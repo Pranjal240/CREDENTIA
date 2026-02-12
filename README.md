@@ -24,8 +24,7 @@ Ingestion: User uploads Resume (PDF/Docx) and Identity Documents.
 
 Analysis: The system calculates an ATS score using the formula:
 
-# Score=( Total Required Keywords
-# Keywords Matched) ×100
+# Score=( Total Required Keywords / Keywords Matched) ×100
 
 Verification: Backend triggers parallel API calls to Aadhaar, Police, and Educational databases.
 
