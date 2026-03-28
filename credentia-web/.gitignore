@@ -39,3 +39,6 @@ next-env.d.ts
 
 # Test scripts
 test-r2.js
+
+.vercel
+.env*.local
