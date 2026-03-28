@@ -15,21 +15,29 @@ export async function GET(request: NextRequest) {
       {
         cookies: {
           get(name) { return cookieStore.get(name)?.value },
-          set(name, value, options) { cookieStore.set({ name, value, ...options }) },
-          remove(name, options) { cookieStore.set({ name, value: '', ...options }) },
+          set(name, value, options) {
+            try { cookieStore.set({ name, value, ...options }) } catch {}
+          },
+          remove(name, options) {
+            try { cookieStore.set({ name, value: '', ...options }) } catch {}
+          },
         },
       }
     )
+
     await supabase.auth.exchangeCodeForSession(code)
-    
-    // Get user role and redirect appropriately
+
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
       const role = profile?.role || 'student'
       return NextResponse.redirect(new URL(`/dashboard/${role}`, request.url))
     }
   }
 
-  return NextResponse.redirect(new URL('/login', request.url))
+  return NextResponse.redirect(new URL('/login?error=auth_failed', request.url))
 }

@@ -1,30 +1,26 @@
-import { NextResponse } from 'next/server'
-import { v4 as uuidv4 } from 'uuid'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase'
 
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const supabase = createSupabaseServerClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { studentId } = await request.json()
+    if (!studentId) return NextResponse.json({ error: 'studentId required' }, { status: 400 })
 
-    const shareToken = uuidv4().split('-')[0] + '-' + Date.now().toString(36)
+    const token = crypto.randomUUID()
 
-    // Ensure student record exists and update it
-    const { data: existingStudent } = await supabase.from('students').select('id').eq('id', user.id).single()
+    const { error } = await supabaseAdmin
+      .from('students')
+      .update({ share_token: token })
+      .eq('id', studentId)
 
-    if (existingStudent) {
-      await supabase.from('students').update({ share_token: shareToken, profile_is_public: true }).eq('id', user.id)
-    } else {
-      await supabase.from('students').insert({ id: user.id, share_token: shareToken, profile_is_public: true, ats_score: 0, verification_score: 0 })
-    }
+    if (error) throw error
 
-    return NextResponse.json({ success: true, token: shareToken })
+    return NextResponse.json({
+      success: true,
+      token,
+      url: `${process.env.NEXT_PUBLIC_APP_URL}/verify/${token}`,
+    })
   } catch (error: any) {
-    console.error('Generate link error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

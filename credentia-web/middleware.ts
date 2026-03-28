@@ -4,6 +4,22 @@ import type { NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } })
+  const pathname = request.nextUrl.pathname
+
+  // Skip middleware for static files and API routes
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api/') ||
+    pathname.startsWith('/auth/') ||
+    pathname.includes('.') ||
+    pathname.startsWith('/verify/')
+  ) {
+    return response
+  }
+
+  // Public pages
+  const publicPages = ['/', '/login', '/register', '/about', '/features']
+  if (publicPages.includes(pathname)) return response
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -26,43 +42,34 @@ export async function middleware(request: NextRequest) {
   )
 
   const { data: { session } } = await supabase.auth.getSession()
-  const pathname = request.nextUrl.pathname
 
-  // Public routes — always accessible
-  const publicRoutes = ['/', '/about', '/features', '/login', '/register', '/verify']
-  const isPublic = publicRoutes.some(r => pathname === r || pathname.startsWith('/verify/'))
-  if (isPublic) return response
-
-  // API routes — skip middleware
-  if (pathname.startsWith('/api/')) return response
-
-  // Not logged in — redirect to login
-  if (!session) {
+  if (!session && pathname.startsWith('/dashboard')) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Role-based protection
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', session.user.id)
-    .single()
+  if (session && pathname.startsWith('/dashboard')) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', session.user.id)
+      .single()
 
-  const role = profile?.role || 'student'
+    const role = profile?.role || 'student'
 
-  if (pathname.startsWith('/dashboard/admin') && role !== 'admin') {
-    return NextResponse.redirect(new URL(`/dashboard/${role}`, request.url))
-  }
-  if (pathname.startsWith('/dashboard/company') && role !== 'company') {
-    return NextResponse.redirect(new URL(`/dashboard/${role}`, request.url))
-  }
-  if (pathname.startsWith('/dashboard/university') && role !== 'university') {
-    return NextResponse.redirect(new URL(`/dashboard/${role}`, request.url))
+    if (pathname.startsWith('/dashboard/admin') && role !== 'admin') {
+      return NextResponse.redirect(new URL(`/dashboard/${role}`, request.url))
+    }
+    if (pathname.startsWith('/dashboard/company') && role !== 'company' && role !== 'admin') {
+      return NextResponse.redirect(new URL(`/dashboard/${role}`, request.url))
+    }
+    if (pathname.startsWith('/dashboard/university') && role !== 'university' && role !== 'admin') {
+      return NextResponse.redirect(new URL(`/dashboard/${role}`, request.url))
+    }
   }
 
   return response
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|public).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)'],
 }

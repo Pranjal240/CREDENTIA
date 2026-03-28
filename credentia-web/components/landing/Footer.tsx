@@ -7,8 +7,8 @@ export default function Footer() {
   const productLinks = [
     { label: 'Features', href: '#features' },
     { label: 'How It Works', href: '#how-it-works' },
-    { label: 'For Students', href: '/register' },
-    { label: 'For Companies', href: '/register' },
+    { label: 'Get Started', href: '/register' },
+    { label: 'Login', href: '/login' },
   ]
 
   const companyLinks = [

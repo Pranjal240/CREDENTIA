@@ -1,6 +1,6 @@
-// lib/supabase-server.ts
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
 
 export function createSupabaseServerClient() {
   const cookieStore = cookies()
@@ -21,16 +21,14 @@ export function createSupabaseServerClient() {
   )
 }
 
+// Alias for backward compatibility — some files import this name
+export const createServerSupabaseClient = createSupabaseServerClient
+
+// Admin client for server-side admin operations
 export function createAdminSupabaseClient() {
-  return createServerClient(
+  return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        get() { return undefined },
-        set() {},
-        remove() {},
-      },
-    }
+    { auth: { autoRefreshToken: false, persistSession: false } }
   )
 }

@@ -3,213 +3,167 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { Loader2 } from 'lucide-react'
 
-type Role = 'student' | 'company' | 'university'
+const roles = [
+  { value: 'student', label: 'Student', desc: 'Get your credentials verified' },
+  { value: 'company', label: 'Company', desc: 'Hire verified candidates' },
+  { value: 'university', label: 'University', desc: 'Manage student records' },
+]
 
 export default function RegisterPage() {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<Role>('student')
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
+  const [role, setRole] = useState('student')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (password.length < 6) { setError('Password must be at least 6 characters'); return }
     setLoading(true)
     setError('')
-    setSuccess(false)
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match')
+    const { error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: fullName, role },
+        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`,
+      },
+    })
+
+    if (authError) {
+      setError(authError.message)
       setLoading(false)
       return
     }
 
-    const { error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          role: activeTab,
-        },
-      },
-    })
-
-    if (signUpError) {
-      setError(signUpError.message)
-    } else {
-      setSuccess(true)
-    }
+    setSuccess(true)
     setLoading(false)
   }
 
-  const handleGoogleInfo = async () => {
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/auth/callback`,
-      },
-    })
-    if (oauthError) {
-      setError(oauthError.message)
-    }
-  }
-
-  const roleNames = {
-    student: 'Student',
-    company: 'Company',
-    university: 'University',
+  if (success) {
+    return (
+      <div className="min-h-screen bg-[#0A0A0F] flex items-center justify-center px-4">
+        <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-10 text-center max-w-md w-full">
+          <div className="text-5xl mb-4">📧</div>
+          <h2 className="text-2xl font-bold text-white mb-3" style={{fontFamily:'var(--font-syne)'}}>Check your email!</h2>
+          <p className="text-[#9999AA] mb-6">We sent a verification link to <span className="text-white font-medium">{email}</span>. Click it to activate your account.</p>
+          <Link href="/login" className="block w-full bg-[#F5C542] text-black font-bold py-3 rounded-xl text-center hover:bg-[#D4A017] transition">
+            Back to Login
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0A0F] text-white flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md bg-[#13131A] border border-[#2A2A3A] rounded-2xl shadow-2xl overflow-hidden p-8">
-        
-        {/* LOGO */}
-        <div className="flex flex-col items-center mb-8">
-          <Link href="/">
-            <div className="w-16 h-16 rounded-full bg-[#1C1C26] border border-[#2A2A3A] flex items-center justify-center hover:border-[#F5C542] transition-colors mb-4 content-center shadow-[0_0_15px_rgba(245,197,66,0.1)]">
-               <span className="font-[family-name:var(--font-syne)] font-black text-2xl text-[#F5C542]">C</span>
+    <div className="min-h-screen bg-[#0A0A0F] flex items-center justify-center px-4 py-12">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 left-1/4 w-80 h-80 bg-yellow-500/10 rounded-full blur-3xl" />
+      </div>
+
+      <div className="relative w-full max-w-md">
+        <div className="flex items-center justify-center gap-2 mb-8">
+          <div className="w-9 h-9 rounded-xl bg-[#F5C542] flex items-center justify-center">
+            <span className="text-black font-black text-base">C</span>
+          </div>
+          <span className="font-bold text-2xl text-[#F5C542] tracking-tight" style={{fontFamily:'var(--font-syne, sans-serif)'}}>
+            CREDENTIA
+          </span>
+        </div>
+
+        <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-8 shadow-2xl">
+          <h1 className="text-2xl font-bold text-white mb-1" style={{fontFamily:'var(--font-syne, sans-serif)'}}>
+            Create account
+          </h1>
+          <p className="text-[#9999AA] text-sm mb-6">Join thousands of verified professionals</p>
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 mb-4 text-red-400 text-sm">
+              {error}
             </div>
-          </Link>
-          <Link href="/">
-            <h1 className="font-[family-name:var(--font-syne)] font-extrabold text-3xl text-[#F5C542] tracking-tight">CREDENTIA</h1>
-          </Link>
-          <p className="text-[#9999AA] text-sm mt-2 font-[family-name:var(--font-dm-sans)]">Create a new account</p>
-        </div>
+          )}
 
-        {/* ROLE TABS */}
-        <div className="flex bg-[#1C1C26] rounded-xl p-1 mb-8 overflow-x-auto no-scrollbar border border-[#2A2A3A]">
-          {(Object.keys(roleNames) as Role[]).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 min-w-max px-3 py-2 rounded-lg text-sm font-medium transition-all duration-300 font-[family-name:var(--font-dm-sans)] ${
-                activeTab === tab
-                  ? 'bg-[#F5C542] text-black shadow-lg shadow-[#F5C542]/20'
-                  : 'text-[#9999AA] hover:text-white hover:bg-[#2A2A3A]'
-              }`}
-            >
-              {roleNames[tab]}
-            </button>
-          ))}
-        </div>
-
-        {/* ERROR/SUCCESS DISPLAY */}
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/50 text-red-400 text-sm p-3 rounded-xl mb-6 font-[family-name:var(--font-dm-sans)]">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="bg-green-500/10 border border-green-500/50 text-green-400 text-sm p-3 rounded-xl mb-6 font-[family-name:var(--font-dm-sans)]">
-            Registration successful! Please check your email for a verification link to log in.
-          </div>
-        )}
-
-        {/* FORM */}
-        <form onSubmit={handleRegister} className="space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5 font-[family-name:var(--font-dm-sans)]">
-              Full Name / Organization Name
-            </label>
-            <input
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="e.g. John Doe or AcademiCore"
-              required
-              className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded-xl px-4 py-3 text-white placeholder:text-[#4A4A5A] focus:outline-none focus:border-[#F5C542] focus:ring-1 focus:ring-[#F5C542] transition-colors font-[family-name:var(--font-dm-sans)]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5 font-[family-name:var(--font-dm-sans)]">
-              Email Address ({roleNames[activeTab]})
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={`your.${activeTab}@example.com`}
-              required
-              className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded-xl px-4 py-3 text-white placeholder:text-[#4A4A5A] focus:outline-none focus:border-[#F5C542] focus:ring-1 focus:ring-[#F5C542] transition-colors font-[family-name:var(--font-dm-sans)]"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+          <form onSubmit={handleRegister} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1.5 font-[family-name:var(--font-dm-sans)]">Password</label>
+              <label className="block text-sm text-[#9999AA] mb-1.5">Full Name</label>
+              <input
+                type="text"
+                value={fullName}
+                onChange={e => setFullName(e.target.value)}
+                required
+                placeholder="Pranjal Kumar"
+                className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded-xl px-4 py-3 text-white placeholder-[#555566] focus:outline-none focus:border-[#F5C542] transition text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm text-[#9999AA] mb-1.5">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                placeholder="you@example.com"
+                className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded-xl px-4 py-3 text-white placeholder-[#555566] focus:outline-none focus:border-[#F5C542] transition text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm text-[#9999AA] mb-1.5">Password</label>
               <input
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                onChange={e => setPassword(e.target.value)}
                 required
-                className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded-xl px-4 py-3 text-white placeholder:text-[#4A4A5A] focus:outline-none focus:border-[#F5C542] focus:ring-1 focus:ring-[#F5C542] transition-colors font-[family-name:var(--font-dm-sans)]"
+                placeholder="Min 6 characters"
+                className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded-xl px-4 py-3 text-white placeholder-[#555566] focus:outline-none focus:border-[#F5C542] transition text-sm"
               />
             </div>
+
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1.5 font-[family-name:var(--font-dm-sans)]">Confirm</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded-xl px-4 py-3 text-white placeholder:text-[#4A4A5A] focus:outline-none focus:border-[#F5C542] focus:ring-1 focus:ring-[#F5C542] transition-colors font-[family-name:var(--font-dm-sans)]"
-              />
+              <label className="block text-sm text-[#9999AA] mb-2">I am a...</label>
+              <div className="grid grid-cols-3 gap-2">
+                {roles.map(r => (
+                  <button
+                    key={r.value}
+                    type="button"
+                    onClick={() => setRole(r.value)}
+                    className={`p-3 rounded-xl border text-center transition-all ${
+                      role === r.value
+                        ? 'border-[#F5C542] bg-[#F5C542]/10 text-[#F5C542]'
+                        : 'border-[#2A2A3A] text-[#9999AA] hover:border-[#F5C542]/50'
+                    }`}
+                  >
+                    <div className="font-semibold text-sm">{r.label}</div>
+                    <div className="text-xs mt-0.5 opacity-70">{r.desc}</div>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={loading || success}
-            className="w-full bg-[#F5C542] hover:bg-[#e0b030] text-black font-bold rounded-xl px-4 py-3.5 transition-all duration-300 transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center font-[family-name:var(--font-dm-sans)]"
-          >
-            {loading ? (
-              <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-            ) : (
-              'Create Account'
-            )}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#F5C542] hover:bg-[#D4A017] text-black font-bold py-3 rounded-xl transition-all disabled:opacity-60 flex items-center justify-center gap-2 text-sm mt-2"
+            >
+              {loading ? <><Loader2 size={16} className="animate-spin" /> Creating account...</> : 'Create Account'}
+            </button>
+          </form>
 
-        <div className="my-6 flex items-center">
-          <div className="flex-1 border-b border-[#2A2A3A]"></div>
-          <span className="px-4 text-xs text-[#4A4A5A] font-[family-name:var(--font-dm-sans)]">OR</span>
-          <div className="flex-1 border-b border-[#2A2A3A]"></div>
+          <p className="text-center text-[#9999AA] text-sm mt-6">
+            Already have an account?{' '}
+            <Link href="/login" className="text-[#F5C542] hover:underline font-medium">
+              Sign in
+            </Link>
+          </p>
         </div>
-
-        {/* GOOGLE OAUTH */}
-        <button
-          onClick={handleGoogleInfo}
-          type="button"
-          disabled={success}
-          className="w-full bg-[#1C1C26] hover:bg-[#2A2A3A] border border-[#2A2A3A] text-white font-medium rounded-xl px-4 py-3 transition-colors flex items-center justify-center gap-3 font-[family-name:var(--font-dm-sans)] disabled:opacity-70 disabled:cursor-not-allowed"
-        >
-          <svg viewBox="0 0 24 24" className="w-5 h-5" xmlns="http://www.w3.org/2000/svg">
-            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-          </svg>
-          Continue with Google
-        </button>
-
-        <p className="mt-6 text-center text-sm text-[#9999AA] font-[family-name:var(--font-dm-sans)]">
-          Already have an account?{' '}
-          <Link href="/login" className="text-[#F5C542] hover:text-white font-medium transition-colors">
-            Sign in
-          </Link>
-        </p>
-
       </div>
     </div>
   )
