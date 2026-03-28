@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Mail, Eye, EyeOff, GraduationCap, Building2, School, Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
@@ -72,7 +73,14 @@ export default function LoginPage() {
         <div className="orb w-80 h-80 bg-purple-600/20 top-10 left-10 animate-float-1" />
         <div className="orb w-60 h-60 bg-[#F5C542]/10 bottom-10 right-10 animate-float-2" />
         <div className="relative z-10 text-center">
-          <h1 className="font-syne font-extrabold text-5xl text-[#F5C542] mb-4">CREDENTIA</h1>
+          <Image
+            src="/logo.jpg"
+            alt="Credentia Logo"
+            width={80}
+            height={80}
+            className="rounded-full object-cover border-2 border-[#F5C542]/30 mx-auto mb-6"
+          />
+          <h1 className="font-heading font-extrabold text-5xl text-[#F5C542] mb-4">CREDENTIA</h1>
           <p className="text-[#9999AA] text-lg mb-12">Verify Once. Trusted Forever.</p>
           <div className="flex flex-col gap-4">
             {floatingBadges.map((badge, i) => (
@@ -92,7 +100,13 @@ export default function LoginPage() {
       {/* Right Panel */}
       <div className="flex-1 flex items-center justify-center p-8 dark:bg-[#13131A] bg-white overflow-y-auto">
         <div className="w-full max-w-md">
-          <h2 className="font-syne font-bold text-3xl dark:text-white text-gray-900 mb-2">
+          {/* Mobile logo */}
+          <div className="md:hidden flex items-center justify-center gap-2 mb-6">
+            <Image src="/logo.jpg" alt="Credentia Logo" width={36} height={36} className="rounded-full object-cover border-2 border-[#F5C542]/30" />
+            <span className="font-heading font-extrabold text-xl text-[#F5C542]">CREDENTIA</span>
+          </div>
+
+          <h2 className="font-heading font-bold text-3xl dark:text-white text-gray-900 mb-2">
             Welcome Back 👋
           </h2>
           <p className="dark:text-[#9999AA] text-gray-500 mb-8">Sign in to your CREDENTIA account</p>

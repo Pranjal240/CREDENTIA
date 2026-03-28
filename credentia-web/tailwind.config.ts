@@ -10,8 +10,10 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        syne: ['var(--font-syne)', 'sans-serif'],
-        dm: ['var(--font-dm-sans)', 'sans-serif'],
+        heading: ['var(--font-heading)', 'system-ui', 'sans-serif'],
+        body: ['var(--font-body)', 'system-ui', 'sans-serif'],
+        syne: ['var(--font-heading)', 'system-ui', 'sans-serif'],
+        dm: ['var(--font-body)', 'system-ui', 'sans-serif'],
       },
       colors: {
         background: 'rgb(var(--background))',

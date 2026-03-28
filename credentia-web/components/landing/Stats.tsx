@@ -24,7 +24,7 @@ export default function Stats() {
               key={stat.label}
               className={`text-center ${i < stats.length - 1 ? 'md:border-r dark:border-r-[#2A2A3A] border-r-gray-100' : ''}`}
             >
-              <div className="font-syne font-extrabold text-4xl sm:text-5xl dark:text-white text-gray-900 mb-2">
+              <div className="font-heading font-extrabold text-4xl sm:text-5xl dark:text-white text-gray-900 mb-2">
                 {isInView ? (
                   <CountUp
                     end={stat.end}

@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 
@@ -5,11 +7,11 @@ export default function CTABanner() {
   return (
     <section className="py-20 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
-        <div className="rounded-3xl bg-gradient-to-br from-[#1C1C26] to-[#2A2A3A] border border-[#F5C542]/20 p-12 text-center">
-          <h2 className="font-syne font-extrabold text-4xl sm:text-5xl text-white mb-4">
+        <div className="rounded-3xl bg-gradient-to-br dark:from-[#1C1C26] dark:to-[#2A2A3A] from-gray-100 to-gray-200 border border-[#F5C542]/20 p-12 text-center">
+          <h2 className="font-heading font-extrabold text-4xl sm:text-5xl dark:text-white text-gray-900 mb-4">
             Start Your Verification Journey
           </h2>
-          <p className="text-lg text-[#9999AA] mb-8 max-w-2xl mx-auto">
+          <p className="text-lg dark:text-[#9999AA] text-gray-500 mb-8 max-w-2xl mx-auto">
             Join 50,000+ students. Get your verified profile link in minutes. It&apos;s completely free.
           </p>
           <Link

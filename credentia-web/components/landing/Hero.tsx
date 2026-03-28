@@ -12,6 +12,14 @@ const badges = [
 const avatarColors = ['bg-purple-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-red-500']
 
 export default function Hero() {
+  const scrollToHowItWorks = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault()
+    const el = document.querySelector('#how-it-works')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* Gradient orbs */}
@@ -39,7 +47,7 @@ export default function Hero() {
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.5 }}
-          className="font-syne font-extrabold text-5xl sm:text-6xl md:text-7xl leading-tight mb-6"
+          className="font-heading font-extrabold text-5xl sm:text-6xl md:text-7xl leading-tight mb-6"
         >
           <span className="dark:text-white text-gray-900">Verify Once.</span>
           <br />
@@ -51,7 +59,7 @@ export default function Hero() {
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 0.5 }}
-          className="text-lg sm:text-xl text-[#9999AA] max-w-2xl mx-auto mb-8 leading-relaxed"
+          className="text-lg sm:text-xl dark:text-[#9999AA] text-gray-500 max-w-2xl mx-auto mb-8 leading-relaxed"
         >
           Upload your resume, police certificate, and Aadhaar — get AI-verified in minutes.
           Share one link with every company you apply to.
@@ -70,12 +78,13 @@ export default function Hero() {
           >
             Start Verifying Free →
           </Link>
-          <Link
+          <a
             href="#how-it-works"
-            className="px-8 py-3.5 rounded-xl border border-[#F5C542]/50 text-[#F5C542] font-medium text-lg hover:bg-[#F5C542]/10 transition-all"
+            onClick={scrollToHowItWorks}
+            className="px-8 py-3.5 rounded-xl border border-[#F5C542]/50 text-[#F5C542] font-medium text-lg hover:bg-[#F5C542]/10 transition-all cursor-pointer"
           >
             See How It Works
-          </Link>
+          </a>
         </motion.div>
 
         {/* Social proof */}

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useState } from 'react'
 import { useTheme } from 'next-themes'
 import { Sun, Moon, Menu, X } from 'lucide-react'
@@ -9,7 +10,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 const navLinks = [
   { href: '#features', label: 'Features' },
   { href: '#how-it-works', label: 'How It Works' },
-  { href: '#companies', label: 'For Companies' },
   { href: '#team', label: 'Our Team' },
 ]
 
@@ -17,26 +17,48 @@ export default function Navbar() {
   const { theme, setTheme } = useTheme()
   const [mobileOpen, setMobileOpen] = useState(false)
 
+  const scrollToSection = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (href.startsWith('#')) {
+      e.preventDefault()
+      const el = document.querySelector(href)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      setMobileOpen(false)
+    }
+  }
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 dark:bg-[#0A0A0F]/85 bg-white/85 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/" className="font-syne font-extrabold text-2xl text-[#F5C542] tracking-tight">
-            CREDENTIA
+          <Link href="/" className="flex items-center gap-2.5">
+            <Image
+              src="/logo.jpg"
+              alt="Credentia Logo"
+              width={36}
+              height={36}
+              className="rounded-full object-cover border-2 border-[#F5C542]/30"
+              priority
+            />
+            <span className="font-heading font-extrabold text-xl text-[#F5C542] tracking-tight">
+              CREDENTIA
+            </span>
           </Link>
 
           {/* Center Nav — desktop */}
           <div className="hidden md:flex items-center gap-8">
             {navLinks.map((link) => (
-              <Link
+              <a
                 key={link.href}
                 href={link.href}
-                className="relative text-sm font-medium dark:text-[#9999AA] text-gray-600 hover:dark:text-white hover:text-black transition-colors group"
+                onClick={(e) => scrollToSection(e, link.href)}
+                className="relative text-sm font-medium dark:text-[#9999AA] text-gray-600 hover:dark:text-white hover:text-black transition-colors group cursor-pointer"
               >
                 {link.label}
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-[#F5C542] group-hover:w-full transition-all duration-300" />
-              </Link>
+              </a>
             ))}
           </div>
 
@@ -87,14 +109,14 @@ export default function Navbar() {
           >
             <div className="px-4 py-4 flex flex-col gap-4">
               {navLinks.map((link) => (
-                <Link
+                <a
                   key={link.href}
                   href={link.href}
-                  className="text-sm font-medium dark:text-[#9999AA] text-gray-600 hover:dark:text-white hover:text-black transition-colors"
-                  onClick={() => setMobileOpen(false)}
+                  onClick={(e) => scrollToSection(e, link.href)}
+                  className="text-sm font-medium dark:text-[#9999AA] text-gray-600 hover:dark:text-white hover:text-black transition-colors cursor-pointer"
                 >
                   {link.label}
-                </Link>
+                </a>
               ))}
               <Link
                 href="/login"

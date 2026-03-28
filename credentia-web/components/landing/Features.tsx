@@ -70,7 +70,7 @@ export default function Features() {
             initial={{ opacity: 0, y: 20 }}
             animate={isInView ? { opacity: 1, y: 0 } : {}}
             transition={{ delay: 0.1, duration: 0.5 }}
-            className="font-syne font-bold text-4xl sm:text-5xl dark:text-white text-gray-900 mb-4"
+            className="font-heading font-bold text-4xl sm:text-5xl dark:text-white text-gray-900 mb-4"
           >
             Everything You Need
           </motion.h2>
@@ -98,7 +98,7 @@ export default function Features() {
               >
                 <feature.Icon className="w-6 h-6 text-white" />
               </div>
-              <h3 className="font-syne font-bold text-lg dark:text-white text-gray-900 mb-3">
+              <h3 className="font-heading font-bold text-lg dark:text-white text-gray-900 mb-3">
                 {feature.title}
               </h3>
               <p className="text-sm dark:text-[#9999AA] text-gray-500 leading-relaxed">

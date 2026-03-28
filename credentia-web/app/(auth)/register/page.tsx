@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import { GraduationCap, Building2, School, Lock, Eye, EyeOff, ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
@@ -104,8 +105,17 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center px-4 py-12 dark:bg-[#0A0A0F] bg-gray-50">
       <div className="w-full max-w-2xl">
         <div className="text-center mb-8">
-          <Link href="/" className="font-syne font-extrabold text-3xl text-[#F5C542]">
-            CREDENTIA
+          <Link href="/" className="inline-flex items-center gap-2.5 mb-2">
+            <Image
+              src="/logo.jpg"
+              alt="Credentia Logo"
+              width={40}
+              height={40}
+              className="rounded-full object-cover border-2 border-[#F5C542]/30"
+            />
+            <span className="font-heading font-extrabold text-3xl text-[#F5C542]">
+              CREDENTIA
+            </span>
           </Link>
           <p className="dark:text-[#9999AA] text-gray-500 mt-2">Create your free account</p>
         </div>
@@ -134,7 +144,7 @@ export default function RegisterPage() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
             >
-              <h2 className="font-syne font-bold text-2xl dark:text-white text-gray-900 text-center mb-2">
+              <h2 className="font-heading font-bold text-2xl dark:text-white text-gray-900 text-center mb-2">
                 Choose your role
               </h2>
               <p className="text-center dark:text-[#9999AA] text-gray-500 mb-8">
@@ -160,7 +170,7 @@ export default function RegisterPage() {
                     <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${role.color} flex items-center justify-center text-2xl mb-4`}>
                       {role.icon}
                     </div>
-                    <h3 className="font-syne font-bold dark:text-white text-gray-900 mb-1">{role.title}</h3>
+                    <h3 className="font-heading font-bold dark:text-white text-gray-900 mb-1">{role.title}</h3>
                     <p className="text-xs dark:text-[#9999AA] text-gray-500">{role.desc}</p>
                   </button>
                 ))}
@@ -178,7 +188,7 @@ export default function RegisterPage() {
                   <ArrowLeft size={20} />
                 </button>
                 <div>
-                  <h2 className="font-syne font-bold text-2xl dark:text-white text-gray-900">
+                  <h2 className="font-heading font-bold text-2xl dark:text-white text-gray-900">
                     Create your account
                   </h2>
                   <p className="dark:text-[#9999AA] text-gray-500 text-sm">

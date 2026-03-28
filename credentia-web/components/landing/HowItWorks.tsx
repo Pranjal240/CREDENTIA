@@ -36,7 +36,7 @@ export default function HowItWorks() {
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
             animate={isInView ? { opacity: 1, y: 0 } : {}}
-            className="font-syne font-bold text-4xl sm:text-5xl dark:text-white text-gray-900 mb-4"
+            className="font-heading font-bold text-4xl sm:text-5xl dark:text-white text-gray-900 mb-4"
           >
             How CREDENTIA Works
           </motion.h2>
@@ -74,7 +74,7 @@ export default function HowItWorks() {
                 <step.Icon className="w-7 h-7 text-black" />
               </div>
               <span className="text-sm font-bold text-[#F5C542] mb-2">STEP {step.number}</span>
-              <h3 className="font-syne font-bold text-xl dark:text-white text-gray-900 mb-3">
+              <h3 className="font-heading font-bold text-xl dark:text-white text-gray-900 mb-3">
                 {step.title}
               </h3>
               <p className="text-sm dark:text-[#9999AA] text-gray-500 leading-relaxed">
