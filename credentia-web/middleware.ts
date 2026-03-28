@@ -2,61 +2,67 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const ROLE_REDIRECTS: Record<string, string> = {
-  student: '/dashboard/student',
-  company: '/dashboard/company',
-  university: '/dashboard/university',
-  admin: '/dashboard/admin',
-}
-
-export async function middleware(req: NextRequest) {
-  const res = NextResponse.next()
+export async function middleware(request: NextRequest) {
+  let response = NextResponse.next({ request: { headers: request.headers } })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name) {
-          return req.cookies.get(name)?.value
-        },
+        get(name) { return request.cookies.get(name)?.value },
         set(name, value, options) {
-          res.cookies.set({ name, value, ...options })
+          request.cookies.set({ name, value, ...options })
+          response = NextResponse.next({ request: { headers: request.headers } })
+          response.cookies.set({ name, value, ...options })
         },
         remove(name, options) {
-          res.cookies.set({ name, value: '', ...options })
+          request.cookies.set({ name, value: '', ...options })
+          response = NextResponse.next({ request: { headers: request.headers } })
+          response.cookies.set({ name, value: '', ...options })
         },
       },
     }
   )
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  const { data: { session } } = await supabase.auth.getSession()
+  const pathname = request.nextUrl.pathname
 
-  const path = req.nextUrl.pathname
-  const isDashboard = path.startsWith('/dashboard')
-  const isAuth = path.startsWith('/login') || path.startsWith('/register')
+  // Public routes — always accessible
+  const publicRoutes = ['/', '/about', '/features', '/login', '/register', '/verify']
+  const isPublic = publicRoutes.some(r => pathname === r || pathname.startsWith('/verify/'))
+  if (isPublic) return response
 
-  // Unauthenticated user trying to access dashboard
-  if (isDashboard && !session) {
-    return NextResponse.redirect(new URL('/login', req.url))
+  // API routes — skip middleware
+  if (pathname.startsWith('/api/')) return response
+
+  // Not logged in — redirect to login
+  if (!session) {
+    return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Already logged in user on login/register page
-  if (isAuth && session) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single()
-    const redirect = ROLE_REDIRECTS[profile?.role || 'student']
-    return NextResponse.redirect(new URL(redirect, req.url))
+  // Role-based protection
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', session.user.id)
+    .single()
+
+  const role = profile?.role || 'student'
+
+  if (pathname.startsWith('/dashboard/admin') && role !== 'admin') {
+    return NextResponse.redirect(new URL(`/dashboard/${role}`, request.url))
+  }
+  if (pathname.startsWith('/dashboard/company') && role !== 'company') {
+    return NextResponse.redirect(new URL(`/dashboard/${role}`, request.url))
+  }
+  if (pathname.startsWith('/dashboard/university') && role !== 'university') {
+    return NextResponse.redirect(new URL(`/dashboard/${role}`, request.url))
   }
 
-  return res
+  return response
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/login', '/register'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|public).*)'],
 }

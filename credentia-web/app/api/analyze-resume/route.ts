@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { analyzeResume } from '@/lib/groq'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 export async function POST(req: Request) {
   try {
     const { fileUrl, linkUrl, studentId, textContent } = await req.json()
-    const supabase = createServerSupabaseClient()
+    const supabase = createSupabaseServerClient()
 
     let content = textContent || ''
 
@@ -27,17 +27,17 @@ export async function POST(req: Request) {
 
     // Save to Supabase
     await supabase.from('verifications').upsert({
-      student_id: studentId,
+      user_id: studentId,
       type: 'resume',
       status: analysis.ats_score >= 60 ? 'ai_approved' : 'needs_review',
       document_url: fileUrl,
       external_link: linkUrl,
       ai_confidence: analysis.ats_score,
       ai_result: analysis,
-    }, { onConflict: 'student_id,type' })
+    }, { onConflict: 'user_id,type' })
 
-    // Update ats_score on students table
-    await supabase.from('students').update({ ats_score: analysis.ats_score }).eq('id', studentId)
+    // Update ats_score on profiles instead of students
+    await supabase.from('profiles').update({ ats_score: analysis.ats_score }).eq('id', studentId)
 
     return NextResponse.json({ success: true, analysis })
   } catch (error: any) {

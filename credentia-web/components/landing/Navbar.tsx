@@ -33,16 +33,11 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5">
-            <Image
-              src="/logo.jpg"
-              alt="Credentia Logo"
-              width={36}
-              height={36}
-              className="rounded-full object-cover border-2 border-[#F5C542]/30"
-              priority
-            />
-            <span className="font-heading font-extrabold text-xl text-[#F5C542] tracking-tight">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-[#F5C542] flex items-center justify-center">
+              <span className="text-black font-black text-sm">C</span>
+            </div>
+            <span className="font-[family-name:var(--font-syne)] font-extrabold text-xl text-[#F5C542] tracking-tight">
               CREDENTIA
             </span>
           </Link>

@@ -6,14 +6,14 @@ import './globals.css'
 const syne = Syne({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700', '800'],
-  variable: '--font-heading',
+  variable: '--font-syne',
   display: 'swap',
 })
 
 const dmSans = DM_Sans({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
-  variable: '--font-body',
+  variable: '--font-dm-sans',
   display: 'swap',
 })
 

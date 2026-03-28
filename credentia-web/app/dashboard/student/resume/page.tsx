@@ -5,7 +5,7 @@ import { useDropzone } from 'react-dropzone'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Upload, Link2, FileText, CheckCircle, XCircle, Loader2 } from 'lucide-react'
-import { createClient } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 type Mode = 'upload' | 'link' | 'paste'
 type AnalysisResult = {
@@ -45,7 +45,6 @@ export default function ResumePage() {
     setLoading(true)
     setError('')
     setProgress(0)
-    const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 

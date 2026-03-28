@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { analyzeDegree } from '@/lib/groq'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 export async function POST(req: Request) {
   try {
     const { fileUrl, linkUrl, studentId, textContent } = await req.json()
-    const supabase = createServerSupabaseClient()
+    const supabase = createSupabaseServerClient()
 
     let content = textContent || ''
 
@@ -25,14 +25,14 @@ export async function POST(req: Request) {
     const analysis = await analyzeDegree(content)
 
     await supabase.from('verifications').upsert({
-      student_id: studentId,
+      user_id: studentId,
       type: 'degree',
       status: analysis.confidence >= 75 ? 'ai_approved' : 'needs_review',
       document_url: fileUrl,
       external_link: linkUrl,
       ai_confidence: analysis.confidence,
       ai_result: analysis,
-    }, { onConflict: 'student_id,type' })
+    }, { onConflict: 'user_id,type' })
 
     if (analysis.confidence >= 75) {
       await supabase.from('students').update({ degree_verified: true }).eq('id', studentId)

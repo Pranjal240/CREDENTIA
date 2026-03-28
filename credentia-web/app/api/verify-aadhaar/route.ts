@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { analyzeAadhaar } from '@/lib/groq'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 export async function POST(req: Request) {
   try {
     const { fileUrl, studentId, textContent } = await req.json()
-    const supabase = createServerSupabaseClient()
+    const supabase = createSupabaseServerClient()
 
     let content = textContent || ''
 
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
     // Save to verifications - NEVER store full Aadhaar
     await supabase.from('verifications').upsert({
-      student_id: studentId,
+      user_id: studentId,
       type: 'aadhaar',
       status: analysis.confidence >= 75 ? 'ai_approved' : 'needs_review',
       document_url: fileUrl,
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
         confidence: analysis.confidence,
         // NEVER store full Aadhaar number
       },
-    }, { onConflict: 'student_id,type' })
+    }, { onConflict: 'user_id,type' })
 
     // Update students table with safe data only
     if (analysis.confidence >= 75) {

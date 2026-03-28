@@ -2,15 +2,16 @@
 
 import Link from 'next/link'
 import { Building2, Users, Settings, LogOut, ArrowLeft } from 'lucide-react'
-import { createClient } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 
 export default function CompanyDashboard() {
   const router = useRouter()
   const handleLogout = async () => {
-    await createClient().auth.signOut()
-    router.push('/login')
+    await supabase.auth.signOut()
+    router.push('/')
+    router.refresh()
   }
 
   return (

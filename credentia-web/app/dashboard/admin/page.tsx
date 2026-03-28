@@ -1,9 +1,10 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { Building2, GraduationCap, Shield, BarChart3, LogOut } from 'lucide-react'
-import { createClient } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
 const cards = [
@@ -47,9 +48,33 @@ const cards = [
 
 export default function AdminDashboard() {
   const router = useRouter()
+  const [verifications, setVerifications] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchPending()
+  }, [])
+
+  const fetchPending = async () => {
+    const { data } = await supabase
+      .from('verifications')
+      .select('*, profiles(full_name, email)')
+      .eq('status', 'needs_review')
+      .order('created_at', { ascending: false })
+
+    setVerifications(data || [])
+    setLoading(false)
+  }
+
+  const handleAction = async (id: string, newStatus: string) => {
+    setActionLoading(id)
+    await supabase.from('verifications').update({ status: newStatus }).eq('id', id)
+    setVerifications((prev) => prev.filter((v) => v.id !== id))
+    setActionLoading(null)
+  }
 
   const handleLogout = async () => {
-    const supabase = createClient()
     await supabase.auth.signOut()
     router.push('/login')
   }

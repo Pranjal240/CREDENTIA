@@ -1,33 +1,35 @@
-// lib/supabase-server.ts — Server component client
+// lib/supabase-server.ts
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
-export function createServerSupabaseClient() {
+export function createSupabaseServerClient() {
   const cookieStore = cookies()
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
+        get(name: string) { return cookieStore.get(name)?.value },
+        set(name: string, value: string, options: any) {
+          try { cookieStore.set({ name, value, ...options }) } catch {}
+        },
+        remove(name: string, options: any) {
+          try { cookieStore.set({ name, value: '', ...options }) } catch {}
         },
       },
     }
   )
 }
 
-// Admin client with service role key (server-side only)
 export function createAdminSupabaseClient() {
-  const cookieStore = cookies()
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
+        get() { return undefined },
+        set() {},
+        remove() {},
       },
     }
   )

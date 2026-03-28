@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Loader2 } from 'lucide-react'
-import { createClient } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { motion } from 'framer-motion'
 
 const steps = ['Upload Certificate', 'AI Analysis', 'Admin Review']
@@ -23,8 +23,6 @@ export default function PolicePage() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<Record<string, unknown> | null>(null)
   const [error, setError] = useState('')
-
-  const supabase = createClient()
 
   const submit = async () => {
     setLoading(true)

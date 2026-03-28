@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createAdminSupabaseClient } from '@/lib/supabase-server'
 
 // GET — list police verifications needing review
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = createAdminSupabaseClient()
     const { data, error } = await supabase
       .from('verifications')
       .select('*, students!inner(id, university_id, cgpa, share_token, police_share_with_companies, profiles!inner(full_name, email))')

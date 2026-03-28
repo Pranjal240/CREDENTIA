@@ -2,15 +2,16 @@
 
 import Link from 'next/link'
 import { GraduationCap, Users, LogOut } from 'lucide-react'
-import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
+import { supabase } from '@/lib/supabase'
 
 export default function UniversityDashboard() {
   const router = useRouter()
   const handleLogout = async () => {
-    await createClient().auth.signOut()
-    router.push('/login')
+    await supabase.auth.signOut()
+    router.push('/')
+    router.refresh()
   }
 
   return (

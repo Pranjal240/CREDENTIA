@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, Shield } from 'lucide-react'
-import { createClient } from '@/lib/supabase'
+import { ArrowLeft, Upload, Loader2, CheckCircle, XCircle, Shield } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 import { motion } from 'framer-motion'
 
 export default function AadhaarPage() {
@@ -17,7 +17,6 @@ export default function AadhaarPage() {
     if (!frontFile) return
     setLoading(true)
     setError('')
-    const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 

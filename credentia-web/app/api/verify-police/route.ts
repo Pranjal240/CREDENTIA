@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { analyzePoliceDocument } from '@/lib/groq'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 export async function POST(req: Request) {
   try {
     const { fileUrl, linkUrl, manualData, studentId } = await req.json()
-    const supabase = createServerSupabaseClient()
+    const supabase = createSupabaseServerClient()
 
     let content = ''
 
@@ -39,14 +39,14 @@ This is a police verification certificate submission.`
     else if (analysis.confidence >= 60) status = 'needs_review'
 
     await supabase.from('verifications').upsert({
-      student_id: studentId,
+      user_id: studentId,
       type: 'police',
       status,
       document_url: fileUrl,
       external_link: linkUrl,
       ai_confidence: analysis.confidence,
       ai_result: analysis,
-    }, { onConflict: 'student_id,type' })
+    }, { onConflict: 'user_id,type' })
 
     return NextResponse.json({ success: true, analysis, status })
   } catch (error: any) {

@@ -2,27 +2,26 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Loader2 } from 'lucide-react'
-import { createClient } from '@/lib/supabase'
+import { ArrowLeft, Upload, Loader2, CheckCircle, XCircle } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 import { motion } from 'framer-motion'
 
 export default function DegreePage() {
+  const [mode, setMode] = useState<'upload' | 'manual'>('upload')
   const [file, setFile] = useState<File | null>(null)
+  const [manualData, setManualData] = useState({ university: '', degree: '', rollNumber: '', cgpa: '', year: '' })
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<Record<string, unknown> | null>(null)
+  const [result, setResult] = useState<any>(null)
   const [error, setError] = useState('')
 
   const submit = async () => {
-    if (!file) return
     setLoading(true)
     setError('')
-    const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     try {
       const fd = new FormData()
-      fd.append('file', file)
       fd.append('folder', 'degrees')
       const uploadRes = await fetch('/api/upload', { method: 'POST', body: fd })
       const { url, success, error: uploadErr } = await uploadRes.json()

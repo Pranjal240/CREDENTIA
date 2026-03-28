@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { ArrowLeft, QrCode, Copy, Share2, Check } from 'lucide-react'
 import QRCode from 'react-qr-code'
-import { createClient } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { useEffect } from 'react'
 
 export default function MyLinkPage() {
@@ -15,7 +15,6 @@ export default function MyLinkPage() {
 
   useEffect(() => {
     const load = async () => {
-      const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       const { data } = await supabase.from('students').select('share_token').eq('id', user.id).single()
@@ -26,8 +25,20 @@ export default function MyLinkPage() {
 
   const verifyUrl = student?.share_token ? `${appUrl}/verify/${student.share_token}` : ''
 
-  const copyLink = () => {
-    navigator.clipboard.writeText(verifyUrl)
+  const copyLink = async () => {
+    let token = student?.share_token
+    if (!token) {
+      const res = await fetch('/api/generate-link', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        token = data.token
+        setStudent({ ...student, share_token: token })
+      } else {
+        return
+      }
+    }
+    
+    navigator.clipboard.writeText(`${appUrl}/verify/${token}`)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }

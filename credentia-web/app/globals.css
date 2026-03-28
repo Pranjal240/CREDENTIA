@@ -57,11 +57,11 @@ html {
 body {
   background-color: rgb(var(--background));
   color: rgb(var(--foreground));
-  font-family: var(--font-body), 'DM Sans', system-ui, sans-serif;
+  font-family: var(--font-dm-sans), 'DM Sans', system-ui, sans-serif;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading), 'Syne', system-ui, sans-serif;
+  font-family: var(--font-syne), 'Syne', system-ui, sans-serif;
 }
 
 /* Shimmer animation for gold badge */
