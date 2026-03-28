@@ -55,10 +55,14 @@ export default function LoginPage() {
 
   const handleGoogle = async () => {
     const supabase = createClient()
-    await supabase.auth.signInWithOAuth({
+    const redirectTo = `${window.location.origin}/auth/callback`
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback` },
+      options: { redirectTo },
     })
+    if (oauthError) {
+      setError('Google login is not available right now. Please use email/password.')
+    }
   }
 
   return (
