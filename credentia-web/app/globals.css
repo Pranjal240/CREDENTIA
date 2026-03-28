@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@400;500;600&display=swap');
+
+:root {
+  --background: 10 10 15;
+  --foreground: 255 255 255;
+  --card: 19 19 26;
+  --card-foreground: 255 255 255;
+  --popover: 28 28 38;
+  --popover-foreground: 255 255 255;
+  --primary: 245 197 66;
+  --primary-foreground: 10 10 15;
+  --secondary: 28 28 38;
+  --secondary-foreground: 255 255 255;
+  --muted: 28 28 38;
+  --muted-foreground: 153 153 170;
+  --accent: 28 28 38;
+  --accent-foreground: 255 255 255;
+  --destructive: 239 68 68;
+  --destructive-foreground: 255 255 255;
+  --border: 42 42 58;
+  --input: 42 42 58;
+  --ring: 245 197 66;
+  --success: 34 197 94;
+  --warning: 245 158 11;
+  --radius: 0.75rem;
+}
+
+.light {
+  --background: 244 244 248;
+  --foreground: 10 10 15;
+  --card: 255 255 255;
+  --card-foreground: 10 10 15;
+  --popover: 248 248 252;
+  --popover-foreground: 10 10 15;
+  --primary: 245 197 66;
+  --primary-foreground: 10 10 15;
+  --secondary: 248 248 252;
+  --secondary-foreground: 10 10 15;
+  --muted: 248 248 252;
+  --muted-foreground: 102 102 128;
+  --accent: 248 248 252;
+  --accent-foreground: 10 10 15;
+  --border: 226 226 238;
+  --input: 226 226 238;
+}
+
+* {
+  border-color: rgb(var(--border));
+}
+
+body {
+  background-color: rgb(var(--background));
+  color: rgb(var(--foreground));
+  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-syne), 'Syne', sans-serif;
+}
+
+/* Shimmer animation for gold badge */
+.shimmer-text {
+  background: linear-gradient(90deg, #F5C542 0%, #D4A017 50%, #F5C542 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 3s linear infinite;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgb(var(--background));
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--border));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--primary));
+}
+
+/* Custom gradient orb */
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+}
+
+/* Progress bar animation */
+@keyframes progress-fill {
+  from { width: 0%; }
+  to { width: var(--target-width); }
+}
+
+.progress-animated {
+  animation: progress-fill 1s ease-out forwards;
+}
