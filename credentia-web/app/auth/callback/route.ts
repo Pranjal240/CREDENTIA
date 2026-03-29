@@ -1,74 +1,117 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+
+const ADMIN_EMAIL = 'pranjalmishra2409@gmail.com'
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
   const error = url.searchParams.get('error')
+  const errorDescription = url.searchParams.get('error_description')
 
+  // Handle OAuth errors returned by the provider
   if (error) {
-    return NextResponse.redirect(new URL('/login?error=' + encodeURIComponent(error), request.url))
-  }
-
-  if (code) {
-    const cookieStore = cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) { return cookieStore.get(name)?.value },
-          set(name: string, value: string, options: any) { try { cookieStore.set({ name, value, ...options }) } catch {} },
-          remove(name: string, options: any) { try { cookieStore.set({ name, value: '', ...options }) } catch {} },
-        },
-      }
+    console.error('[auth/callback] OAuth error:', error, errorDescription)
+    return NextResponse.redirect(
+      new URL('/login?error=' + encodeURIComponent(errorDescription || error), request.url)
     )
+  }
 
-    const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+  if (!code) {
+    console.error('[auth/callback] No code provided')
+    return NextResponse.redirect(new URL('/login?error=no_code', request.url))
+  }
 
-    if (exchangeError) {
-      console.error('Exchange error:', exchangeError)
-      return NextResponse.redirect(new URL('/login?error=' + encodeURIComponent(exchangeError.message), request.url))
+  // Step 1: Exchange the code for a session using the SSR client (sets cookies)
+  const cookieStore = cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+        set(name: string, value: string, options: any) {
+          try { cookieStore.set({ name, value, ...options }) } catch {}
+        },
+        remove(name: string, options: any) {
+          try { cookieStore.set({ name, value: '', ...options }) } catch {}
+        },
+      },
+    }
+  )
+
+  const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+
+  if (exchangeError || !data.user) {
+    console.error('[auth/callback] Code exchange failed:', exchangeError?.message)
+    return NextResponse.redirect(
+      new URL('/login?error=' + encodeURIComponent(exchangeError?.message || 'exchange_failed'), request.url)
+    )
+  }
+
+  const user = data.user
+
+  // Step 2: Use the SERVICE ROLE client for profile writes (bypasses RLS)
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+
+  // Step 3: Check if profile exists
+  const { data: existingProfile, error: profileError } = await supabaseAdmin
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  let role = 'student'
+
+  if (profileError || !existingProfile) {
+    // First-time login — determine role
+    // Force admin role for the admin email
+    if (user.email === ADMIN_EMAIL) {
+      role = 'admin'
     }
 
-    if (data.user) {
-      // Check if profile exists; if not, create one (first-time Google login)
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', data.user.id)
-        .single()
+    // Create profile
+    await supabaseAdmin.from('profiles').upsert({
+      id: user.id,
+      email: user.email,
+      full_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || '',
+      avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
+      role,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' })
 
-      if (profileError || !profile) {
-        // Create profile for first-time Google users
-        await supabase.from('profiles').upsert({
-          id: data.user.id,
-          email: data.user.email,
-          full_name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || data.user.email?.split('@')[0] || '',
-          avatar_url: data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture || null,
-          role: 'student',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' })
+    // If student, also create the student record
+    if (role === 'student') {
+      await supabaseAdmin.from('students').upsert({
+        id: user.id,
+        profile_is_public: false,
+        profile_views: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' })
+    }
 
-        // Also create student record
-        await supabase.from('students').upsert({
-          id: data.user.id,
-          profile_is_public: false,
-          profile_views: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' })
-
-        return NextResponse.redirect(new URL('/dashboard/student', request.url))
-      }
-
-      const role = profile?.role || 'student'
-      return NextResponse.redirect(new URL(`/dashboard/${role}`, request.url))
+    console.log(`[auth/callback] Created new profile for ${user.email} with role=${role}`)
+  } else {
+    // Existing user — update admin role if email matches
+    role = existingProfile.role || 'student'
+    if (user.email === ADMIN_EMAIL && role !== 'admin') {
+      await supabaseAdmin.from('profiles').update({ role: 'admin', updated_at: new Date().toISOString() }).eq('id', user.id)
+      role = 'admin'
     }
   }
 
-  return NextResponse.redirect(new URL('/login', request.url))
+  // Step 4: Redirect to role-specific dashboard
+  console.log(`[auth/callback] Redirecting ${user.email} to /dashboard/${role}`)
+  return NextResponse.redirect(new URL(`/dashboard/${role}`, request.url))
 }

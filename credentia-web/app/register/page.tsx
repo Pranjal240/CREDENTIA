@@ -35,7 +35,7 @@ export default function RegisterPage() {
         password,
         options: {
           data: { full_name: fullName, role: selectedRole },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/auth/callback`,
         },
       })
       if (err) { setError(err.message); setLoading(false); return }

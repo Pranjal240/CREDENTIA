@@ -70,7 +70,13 @@ function LoginContent() {
         return
       }
 
-      if (selectedRole === 'admin' && data.user?.email !== 'pranjalmishra2409@gmail.com') {
+      if (!data.user) {
+        setError('Login failed — no user returned.')
+        setLoading(false)
+        return
+      }
+
+      if (selectedRole === 'admin' && data.user.email !== 'pranjalmishra2409@gmail.com') {
         await supabase.auth.signOut()
         setError('Unauthorized: Admin access is restricted.')
         setLoading(false)
@@ -90,10 +96,11 @@ function LoginContent() {
   const handleGoogle = async () => {
     setGoogleLoading(true)
     setError('')
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
     const { error: oauthErr } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${appUrl}/auth/callback`,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
