@@ -1,65 +1,56 @@
 'use client'
 
 import Link from 'next/link'
-import { motion } from 'framer-motion'
+import { motion, useInView } from 'framer-motion'
+import { useRef } from 'react'
+import { ArrowRight, Sparkles } from 'lucide-react'
 
 export default function CTA() {
+  const ref = useRef(null)
+  const inView = useInView(ref, { once: true, margin: '-80px' })
+
   return (
-    <section className="py-24 bg-gradient-to-b from-[#13131A] to-[#1C1C26] relative overflow-hidden">
-      {/* Golden orb glow */}
-      <div className="absolute w-[500px] h-[500px] rounded-full bg-[#F5C542]/5 blur-[120px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
-
-      {/* Floating golden particles */}
-      {[...Array(6)].map((_, i) => (
-        <div
-          key={i}
-          className="absolute w-1 h-1 rounded-full bg-[#F5C542]/40 animate-float"
-          style={{
-            top: `${20 + Math.random() * 60}%`,
-            left: `${10 + Math.random() * 80}%`,
-            animationDelay: `${i * 0.8}s`,
-            animationDuration: `${4 + Math.random() * 4}s`,
-          }}
-        />
-      ))}
-
-      <div className="relative z-10 max-w-3xl mx-auto px-5 text-center">
-        <motion.h2
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="font-syne text-4xl md:text-[52px] font-extrabold text-white mb-5 leading-tight"
-        >
-          Ready to Get Verified?
-        </motion.h2>
-        <motion.p
-          initial={{ opacity: 0, y: 15 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.15 }}
-          className="text-[#9999AA] text-lg mb-10 max-w-lg mx-auto"
-        >
-          Join 50,000+ students. Get your credentials verified today — free.
-        </motion.p>
+    <section ref={ref} className="py-24 relative">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.3 }}
-          className="flex flex-col sm:flex-row items-center justify-center gap-4"
+          initial={{ opacity: 0, y: 30 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.6 }}
+          className="relative rounded-3xl overflow-hidden"
         >
-          <Link
-            href="/register"
-            className="bg-[#F5C542] text-black font-bold h-14 px-8 rounded-xl hover:bg-[#D4A017] hover:scale-105 transition-all shadow-[0_0_30px_rgba(245,197,66,0.3)] flex items-center gap-2"
-          >
-            Get Started Free →
-          </Link>
-          <button
-            onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
-            className="border border-[#F5C542]/50 text-[#F5C542] h-14 px-8 rounded-xl hover:bg-[#F5C542]/10 transition-all flex items-center gap-2"
-          >
-            See Demo
-          </button>
+          {/* Background gradient */}
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-indigo-600 to-teal-600" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+
+          {/* Floating dots */}
+          {[...Array(6)].map((_, i) => (
+            <motion.div
+              key={i}
+              animate={{ y: [0, -15, 0], opacity: [0.2, 0.5, 0.2] }}
+              transition={{ duration: 4 + i, repeat: Infinity, delay: i * 0.5 }}
+              className="absolute w-2 h-2 rounded-full bg-white/30"
+              style={{ top: `${20 + Math.random() * 60}%`, left: `${10 + Math.random() * 80}%` }}
+            />
+          ))}
+
+          <div className="relative z-10 px-8 py-16 sm:px-16 sm:py-20 text-center">
+            <Sparkles size={32} className="text-white/80 mx-auto mb-4" />
+            <h2 className="font-syne text-3xl sm:text-4xl font-extrabold text-white mb-4 leading-tight">
+              Ready to Transform Your Credentials?
+            </h2>
+            <p className="text-white/80 text-lg max-w-xl mx-auto mb-8">
+              Join thousands of students and companies who trust CREDENTIA for instant, AI-powered verification.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Link href="/register" className="bg-white text-blue-700 font-bold px-8 py-3.5 rounded-xl hover:bg-blue-50 transition-all text-base flex items-center gap-2 group shadow-lg">
+                Get Started Free
+                <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+              </Link>
+              <Link href="/login" className="text-white/90 font-medium px-8 py-3.5 rounded-xl border border-white/30 hover:bg-white/10 transition-all text-base">
+                Sign In
+              </Link>
+            </div>
+          </div>
         </motion.div>
       </div>
     </section>

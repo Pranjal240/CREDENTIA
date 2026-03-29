@@ -1,62 +1,89 @@
 'use client'
 
 import { useState } from 'react'
+import { motion, useInView, AnimatePresence } from 'framer-motion'
+import { useRef } from 'react'
 import Image from 'next/image'
-import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 
 const team = [
-  { name: 'Pranjal', image: '/owner/Pranjal.jpg', role: 'Founder & Lead Developer', bio: 'Full-stack engineer driving CREDENTIA\u0027s technical vision. Passionate about solving India\u0027s credential trust problem.' },
-  { name: 'Nihal', image: '/owner/Nihal.jpg', role: 'Co-Founder & Backend', bio: 'Backend architect building the scalable infrastructure behind CREDENTIA\u0027s AI verification engine.' },
-  { name: 'Kriti', image: '/owner/KRITI.jpeg', role: 'Co-Founder & Strategy', bio: 'Shaping CREDENTIA\u0027s product roadmap and driving partnerships with universities and companies across India.' },
-  { name: 'Pragya', image: '/owner/Pragya.jpg', role: 'Co-Founder & Design', bio: 'Crafting the visual identity and user experience that makes CREDENTIA feel premium and trustworthy.' },
+  {
+    name: 'Pranjal Mishra',
+    role: 'Founder & CEO',
+    img: '/team/pranjal.png',
+    bio: 'Visionary entrepreneur dedicated to building India\'s trust infrastructure for the next generation. Leading the charge to eliminate hiring fraud and empower students with verifiable credentials.',
+    linkedin: '#',
+  },
+  {
+    name: 'Kriti Ahlawat',
+    role: 'Co-Founder & COO',
+    img: '/team/kriti.png',
+    bio: 'Driving strategic operations and forging partnerships across India\'s education and corporate landscape. Passionate about creating seamless verification experiences at scale.',
+    linkedin: '#',
+  },
+  {
+    name: 'Nihal Kumar',
+    role: 'CTO',
+    img: '/team/nihal.png',
+    bio: 'Architecting scalable AI-powered verification systems using cutting-edge technologies. Expert in building secure, high-throughput platforms that handle millions of document verifications.',
+    linkedin: '#',
+  },
+  {
+    name: 'Pragya Mishra',
+    role: 'Head of Operations',
+    img: '/team/pragya.png',
+    bio: 'Ensuring seamless verification workflows and exceptional user experiences. Managing end-to-end operations from university onboarding to enterprise client success.',
+    linkedin: '#',
+  },
 ]
 
 export default function Team() {
+  const ref = useRef(null)
+  const inView = useInView(ref, { once: true, margin: '-80px' })
   const [selected, setSelected] = useState<number | null>(null)
 
   return (
-    <section id="team" className="py-24 bg-[#0A0A0F]">
-      <div className="max-w-6xl mx-auto px-5">
+    <section id="team" ref={ref} className="py-24 relative">
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[rgb(var(--accent))]/[0.02] to-transparent" />
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 relative z-10">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
           className="text-center mb-16"
         >
-          <span className="text-[#F5C542] text-sm font-semibold uppercase tracking-widest">Our Team</span>
-          <h2 className="font-syne text-3xl md:text-5xl font-extrabold text-white mt-3">
-            The Minds Behind CREDENTIA
+          <h2 className="font-syne text-3xl sm:text-4xl font-extrabold text-[rgb(var(--text-primary))] mb-4">
+            Meet Our <span className="gradient-text">Team</span>
           </h2>
+          <p className="text-[rgb(var(--text-secondary))] text-lg">The people building India&apos;s most trusted credential platform</p>
         </motion.div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-10">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
           {team.map((member, i) => (
             <motion.div
               key={i}
               initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.4, delay: i * 0.15 }}
-              className="text-center group cursor-pointer"
+              animate={inView ? { opacity: 1, y: 0 } : {}}
+              transition={{ duration: 0.5, delay: i * 0.1 }}
               onClick={() => setSelected(i)}
+              className="text-center cursor-pointer group"
             >
-              <div className="relative w-36 h-36 mx-auto mb-4 rounded-full overflow-hidden ring-2 ring-transparent group-hover:ring-4 group-hover:ring-[#F5C542] group-hover:ring-offset-4 group-hover:ring-offset-[#0A0A0F] transition-all duration-300 group-hover:shadow-[0_0_40px_rgba(245,197,66,0.4)]">
-                <Image
-                  src={member.image}
-                  alt={member.name}
-                  fill
-                  className="object-cover object-top"
-                  onError={(e) => {
-                    const t = e.currentTarget as HTMLImageElement
-                    t.style.display = 'none'
-                    const p = t.parentElement
-                    if (p) p.innerHTML = `<div style="width:100%;height:100%;background:#1C1C26;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:800;color:#F5C542;">${member.name[0]}</div>`
-                  }}
-                />
+              <div className="relative w-28 h-28 md:w-32 md:h-32 mx-auto mb-4">
+                {/* Gradient ring */}
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500 via-teal-400 to-indigo-500 p-[3px] group-hover:p-[2px] transition-all group-hover:shadow-[0_0_20px_rgba(59,130,246,0.3)]">
+                  <div className="w-full h-full rounded-full bg-[rgb(var(--bg-base))] p-[3px]">
+                    <div className="relative w-full h-full rounded-full overflow-hidden">
+                      <Image
+                        src={member.img}
+                        alt={member.name}
+                        fill
+                        className="object-cover object-top group-hover:scale-110 transition-transform duration-500"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
-              <h4 className="font-syne font-bold text-white text-lg">{member.name}</h4>
-              <p className="text-[#9999AA] text-sm mt-1">{member.role}</p>
+              <h3 className="font-syne text-sm md:text-base font-bold text-[rgb(var(--text-primary))] group-hover:text-[rgb(var(--accent))] transition-colors">{member.name}</h3>
+              <p className="text-[rgb(var(--text-muted))] text-xs md:text-sm">{member.role}</p>
             </motion.div>
           ))}
         </div>
@@ -69,38 +96,26 @@ export default function Team() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
             onClick={() => setSelected(null)}
+            className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
           >
             <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{ type: 'spring', damping: 20 }}
-              className="glass rounded-3xl p-8 max-w-sm w-full mx-4 relative"
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
               onClick={e => e.stopPropagation()}
+              className="glass-strong rounded-3xl p-8 max-w-md w-full relative"
             >
-              <button onClick={() => setSelected(null)} className="absolute top-4 right-4 text-[#9999AA] hover:text-white">
-                <X size={20} />
+              <button onClick={() => setSelected(null)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-[rgb(var(--bg-elevated))] flex items-center justify-center text-[rgb(var(--text-muted))] hover:text-[rgb(var(--text-primary))] transition-colors">
+                <X size={16} />
               </button>
-              <div className="text-center">
-                <div className="relative w-28 h-28 mx-auto mb-4 rounded-full overflow-hidden ring-4 ring-[#F5C542] ring-offset-4 ring-offset-[#13131A]">
-                  <Image
-                    src={team[selected].image}
-                    alt={team[selected].name}
-                    fill
-                    className="object-cover object-top"
-                    onError={(e) => {
-                      const t = e.currentTarget as HTMLImageElement
-                      t.style.display = 'none'
-                      const p = t.parentElement
-                      if (p) p.innerHTML = `<div style="width:100%;height:100%;background:#1C1C26;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:800;color:#F5C542;">${team[selected].name[0]}</div>`
-                    }}
-                  />
+              <div className="flex flex-col items-center text-center">
+                <div className="relative w-24 h-24 rounded-full overflow-hidden mb-4 ring-3 ring-[rgb(var(--accent))]/30">
+                  <Image src={team[selected].img} alt={team[selected].name} fill className="object-cover object-top" />
                 </div>
-                <h3 className="font-syne text-2xl font-extrabold text-white">{team[selected].name}</h3>
-                <p className="text-[#F5C542] text-sm font-medium mt-1">{team[selected].role}</p>
-                <p className="text-[#9999AA] text-sm mt-4 leading-relaxed">{team[selected].bio}</p>
+                <h3 className="font-syne text-xl font-bold text-[rgb(var(--text-primary))] mb-1">{team[selected].name}</h3>
+                <p className="text-[rgb(var(--accent))] text-sm font-medium mb-4">{team[selected].role}</p>
+                <p className="text-[rgb(var(--text-secondary))] text-sm leading-relaxed">{team[selected].bio}</p>
               </div>
             </motion.div>
           </motion.div>

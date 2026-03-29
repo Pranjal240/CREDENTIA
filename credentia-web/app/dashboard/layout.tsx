@@ -3,47 +3,38 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
-  LayoutDashboard, FileText, Shield, CreditCard,
-  GraduationCap, Link2, LogOut, Users, Building2,
-  BarChart3, Settings, Menu, X
+  LayoutDashboard, FileText, Shield, CreditCard, GraduationCap, Link2, Building2, Users,
+  ChevronLeft, ChevronRight, LogOut, Bell, Settings, Menu, X
 } from 'lucide-react'
-import { getInitials } from '@/lib/utils'
 
-const studentNav = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/student' },
-  { icon: FileText, label: 'Resume', href: '/dashboard/student/resume' },
-  { icon: Shield, label: 'Police Verify', href: '/dashboard/student/police' },
-  { icon: CreditCard, label: 'Aadhaar', href: '/dashboard/student/aadhaar' },
-  { icon: GraduationCap, label: 'Degree', href: '/dashboard/student/degree' },
-  { icon: Link2, label: 'My Link', href: '/dashboard/student/my-link' },
-]
-
-const companyNav = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/company' },
-  { icon: Users, label: 'Candidates', href: '/dashboard/company/candidates' },
-  { icon: Settings, label: 'Settings', href: '/dashboard/company/settings' },
-]
-
-const universityNav = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/university' },
-  { icon: Users, label: 'Students', href: '/dashboard/university/students' },
-]
-
-const adminNav = [
-  { icon: LayoutDashboard, label: 'Overview', href: '/dashboard/admin' },
-  { icon: Shield, label: 'Police Verified', href: '/dashboard/admin/police-verified' },
-  { icon: Building2, label: 'Companies', href: '/dashboard/admin/companies' },
-  { icon: GraduationCap, label: 'Universities', href: '/dashboard/admin/universities' },
-  { icon: BarChart3, label: 'Analytics', href: '/dashboard/admin/analytics' },
-]
-
-function getNav(role: string) {
-  if (role === 'company') return companyNav
-  if (role === 'university') return universityNav
-  if (role === 'admin') return adminNav
-  return studentNav
+const sidebarLinks: Record<string, { label: string; icon: any; href: string }[]> = {
+  student: [
+    { label: 'Overview', icon: LayoutDashboard, href: '/dashboard/student' },
+    { label: 'Resume', icon: FileText, href: '/dashboard/student/resume' },
+    { label: 'Police', icon: Shield, href: '/dashboard/student/police' },
+    { label: 'Aadhaar', icon: CreditCard, href: '/dashboard/student/aadhaar' },
+    { label: 'Degree', icon: GraduationCap, href: '/dashboard/student/degree' },
+    { label: 'My Link', icon: Link2, href: '/dashboard/student/my-link' },
+  ],
+  company: [
+    { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/company' },
+    { label: 'Candidates', icon: Users, href: '/dashboard/company/candidates' },
+    { label: 'Settings', icon: Settings, href: '/dashboard/company/settings' },
+  ],
+  university: [
+    { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/university' },
+    { label: 'Students', icon: Users, href: '/dashboard/university/students' },
+  ],
+  admin: [
+    { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/admin' },
+    { label: 'Police Queue', icon: Shield, href: '/dashboard/admin/police' },
+    { label: 'Companies', icon: Building2, href: '/dashboard/admin/companies' },
+    { label: 'Universities', icon: GraduationCap, href: '/dashboard/admin/universities' },
+  ],
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -51,113 +42,152 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname()
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
+  const [role, setRole] = useState<string>('student')
+  const [collapsed, setCollapsed] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
-    async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
-
-      const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-      setUser(user)
-      setProfile(p)
+    const init = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { router.push('/login'); return }
+      setUser(session.user)
+      const { data: prof } = await supabase.from('profiles').select('*').eq('id', session.user.id).single()
+      if (prof) { setProfile(prof); setRole(prof.role) }
       setLoading(false)
     }
     init()
   }, [router])
 
-  const logout = async () => {
+  const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/login')
+    router.refresh()
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0A0A0F] flex items-center justify-center">
-        <div className="w-10 h-10 border-2 border-[#F5C542] border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'rgb(var(--bg-base))' }}>
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
-  const role = profile?.role || 'student'
-  const nav = getNav(role)
-  const displayName = profile?.full_name || user?.email?.split('@')[0] || 'User'
+  const links = sidebarLinks[role] || sidebarLinks.student
 
   return (
-    <div className="min-h-screen bg-[#0A0A0F] flex">
-      {/* Mobile hamburger */}
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="md:hidden fixed top-4 left-4 z-50 w-10 h-10 rounded-xl bg-[#13131A] border border-[#2A2A3A] flex items-center justify-center text-white"
+    <div className="min-h-screen flex" style={{ background: 'rgb(var(--bg-base))' }}>
+      {/* Desktop Sidebar */}
+      <motion.aside
+        animate={{ width: collapsed ? 72 : 260 }}
+        transition={{ duration: 0.3 }}
+        className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 z-40 border-r"
+        style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}
       >
-        {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
-      </button>
-
-      {/* Sidebar */}
-      <aside className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 w-64 bg-[#13131A] border-r border-[#2A2A3A] flex flex-col fixed h-full z-40 transition-transform duration-300`}>
-        <div className="p-5 border-b border-[#2A2A3A]">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#F5C542] flex items-center justify-center flex-shrink-0">
-              <span className="text-black font-black text-sm">C</span>
-            </div>
-            <span className="font-bold text-lg text-[#F5C542] font-syne tracking-tight">CREDENTIA</span>
-          </Link>
+        {/* Logo */}
+        <div className="h-16 flex items-center px-4 gap-2.5 border-b" style={{ borderColor: 'rgba(var(--border-default), 0.3)' }}>
+          <div className="relative w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+            <Image src="/logo.png" alt="C" fill className="object-contain p-0.5" />
+          </div>
+          {!collapsed && <span className="font-syne text-base font-extrabold" style={{ color: 'rgb(var(--text-primary))' }}>CREDENTIA</span>}
         </div>
 
-        <div className="px-5 py-3 border-b border-[#2A2A3A]">
-          <span className="text-xs uppercase tracking-widest text-[#9999AA] font-semibold">{role} portal</span>
-        </div>
-
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          {nav.map(item => {
-            const isActive = pathname === item.href || (pathname.startsWith(item.href + '/') && item.href !== '/dashboard/' + role)
+        {/* Nav links */}
+        <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
+          {links.map((link) => {
+            const active = pathname === link.href
             return (
               <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setSidebarOpen(false)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-                  isActive
-                    ? 'bg-[#F5C542]/10 text-[#F5C542] border border-[#F5C542]/20'
-                    : 'text-[#9999AA] hover:text-white hover:bg-[#1C1C26]'
+                key={link.href}
+                href={link.href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  active
+                    ? 'text-white'
+                    : ''
                 }`}
+                style={{
+                  color: active ? 'white' : 'rgb(var(--text-secondary))',
+                  background: active ? 'linear-gradient(135deg, rgb(var(--accent)), rgb(var(--accent-hover)))' : 'transparent',
+                }}
+                title={collapsed ? link.label : undefined}
               >
-                <item.icon size={17} className={isActive ? 'text-[#F5C542]' : 'group-hover:text-[#F5C542] transition-colors'} />
-                <span className="text-sm font-medium">{item.label}</span>
+                <link.icon size={20} className="flex-shrink-0" />
+                {!collapsed && link.label}
               </Link>
             )
           })}
         </nav>
 
-        <div className="p-4 border-t border-[#2A2A3A]">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#F5C542] to-[#D4A017] flex items-center justify-center text-black font-bold text-sm flex-shrink-0">
-              {getInitials(displayName)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-sm font-semibold truncate">{displayName}</p>
-              <p className="text-[#9999AA] text-xs truncate">{user?.email}</p>
-            </div>
-          </div>
-          <button
-            onClick={logout}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[#9999AA] hover:text-red-400 hover:bg-red-500/10 transition-all text-sm"
-          >
-            <LogOut size={15} />
-            Sign Out
+        {/* Collapse + Logout */}
+        <div className="p-3 space-y-1 border-t" style={{ borderColor: 'rgba(var(--border-default), 0.3)' }}>
+          <button onClick={() => setCollapsed(!collapsed)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all" style={{ color: 'rgb(var(--text-muted))' }}>
+            {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+            {!collapsed && 'Collapse'}
+          </button>
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all hover:bg-red-500/5" style={{ color: 'rgb(var(--danger))' }}>
+            <LogOut size={20} />
+            {!collapsed && 'Sign Out'}
           </button>
         </div>
-      </aside>
+      </motion.aside>
 
-      {/* Backdrop for mobile */}
-      {sidebarOpen && (
-        <div className="md:hidden fixed inset-0 bg-black/50 z-30" onClick={() => setSidebarOpen(false)} />
-      )}
+      {/* Mobile header */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-between px-4 border-b" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
+        <button onClick={() => setMobileOpen(true)} className="p-1.5"><Menu size={20} style={{ color: 'rgb(var(--text-primary))' }} /></button>
+        <span className="font-syne font-bold text-sm" style={{ color: 'rgb(var(--text-primary))' }}>CREDENTIA</span>
+        <button onClick={handleLogout} className="p-1.5"><LogOut size={18} style={{ color: 'rgb(var(--danger))' }} /></button>
+      </div>
+
+      {/* Mobile sidebar overlay */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setMobileOpen(false)} className="fixed inset-0 bg-black/40 z-40 md:hidden" />
+            <motion.div initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }} className="fixed left-0 top-0 bottom-0 w-[260px] z-50 md:hidden border-r" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
+              <div className="h-14 flex items-center justify-between px-4 border-b" style={{ borderColor: 'rgba(var(--border-default), 0.3)' }}>
+                <span className="font-syne font-bold" style={{ color: 'rgb(var(--text-primary))' }}>Menu</span>
+                <button onClick={() => setMobileOpen(false)}><X size={20} style={{ color: 'rgb(var(--text-muted))' }} /></button>
+              </div>
+              <nav className="py-4 px-2 space-y-1">
+                {links.map((link) => {
+                  const active = pathname === link.href
+                  return (
+                    <Link key={link.href} href={link.href} onClick={() => setMobileOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium" style={{ color: active ? 'white' : 'rgb(var(--text-secondary))', background: active ? 'linear-gradient(135deg, rgb(var(--accent)), rgb(var(--accent-hover)))' : 'transparent' }}>
+                      <link.icon size={20} />
+                      {link.label}
+                    </Link>
+                  )
+                })}
+              </nav>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Main content */}
-      <main className="md:ml-64 flex-1 min-h-screen">
-        {children}
+      <main className={`flex-1 transition-all duration-300 ${collapsed ? 'md:ml-[72px]' : 'md:ml-[260px]'} mt-14 md:mt-0`}>
+        {/* Top bar */}
+        <div className="hidden md:flex items-center justify-between h-16 px-6 border-b" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.3)' }}>
+          <div>
+            <span className="text-sm" style={{ color: 'rgb(var(--text-muted))' }}>Welcome back,</span>
+            <span className="font-syne font-bold text-sm ml-1" style={{ color: 'rgb(var(--text-primary))' }}>
+              {profile?.full_name || user?.email?.split('@')[0] || 'User'}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="px-3 py-1 rounded-full text-xs font-medium capitalize" style={{ background: 'rgba(var(--accent), 0.1)', color: 'rgb(var(--accent))' }}>
+              {role}
+            </span>
+            <button className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ color: 'rgb(var(--text-muted))' }}>
+              <Bell size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Page content */}
+        <div className="p-4 md:p-6 page-enter">
+          {children}
+        </div>
       </main>
     </div>
   )

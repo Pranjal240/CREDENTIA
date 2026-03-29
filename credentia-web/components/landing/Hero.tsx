@@ -2,121 +2,108 @@
 
 import Link from 'next/link'
 import { motion } from 'framer-motion'
+import { Shield, ArrowRight } from 'lucide-react'
 
 export default function Hero() {
   return (
-    <section className="relative min-h-screen flex items-center justify-center bg-[#0A0A0F] overflow-hidden pt-16">
-      {/* Animated gradient orbs */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute w-[600px] h-[600px] rounded-full bg-[#7C3AED]/20 blur-[120px] -top-40 -left-40 animate-[drift_10s_ease-in-out_infinite]" />
-        <div className="absolute w-[500px] h-[500px] rounded-full bg-[#F5C542]/10 blur-[100px] -bottom-40 -right-40 animate-[counterDrift_13s_ease-in-out_infinite]" />
-        <div className="absolute w-[400px] h-[400px] rounded-full bg-[#2563EB]/15 blur-[80px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
-      </div>
+    <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
+      {/* Animated orbs */}
+      <div className="orb w-[500px] h-[500px] bg-blue-500/30 -top-40 -left-40" style={{ animationDelay: '0s' }} />
+      <div className="orb w-[400px] h-[400px] bg-teal-500/20 -bottom-32 -right-32" style={{ animationDelay: '4s', animationDuration: '15s' }} />
+      <div className="orb w-[300px] h-[300px] bg-indigo-500/15 top-1/3 right-1/4" style={{ animationDelay: '8s', animationDuration: '18s' }} />
 
-      <style jsx>{`
-        @keyframes drift { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(60px, 40px); } }
-        @keyframes counterDrift { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-50px, -30px); } }
-      `}</style>
+      {/* Grid overlay */}
+      <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, rgb(var(--accent)) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
-      <div className="relative z-10 max-w-4xl mx-auto px-5 text-center">
+      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 text-center">
         {/* Badge */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#F5C542]/30 bg-[#F5C542]/5 mb-8"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[rgb(var(--accent))]/10 border border-[rgb(var(--accent))]/20 mb-8"
         >
-          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          <span className="text-sm text-[#F5C542]">🇮🇳 India&apos;s #1 Credential Platform</span>
+          <span className="w-2 h-2 rounded-full bg-[rgb(var(--success))] animate-pulse" />
+          <span className="text-[rgb(var(--accent))] text-sm font-medium">India&apos;s #1 Credential Verification Platform</span>
         </motion.div>
 
-        {/* H1 */}
-        <h1 className="font-syne text-5xl md:text-7xl lg:text-[80px] font-extrabold leading-tight mb-6">
-          <motion.span
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="block text-white"
-          >
-            Verify Once.
-          </motion.span>
-          <motion.span
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.4 }}
-            className="block text-[#F5C542]"
-          >
-            Trusted Forever.
-          </motion.span>
-        </h1>
+        {/* Headline */}
+        <motion.h1
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.15 }}
+          className="font-syne text-5xl sm:text-6xl lg:text-7xl font-extrabold leading-[1.1] mb-6"
+        >
+          Verify Once.{' '}
+          <span className="gradient-text-hero">Trusted Forever.</span>
+        </motion.h1>
 
         {/* Subtitle */}
         <motion.p
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.6 }}
-          className="text-lg md:text-xl text-[#9999AA] max-w-2xl mx-auto mb-10"
+          transition={{ duration: 0.7, delay: 0.3 }}
+          className="text-lg sm:text-xl text-[rgb(var(--text-secondary))] max-w-2xl mx-auto mb-10 leading-relaxed"
         >
           Upload your resume, police certificate, and Aadhaar — get AI-verified in minutes. Share one link with every company you apply to.
         </motion.p>
 
-        {/* CTA Buttons */}
+        {/* CTAs */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.8 }}
-          className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12"
+          transition={{ duration: 0.7, delay: 0.45 }}
+          className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-14"
         >
-          <Link
-            href="/register"
-            className="bg-[#F5C542] text-black font-bold h-14 px-8 rounded-xl hover:bg-[#D4A017] hover:scale-105 transition-all shadow-[0_0_30px_rgba(245,197,66,0.3)] flex items-center gap-2 text-base"
-          >
-            Start Verifying Free →
+          <Link href="/register" className="btn-primary px-8 py-3.5 text-base flex items-center gap-2 group">
+            Start Verifying Free
+            <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
           </Link>
-          <button
-            onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
-            className="border border-[#F5C542] text-[#F5C542] h-14 px-8 rounded-xl hover:bg-[#F5C542]/10 transition-all flex items-center gap-2 text-base"
-          >
+          <a href="#how-it-works" className="btn-secondary px-8 py-3.5 text-base">
             See How It Works
-          </button>
+          </a>
         </motion.div>
 
         {/* Social proof */}
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 1 }}
-          className="flex items-center justify-center gap-3 mb-14"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.6 }}
+          className="flex items-center justify-center gap-3 mb-10"
         >
           <div className="flex -space-x-2">
-            {['#EF4444', '#3B82F6', '#22C55E', '#F59E0B', '#8B5CF6'].map((c, i) => (
-              <div key={i} className="w-8 h-8 rounded-full border-2 border-[#0A0A0F] flex items-center justify-center text-xs font-bold text-white" style={{ background: c }}>
-                {['A', 'R', 'S', 'P', 'K'][i]}
+            {['bg-blue-500', 'bg-teal-500', 'bg-indigo-500', 'bg-emerald-500', 'bg-violet-500'].map((bg, i) => (
+              <div key={i} className={`w-8 h-8 rounded-full ${bg} border-2 border-[rgb(var(--bg-base))] flex items-center justify-center text-white text-xs font-bold`}>
+                {String.fromCharCode(65 + i)}
               </div>
             ))}
           </div>
-          <span className="text-sm text-[#9999AA]">Join <strong className="text-white">50,000+</strong> students already verified</span>
+          <span className="text-[rgb(var(--text-secondary))] text-sm">
+            Join <strong className="text-[rgb(var(--text-primary))]">50,000+</strong> students already verified
+          </span>
         </motion.div>
 
         {/* Floating verification badges */}
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 1.2 }}
-          className="flex flex-wrap justify-center gap-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 1, delay: 0.8 }}
+          className="flex flex-wrap items-center justify-center gap-3"
         >
           {[
-            '✅ Resume Verified — 94/100',
-            '✅ Police Verified — Delhi',
-            '✅ Aadhaar Verified',
-          ].map((text, i) => (
-            <div
+            { label: 'Resume Verified — 94/100', color: 'blue' },
+            { label: 'Police Verified — Delhi', color: 'emerald' },
+            { label: 'Aadhaar Verified', color: 'teal' },
+          ].map((badge, i) => (
+            <motion.div
               key={i}
-              className="glass rounded-full px-5 py-2.5 border border-[#F5C542]/20 text-sm text-white animate-float"
-              style={{ animationDelay: `${i * 0.5}s` }}
+              animate={{ y: [0, -6, 0] }}
+              transition={{ duration: 3, delay: i * 0.5, repeat: Infinity, ease: 'easeInOut' }}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl glass text-sm font-medium text-[rgb(var(--text-primary))]`}
             >
-              {text}
-            </div>
+              <Shield size={14} className={`text-${badge.color}-400`} />
+              {badge.label}
+            </motion.div>
           ))}
         </motion.div>
       </div>

@@ -1,172 +1,192 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
+import { useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useDropzone } from 'react-dropzone'
-import { FileText, Upload, Loader2, RefreshCw } from 'lucide-react'
-import { getScoreColor } from '@/lib/utils'
+import { motion } from 'framer-motion'
+import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, Sparkles, RotateCcw } from 'lucide-react'
 
 export default function ResumePage() {
   const [file, setFile] = useState<File | null>(null)
-  const [linkUrl, setLinkUrl] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [analysis, setAnalysis] = useState<any>(null)
+  const [uploading, setUploading] = useState(false)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [result, setResult] = useState<any>(null)
   const [error, setError] = useState('')
 
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    if (acceptedFiles.length > 0) {
+      setFile(acceptedFiles[0])
+      setResult(null)
+      setError('')
+    }
+  }, [])
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
     accept: { 'application/pdf': ['.pdf'], 'application/msword': ['.doc'], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'] },
     maxFiles: 1,
-    onDrop: (files) => { setFile(files[0]); setError('') },
+    maxSize: 10 * 1024 * 1024,
   })
 
-  const analyze = async () => {
-    setLoading(true)
+  const handleUploadAndAnalyze = async () => {
+    if (!file) return
+    setUploading(true)
     setError('')
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      // Step 1: Upload to R2
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('folder', 'resumes')
+      const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
+      if (!uploadRes.ok) throw new Error('Upload failed')
+      const uploadData = await uploadRes.json()
 
-      let fileUrl = linkUrl
+      setUploading(false)
+      setAnalyzing(true)
 
-      if (file) {
-        const formData = new FormData()
-        formData.append('file', file)
-        formData.append('folder', 'resumes')
-        formData.append('studentId', user.id)
-        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
-        const uploadData = await uploadRes.json()
-        if (!uploadData.success) throw new Error(uploadData.error)
-        fileUrl = uploadData.url
-      }
-
+      // Step 2: Analyze with Groq AI
       const analyzeRes = await fetch('/api/analyze-resume', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileUrl, studentId: user.id }),
+        body: JSON.stringify({ url: uploadData.url, filename: uploadData.filename }),
       })
-      const analyzeData = await analyzeRes.json()
-      if (!analyzeData.success) throw new Error(analyzeData.error)
-      setAnalysis(analyzeData.analysis)
+      if (!analyzeRes.ok) throw new Error('Analysis failed')
+      const analysisData = await analyzeRes.json()
+      setResult(analysisData)
+      setAnalyzing(false)
     } catch (err: any) {
-      setError(err.message || 'Analysis failed')
+      setError(err.message || 'Something went wrong')
+      setUploading(false)
+      setAnalyzing(false)
     }
-    setLoading(false)
   }
 
-  const reset = () => { setFile(null); setLinkUrl(''); setAnalysis(null); setError('') }
+  const reset = () => { setFile(null); setResult(null); setError('') }
+
+  const scoreColor = (score: number) => {
+    if (score >= 80) return 'rgb(var(--success))'
+    if (score >= 60) return 'rgb(var(--warning))'
+    return 'rgb(var(--danger))'
+  }
 
   return (
-    <div className="p-6 md:p-8 max-w-4xl">
-      <div className="flex items-center gap-3 mb-8">
-        <FileText size={24} className="text-[#F5C542]" />
-        <h1 className="font-syne text-2xl font-extrabold text-white">Resume Analysis</h1>
+    <div className="max-w-4xl mx-auto space-y-6">
+      <div>
+        <h1 className="font-syne text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>Resume Analysis</h1>
+        <p className="text-sm mt-1" style={{ color: 'rgb(var(--text-secondary))' }}>Upload your resume for AI-powered ATS scoring</p>
       </div>
 
-      {!analysis ? (
-        <div className="space-y-6">
+      {!result ? (
+        <div className="rounded-2xl p-8 border" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
           {/* Dropzone */}
           <div
             {...getRootProps()}
-            className={`bg-[#13131A] border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all ${isDragActive ? 'border-[#F5C542] bg-[#F5C542]/5' : 'border-[#2A2A3A] hover:border-[#F5C542]/50'}`}
+            className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all ${isDragActive ? 'border-blue-500 bg-blue-500/5' : ''}`}
+            style={{ borderColor: file ? 'rgb(var(--success))' : isDragActive ? 'rgb(var(--accent))' : 'rgba(var(--border-default), 0.6)', background: file ? 'rgba(var(--success), 0.03)' : 'transparent' }}
           >
             <input {...getInputProps()} />
-            <Upload size={40} className="text-[#9999AA] mx-auto mb-4" />
             {file ? (
-              <p className="text-white font-medium">{file.name} <span className="text-[#9999AA]">({(file.size / 1024).toFixed(0)} KB)</span></p>
+              <div className="flex flex-col items-center gap-3">
+                <FileText size={40} style={{ color: 'rgb(var(--success))' }} />
+                <p className="font-medium text-sm" style={{ color: 'rgb(var(--text-primary))' }}>{file.name}</p>
+                <p className="text-xs" style={{ color: 'rgb(var(--text-muted))' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+              </div>
             ) : (
-              <>
-                <p className="text-white font-medium mb-1">Drop your resume here</p>
-                <p className="text-[#9999AA] text-sm">PDF, DOC, or DOCX — max 10MB</p>
-              </>
+              <div className="flex flex-col items-center gap-3">
+                <Upload size={40} style={{ color: 'rgb(var(--text-muted))' }} />
+                <p className="font-medium text-sm" style={{ color: 'rgb(var(--text-primary))' }}>
+                  {isDragActive ? 'Drop your resume here' : 'Drag & drop your resume, or click to browse'}
+                </p>
+                <p className="text-xs" style={{ color: 'rgb(var(--text-muted))' }}>PDF, DOC, DOCX — Max 10MB</p>
+              </div>
             )}
           </div>
 
-          {/* Or paste link */}
-          <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-5">
-            <p className="text-[#9999AA] text-sm mb-3">Or paste a link to your resume:</p>
-            <input
-              type="url" value={linkUrl} onChange={e => setLinkUrl(e.target.value)}
-              className="w-full h-11 px-4 rounded-xl bg-[#1C1C26] border border-[#2A2A3A] text-white text-sm focus:border-[#F5C542] outline-none"
-              placeholder="https://drive.google.com/..."
-            />
-          </div>
-
-          {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-xl px-4 py-3">{error}</div>}
-
-          <button
-            onClick={analyze}
-            disabled={(!file && !linkUrl) || loading}
-            className="bg-[#F5C542] text-black font-bold h-12 px-8 rounded-xl hover:bg-[#D4A017] transition-all disabled:opacity-50 flex items-center gap-2"
-          >
-            {loading ? <><Loader2 size={18} className="animate-spin" /> Analyzing...</> : 'Analyze Now →'}
-          </button>
-
-          {loading && (
-            <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-8 text-center">
-              <div className="w-12 h-12 border-2 border-[#F5C542] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-white font-medium">🤖 AI is analyzing your resume...</p>
-              <p className="text-[#9999AA] text-sm mt-1">This takes 10-30 seconds</p>
+          {error && (
+            <div className="mt-4 rounded-xl px-4 py-3 text-sm flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171' }}>
+              <AlertCircle size={16} /> {error}
             </div>
+          )}
+
+          {file && (
+            <button
+              onClick={handleUploadAndAnalyze}
+              disabled={uploading || analyzing}
+              className="mt-6 w-full h-12 rounded-xl font-bold text-white flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
+              style={{ background: 'linear-gradient(135deg, rgb(var(--accent)), rgb(var(--accent-hover)))' }}
+            >
+              {uploading ? (<><Loader2 size={18} className="animate-spin" /> Uploading...</>) :
+               analyzing ? (<><Sparkles size={18} className="animate-pulse" /> AI Analyzing...</>) :
+               (<><Sparkles size={18} /> Analyze Resume</>)}
+            </button>
           )}
         </div>
       ) : (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-          {/* Score */}
-          <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-syne font-bold text-white">ATS SCORE</h3>
-              <span className="font-syne text-3xl font-extrabold" style={{ color: getScoreColor(analysis.ats_score) }}>{analysis.ats_score}/100</span>
-            </div>
-            <div className="bg-[#1C1C26] rounded-full h-3 overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-1000" style={{ width: `${analysis.ats_score}%`, background: getScoreColor(analysis.ats_score) }} />
-            </div>
-            <p className="text-[#9999AA] text-sm mt-2">{analysis.ats_score >= 75 ? '🎉 Excellent!' : analysis.ats_score >= 50 ? '👍 Good, room to improve' : '⚠️ Needs significant improvement'}</p>
-          </div>
-
-          {/* Keywords */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-5">
-              <h4 className="font-syne font-bold text-white text-sm mb-3">✅ Keywords Found</h4>
-              <div className="flex flex-wrap gap-2">
-                {(analysis.keywords_found || []).map((k: string, i: number) => (
-                  <span key={i} className="text-xs px-3 py-1.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">{k}</span>
-                ))}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+          {/* ATS Score */}
+          <div className="rounded-2xl p-6 border text-center" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
+            <div className="relative w-28 h-28 mx-auto mb-4">
+              <svg className="score-ring w-28 h-28">
+                <circle cx="56" cy="56" r="48" stroke="rgba(var(--border-default),0.3)" strokeWidth="6" fill="none" />
+                <circle cx="56" cy="56" r="48" stroke={scoreColor(result.ats_score)} strokeWidth="6" fill="none" strokeDasharray={`${2 * Math.PI * 48}`} strokeDashoffset={`${2 * Math.PI * 48 * (1 - result.ats_score / 100)}`} strokeLinecap="round" />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="font-syne text-3xl font-extrabold" style={{ color: scoreColor(result.ats_score) }}>{result.ats_score}</span>
+                <span className="text-xs" style={{ color: 'rgb(var(--text-muted))' }}>ATS Score</span>
               </div>
             </div>
-            <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-5">
-              <h4 className="font-syne font-bold text-white text-sm mb-3">❌ Missing Keywords</h4>
-              <div className="flex flex-wrap gap-2">
-                {(analysis.keywords_missing || []).map((k: string, i: number) => (
-                  <span key={i} className="text-xs px-3 py-1.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">{k}</span>
-                ))}
-              </div>
-            </div>
+            <p className="text-sm" style={{ color: 'rgb(var(--text-secondary))' }}>{result.summary}</p>
           </div>
 
-          {/* Strengths & Improvements */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-5">
-              <h4 className="font-syne font-bold text-white text-sm mb-3">💪 Strengths</h4>
+          {/* Details grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Strengths */}
+            <div className="rounded-2xl p-5 border" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
+              <h3 className="font-syne font-bold text-sm mb-3" style={{ color: 'rgb(var(--success))' }}>✅ Strengths</h3>
               <ul className="space-y-2">
-                {(analysis.strengths || []).map((s: string, i: number) => (
-                  <li key={i} className="text-[#CCCCDD] text-sm flex items-start gap-2"><span className="text-green-400">•</span> {s}</li>
+                {(result.strengths || []).map((s: string, i: number) => (
+                  <li key={i} className="text-sm flex items-start gap-2" style={{ color: 'rgb(var(--text-secondary))' }}>
+                    <CheckCircle2 size={14} className="mt-0.5 flex-shrink-0" style={{ color: 'rgb(var(--success))' }} /> {s}
+                  </li>
                 ))}
               </ul>
             </div>
-            <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-5">
-              <h4 className="font-syne font-bold text-white text-sm mb-3">💡 Improvements</h4>
+
+            {/* Improvements */}
+            <div className="rounded-2xl p-5 border" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
+              <h3 className="font-syne font-bold text-sm mb-3" style={{ color: 'rgb(var(--warning))' }}>💡 Improvements</h3>
               <ul className="space-y-2">
-                {(analysis.improvements || []).map((s: string, i: number) => (
-                  <li key={i} className="text-[#CCCCDD] text-sm flex items-start gap-2"><span className="text-yellow-400">•</span> {s}</li>
+                {(result.improvements || []).map((s: string, i: number) => (
+                  <li key={i} className="text-sm flex items-start gap-2" style={{ color: 'rgb(var(--text-secondary))' }}>
+                    <AlertCircle size={14} className="mt-0.5 flex-shrink-0" style={{ color: 'rgb(var(--warning))' }} /> {s}
+                  </li>
                 ))}
               </ul>
             </div>
+
+            {/* Keywords Found */}
+            <div className="rounded-2xl p-5 border" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
+              <h3 className="font-syne font-bold text-sm mb-3" style={{ color: 'rgb(var(--accent))' }}>🔑 Keywords Found</h3>
+              <div className="flex flex-wrap gap-2">
+                {(result.keywords_found || []).map((k: string, i: number) => (
+                  <span key={i} className="px-3 py-1 rounded-lg text-xs font-medium" style={{ background: 'rgba(var(--accent), 0.1)', color: 'rgb(var(--accent))' }}>{k}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* Top Skills */}
+            <div className="rounded-2xl p-5 border" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
+              <h3 className="font-syne font-bold text-sm mb-3" style={{ color: 'rgb(var(--teal))' }}>⚡ Top Skills</h3>
+              <div className="flex flex-wrap gap-2">
+                {(result.top_skills || []).map((k: string, i: number) => (
+                  <span key={i} className="px-3 py-1 rounded-lg text-xs font-medium" style={{ background: 'rgba(var(--teal), 0.1)', color: 'rgb(var(--teal))' }}>{k}</span>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <button onClick={reset} className="flex items-center gap-2 text-[#F5C542] text-sm hover:underline">
-            <RefreshCw size={14} /> Re-analyze with another resume
+          <button onClick={reset} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all" style={{ border: '1px solid rgba(var(--border-default), 0.8)', color: 'rgb(var(--text-secondary))' }}>
+            <RotateCcw size={16} /> Upload Another Resume
           </button>
         </motion.div>
       )}

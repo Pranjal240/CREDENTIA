@@ -2,55 +2,83 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { GraduationCap, Users, Search } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { GraduationCap, Users, CheckCircle2 } from 'lucide-react'
 
 export default function UniversityDashboard() {
   const [students, setStudents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function load() {
-      const { data } = await supabase.from('students').select('*, profiles!inner(full_name, email)').limit(100)
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const { data } = await supabase
+        .from('students')
+        .select('*, profiles!inner(full_name, email)')
+        .eq('university_id', session.user.id)
+        .order('created_at', { ascending: false })
       setStudents(data || [])
       setLoading(false)
     }
     load()
   }, [])
 
-  if (loading) return <div className="p-8 flex justify-center"><div className="w-8 h-8 border-2 border-[#F5C542] border-t-transparent rounded-full animate-spin" /></div>
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>
 
   return (
-    <div className="p-6 md:p-8">
-      <h1 className="font-syne text-2xl font-extrabold text-white mb-6">University Dashboard</h1>
-      <div className="grid grid-cols-2 gap-4 mb-8">
-        <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-5">
-          <Users size={18} className="text-[#9999AA] mb-2" />
-          <p className="font-syne text-2xl font-extrabold text-white">{students.length}</p>
-          <p className="text-[#9999AA] text-xs">Total Students</p>
-        </div>
-        <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-5">
-          <GraduationCap size={18} className="text-[#9999AA] mb-2" />
-          <p className="font-syne text-2xl font-extrabold text-white">{students.filter((s: any) => s.degree_verified).length}</p>
-          <p className="text-[#9999AA] text-xs">Degree Verified</p>
-        </div>
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div>
+        <h1 className="font-syne text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>University Dashboard</h1>
+        <p className="text-sm mt-1" style={{ color: 'rgb(var(--text-secondary))' }}>Manage your institution&apos;s students</p>
       </div>
-      <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-6">
-        <h3 className="font-syne font-bold text-white mb-4">Student Records</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b border-[#2A2A3A]"><th className="text-left py-3 text-[#9999AA] font-medium">Name</th><th className="text-left py-3 text-[#9999AA] font-medium">Email</th><th className="text-center py-3 text-[#9999AA] font-medium">Degree</th><th className="text-center py-3 text-[#9999AA] font-medium">CGPA</th></tr></thead>
-            <tbody>
-              {students.map((s: any) => (
-                <tr key={s.id} className="border-b border-[#2A2A3A] hover:bg-[#1C1C26]">
-                  <td className="py-3 text-white">{s.profiles?.full_name || '—'}</td>
-                  <td className="py-3 text-[#9999AA]">{s.profiles?.email || '—'}</td>
-                  <td className="py-3 text-center">{s.degree_verified ? '✅' : '⬜'}</td>
-                  <td className="py-3 text-center text-white">{s.cgpa || '—'}</td>
+
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: 'Total Students', value: students.length, icon: Users },
+          { label: 'Degree Verified', value: students.filter(s => s.degree_verified).length, icon: GraduationCap },
+          { label: 'Academic Verified', value: students.filter(s => s.academic_verified).length, icon: CheckCircle2 },
+        ].map((stat, i) => (
+          <div key={i} className="rounded-2xl p-5 border text-center" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
+            <stat.icon size={20} className="mx-auto mb-2" style={{ color: 'rgb(var(--accent))' }} />
+            <p className="font-syne text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>{stat.value}</p>
+            <p className="text-xs" style={{ color: 'rgb(var(--text-muted))' }}>{stat.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Student table */}
+      <div className="rounded-2xl border overflow-hidden" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
+        {students.length === 0 ? (
+          <div className="p-12 text-center">
+            <Users size={40} className="mx-auto mb-3" style={{ color: 'rgb(var(--text-muted))' }} />
+            <p className="font-syne font-bold" style={{ color: 'rgb(var(--text-primary))' }}>No Students Yet</p>
+            <p className="text-sm mt-1" style={{ color: 'rgb(var(--text-muted))' }}>Students linked to your university will appear here</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: '1px solid rgba(var(--border-default), 0.5)' }}>
+                  {['Name', 'Course', 'CGPA', 'Degree', 'Academic'].map(h => (
+                    <th key={h} className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'rgb(var(--text-muted))' }}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {students.map((s, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid rgba(var(--border-default), 0.3)' }}>
+                    <td className="px-5 py-4 font-medium" style={{ color: 'rgb(var(--text-primary))' }}>{s.profiles?.full_name}</td>
+                    <td className="px-5 py-4" style={{ color: 'rgb(var(--text-secondary))' }}>{s.course} {s.branch}</td>
+                    <td className="px-5 py-4" style={{ color: 'rgb(var(--text-primary))' }}>{s.cgpa || '—'}</td>
+                    <td className="px-5 py-4">{s.degree_verified ? <CheckCircle2 size={16} style={{ color: 'rgb(var(--success))' }} /> : <span style={{ color: 'rgb(var(--text-muted))' }}>—</span>}</td>
+                    <td className="px-5 py-4">{s.academic_verified ? <CheckCircle2 size={16} style={{ color: 'rgb(var(--success))' }} /> : <span style={{ color: 'rgb(var(--text-muted))' }}>—</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -1,51 +1,56 @@
 'use client'
 
-import { motion } from 'framer-motion'
-import { UserPlus, Cpu, Share2 } from 'lucide-react'
+import { motion, useInView } from 'framer-motion'
+import { useRef } from 'react'
+import { Upload, Cpu, Share2 } from 'lucide-react'
 
 const steps = [
-  { num: 1, icon: UserPlus, title: 'Register & Upload', desc: 'Create your account in 30 seconds. Upload resume, police certificate, or paste a link.' },
-  { num: 2, icon: Cpu, title: 'AI Verifies Everything', desc: 'Groq AI model (llama-3.3-70b) analyzes your documents instantly. Extracts data, checks authenticity, gives confidence scores.' },
-  { num: 3, icon: Share2, title: 'Share Your Profile', desc: 'Get one verified link. Paste it on your resume, LinkedIn, emails. Every company trusts CREDENTIA.' },
+  { icon: Upload, num: '01', title: 'Upload Documents', desc: 'Upload your resume, police certificate, Aadhaar, or degree. Or just paste a link.' },
+  { icon: Cpu, num: '02', title: 'AI Verifies Instantly', desc: 'Groq AI analyzes your documents in seconds. Get ATS scores, authenticity checks, and fraud detection.' },
+  { icon: Share2, num: '03', title: 'Share One Link', desc: 'Get a verified profile link. Share it with any company — they see all your credentials in one place.' },
 ]
 
 export default function HowItWorks() {
+  const ref = useRef(null)
+  const inView = useInView(ref, { once: true, margin: '-80px' })
+
   return (
-    <section id="how-it-works" className="py-24 bg-gradient-to-b from-[#0A0A0F] to-[#13131A]">
-      <div className="max-w-6xl mx-auto px-5">
+    <section id="how-it-works" ref={ref} className="py-24 relative">
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[rgb(var(--accent))]/[0.02] to-transparent" />
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 relative z-10">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
           className="text-center mb-16"
         >
-          <span className="text-[#F5C542] text-sm font-semibold uppercase tracking-widest">How It Works</span>
-          <h2 className="font-syne text-3xl md:text-5xl font-extrabold text-white mt-3">
-            Three Steps to Total Trust
+          <h2 className="font-syne text-3xl sm:text-4xl font-extrabold text-[rgb(var(--text-primary))] mb-4">
+            How It <span className="gradient-text">Works</span>
           </h2>
+          <p className="text-[rgb(var(--text-secondary))] text-lg">Three simple steps to a verified professional profile</p>
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
           {/* Connecting line */}
-          <div className="hidden md:block absolute top-16 left-[20%] right-[20%] h-[2px] bg-gradient-to-r from-[#F5C542]/0 via-[#F5C542]/40 to-[#F5C542]/0" />
+          <div className="hidden md:block absolute top-16 left-[20%] right-[20%] h-px bg-gradient-to-r from-[rgb(var(--accent))]/20 via-[rgb(var(--accent))]/40 to-[rgb(var(--accent))]/20" />
 
           {steps.map((step, i) => (
             <motion.div
               key={i}
-              initial={{ opacity: 0, x: -30 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: i * 0.2 }}
+              initial={{ opacity: 0, y: 30 }}
+              animate={inView ? { opacity: 1, y: 0 } : {}}
+              transition={{ duration: 0.5, delay: i * 0.15 }}
               className="text-center relative"
             >
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#F5C542] to-[#D4A017] flex items-center justify-center mx-auto mb-6 shadow-[0_0_30px_rgba(245,197,66,0.3)] relative z-10">
-                <span className="text-2xl font-extrabold text-black font-syne">{step.num}</span>
+              <div className="relative inline-flex mb-6">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[rgb(var(--accent))] to-[rgb(var(--teal))] flex items-center justify-center glow-blue">
+                  <step.icon size={28} className="text-white" />
+                </div>
+                <span className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-[rgb(var(--bg-base))] border-2 border-[rgb(var(--accent))] flex items-center justify-center text-[rgb(var(--accent))] text-xs font-bold">
+                  {step.num.replace('0', '')}
+                </span>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-[#1C1C26] flex items-center justify-center mx-auto mb-4 border border-[#2A2A3A]">
-                <step.icon size={20} className="text-[#F5C542]" />
-              </div>
-              <h3 className="font-syne text-xl font-bold text-white mb-3">{step.title}</h3>
-              <p className="text-[#9999AA] text-sm leading-relaxed max-w-xs mx-auto">{step.desc}</p>
+              <h3 className="font-syne text-xl font-bold text-[rgb(var(--text-primary))] mb-2">{step.title}</h3>
+              <p className="text-[rgb(var(--text-secondary))] text-sm leading-relaxed max-w-xs mx-auto">{step.desc}</p>
             </motion.div>
           ))}
         </div>

@@ -1,98 +1,119 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Link2, Copy, Check, ExternalLink, QrCode } from 'lucide-react'
-import QRCode from 'react-qr-code'
+import { motion } from 'framer-motion'
+import { Link2, Copy, Check, QrCode, ExternalLink, Eye, Share2 } from 'lucide-react'
 
 export default function MyLinkPage() {
-  const [student, setStudent] = useState<any>(null)
+  const [token, setToken] = useState('')
   const [loading, setLoading] = useState(true)
+  const [generating, setGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [views, setViews] = useState(0)
 
   useEffect(() => {
-    async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data } = await supabase.from('students').select('*').eq('id', user.id).single()
-      setStudent(data)
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const { data } = await supabase.from('students').select('share_token, profile_views').eq('id', session.user.id).single()
+      if (data?.share_token) { setToken(data.share_token); setViews(data.profile_views || 0) }
       setLoading(false)
     }
     load()
   }, [])
 
-  const shareUrl = student?.share_token ? `${process.env.NEXT_PUBLIC_APP_URL || 'https://credentiaonline.in'}/verify/${student.share_token}` : null
-
   const generateLink = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const res = await fetch('/api/generate-link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId: user.id }) })
-    const data = await res.json()
-    if (data.success) setStudent({ ...student, share_token: data.token, profile_is_public: true })
+    setGenerating(true)
+    try {
+      const res = await fetch('/api/generate-link', { method: 'POST' })
+      if (!res.ok) throw new Error('Failed')
+      const data = await res.json()
+      setToken(data.token)
+    } catch {}
+    setGenerating(false)
   }
 
+  const fullUrl = token ? `${window.location.origin}/verify/${token}` : ''
+
   const copyLink = () => {
-    if (shareUrl) navigator.clipboard.writeText(shareUrl)
+    navigator.clipboard.writeText(fullUrl)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
-  if (loading) return <div className="p-8 flex justify-center"><div className="w-8 h-8 border-2 border-[#F5C542] border-t-transparent rounded-full animate-spin" /></div>
+  const shareLinks = [
+    { label: 'WhatsApp', href: `https://wa.me/?text=Check%20my%20verified%20credentials%3A%20${encodeURIComponent(fullUrl)}`, color: '#25D366' },
+    { label: 'LinkedIn', href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(fullUrl)}`, color: '#0077B5' },
+    { label: 'Email', href: `mailto:?subject=My%20Verified%20Credentials&body=${encodeURIComponent(fullUrl)}`, color: 'rgb(var(--accent))' },
+  ]
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>
 
   return (
-    <div className="p-6 md:p-8 max-w-3xl">
-      <div className="flex items-center gap-3 mb-8">
-        <Link2 size={24} className="text-[#F5C542]" />
-        <h1 className="font-syne text-2xl font-extrabold text-white">My Verified Link</h1>
+    <div className="max-w-3xl mx-auto space-y-6">
+      <div>
+        <h1 className="font-syne text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>My Verified Link</h1>
+        <p className="text-sm mt-1" style={{ color: 'rgb(var(--text-secondary))' }}>Share one link with every company you apply to</p>
       </div>
 
-      {shareUrl ? (
-        <div className="space-y-6">
-          <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-6">
-            <h3 className="font-syne font-bold text-white mb-3">Your Verified Profile Link</h3>
-            <div className="flex items-center gap-3 bg-[#1C1C26] rounded-xl px-4 py-3 border border-[#2A2A3A] mb-4">
-              <span className="text-[#F5C542] text-sm flex-1 truncate">{shareUrl}</span>
-              <button onClick={copyLink} className="text-[#F5C542] hover:text-white transition-colors">
-                {copied ? <Check size={16} /> : <Copy size={16} />}
+      {token ? (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+          {/* Link card */}
+          <div className="rounded-2xl p-6 border" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgb(var(--accent)), rgb(var(--teal)))' }}>
+                <Link2 size={20} className="text-white" />
+              </div>
+              <div>
+                <p className="font-syne font-bold text-sm" style={{ color: 'rgb(var(--text-primary))' }}>Your Verified Profile</p>
+                <p className="text-xs" style={{ color: 'rgb(var(--text-muted))' }}>Anyone with this link can view your credentials</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex-1 px-4 py-3 rounded-xl text-sm truncate" style={{ background: 'rgb(var(--bg-elevated))', color: 'rgb(var(--accent))' }}>
+                {fullUrl}
+              </div>
+              <button onClick={copyLink} className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-all" style={{ background: copied ? 'rgb(var(--success))' : 'linear-gradient(135deg, rgb(var(--accent)), rgb(var(--accent-hover)))', color: 'white' }}>
+                {copied ? <Check size={18} /> : <Copy size={18} />}
               </button>
-              <a href={shareUrl} target="_blank" rel="noreferrer" className="text-[#9999AA] hover:text-white transition-colors">
-                <ExternalLink size={16} />
-              </a>
             </div>
           </div>
 
-          <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-6">
-            <h3 className="font-syne font-bold text-white mb-3">Share Via</h3>
-            <div className="flex flex-wrap gap-3">
-              <a href={`https://wa.me/?text=Check my verified credentials: ${shareUrl}`} target="_blank" rel="noreferrer" className="bg-[#25D366]/10 text-[#25D366] px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-[#25D366]/20 transition-all">WhatsApp</a>
-              <a href={`https://www.linkedin.com/sharing/share-offsite/?url=${shareUrl}`} target="_blank" rel="noreferrer" className="bg-[#0A66C2]/10 text-[#0A66C2] px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-[#0A66C2]/20 transition-all">LinkedIn</a>
-              <a href={`mailto:?subject=My Verified Profile&body=Check my verified credentials: ${shareUrl}`} className="bg-[#9999AA]/10 text-[#9999AA] px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-[#9999AA]/20 transition-all">Email</a>
-              <a href={`https://twitter.com/intent/tweet?text=My verified credentials: ${shareUrl}`} target="_blank" rel="noreferrer" className="bg-[#1DA1F2]/10 text-[#1DA1F2] px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-[#1DA1F2]/20 transition-all">Twitter</a>
+          {/* Stats */}
+          <div className="rounded-2xl p-5 border flex items-center gap-4" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
+            <Eye size={20} style={{ color: 'rgb(var(--accent))' }} />
+            <div>
+              <p className="font-syne font-bold" style={{ color: 'rgb(var(--text-primary))' }}>{views}</p>
+              <p className="text-xs" style={{ color: 'rgb(var(--text-muted))' }}>Profile views</p>
             </div>
           </div>
 
-          <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-6 flex flex-col items-center">
-            <h3 className="font-syne font-bold text-white mb-4">QR Code</h3>
-            <div className="p-4 bg-white rounded-2xl">
-              <QRCode value={shareUrl} size={180} bgColor="#FFFFFF" fgColor="#0A0A0F" />
+          {/* Share buttons */}
+          <div className="rounded-2xl p-5 border" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
+            <p className="font-syne font-bold text-sm mb-3" style={{ color: 'rgb(var(--text-primary))' }}>Share via</p>
+            <div className="flex gap-3">
+              {shareLinks.map((s, i) => (
+                <a key={i} href={s.href} target="_blank" rel="noreferrer" className="flex-1 py-3 rounded-xl text-center text-sm font-medium text-white transition-all hover:opacity-90" style={{ background: s.color }}>
+                  {s.label}
+                </a>
+              ))}
             </div>
-            <p className="text-[#9999AA] text-xs mt-3">Scan to view verified profile</p>
           </div>
 
-          {student?.profile_views > 0 && (
-            <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-4 text-center">
-              <span className="text-[#9999AA] text-sm">Profile Views: </span>
-              <span className="text-white font-bold">{student.profile_views}</span>
-            </div>
-          )}
-        </div>
+          {/* Preview */}
+          <a href={fullUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 py-3 text-sm font-medium" style={{ color: 'rgb(var(--accent))' }}>
+            <ExternalLink size={16} /> Preview Your Public Profile
+          </a>
+        </motion.div>
       ) : (
-        <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-12 text-center">
-          <QrCode size={48} className="text-[#9999AA] mx-auto mb-4" />
-          <h3 className="font-syne font-bold text-white text-lg mb-2">Generate Your Verified Link</h3>
-          <p className="text-[#9999AA] text-sm mb-6">Create a shareable link that shows your verification status to anyone.</p>
-          <button onClick={generateLink} className="bg-[#F5C542] text-black font-bold px-8 py-3 rounded-xl hover:bg-[#D4A017] transition-all">
-            Generate My Link
+        <div className="rounded-2xl p-10 border text-center" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
+          <Link2 size={48} className="mx-auto mb-4" style={{ color: 'rgb(var(--text-muted))' }} />
+          <h2 className="font-syne font-bold mb-2" style={{ color: 'rgb(var(--text-primary))' }}>No Link Generated Yet</h2>
+          <p className="text-sm mb-6" style={{ color: 'rgb(var(--text-secondary))' }}>Generate a shareable link to showcase all your verified credentials in one place.</p>
+          <button onClick={generateLink} disabled={generating} className="px-6 py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2 mx-auto disabled:opacity-50" style={{ background: 'linear-gradient(135deg, rgb(var(--accent)), rgb(var(--accent-hover)))' }}>
+            {generating ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Link2 size={18} /> Generate My Link</>}
           </button>
         </div>
       )}
