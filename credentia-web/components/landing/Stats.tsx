@@ -30,7 +30,7 @@ export default function Stats() {
               className="glass rounded-2xl p-6 text-center card-hover"
             >
               <stat.icon size={24} className={`${stat.color} mx-auto mb-3`} />
-              <div className="font-syne text-3xl md:text-4xl font-extrabold text-[rgb(var(--text-primary))] mb-1">
+              <div className="font-heading text-3xl md:text-4xl font-extrabold text-[rgb(var(--text-primary))] mb-1">
                 {inView ? (
                   <CountUp end={stat.value} duration={2.5} decimals={stat.decimals || 0} separator="," />
                 ) : '0'}

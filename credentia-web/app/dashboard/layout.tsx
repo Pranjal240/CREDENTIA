@@ -22,18 +22,12 @@ const sidebarLinks: Record<string, { label: string; icon: any; href: string }[]>
   ],
   company: [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/company' },
-    { label: 'Candidates', icon: Users, href: '/dashboard/company/candidates' },
-    { label: 'Settings', icon: Settings, href: '/dashboard/company/settings' },
   ],
   university: [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/university' },
-    { label: 'Students', icon: Users, href: '/dashboard/university/students' },
   ],
   admin: [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/admin' },
-    { label: 'Police Queue', icon: Shield, href: '/dashboard/admin/police' },
-    { label: 'Companies', icon: Building2, href: '/dashboard/admin/companies' },
-    { label: 'Universities', icon: GraduationCap, href: '/dashboard/admin/universities' },
   ],
 }
 
@@ -89,7 +83,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="relative w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
             <Image src="/logo.png" alt="C" fill className="object-contain p-0.5" />
           </div>
-          {!collapsed && <span className="font-syne text-base font-extrabold" style={{ color: 'rgb(var(--text-primary))' }}>CREDENTIA</span>}
+          {!collapsed && <span className="font-heading text-base font-extrabold" style={{ color: 'rgb(var(--text-primary))' }}>CREDENTIA</span>}
         </div>
 
         {/* Nav links */}
@@ -134,7 +128,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Mobile header */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-between px-4 border-b" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
         <button onClick={() => setMobileOpen(true)} className="p-1.5"><Menu size={20} style={{ color: 'rgb(var(--text-primary))' }} /></button>
-        <span className="font-syne font-bold text-sm" style={{ color: 'rgb(var(--text-primary))' }}>CREDENTIA</span>
+        <span className="font-heading font-bold text-sm" style={{ color: 'rgb(var(--text-primary))' }}>CREDENTIA</span>
         <button onClick={handleLogout} className="p-1.5"><LogOut size={18} style={{ color: 'rgb(var(--danger))' }} /></button>
       </div>
 
@@ -145,7 +139,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setMobileOpen(false)} className="fixed inset-0 bg-black/40 z-40 md:hidden" />
             <motion.div initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }} className="fixed left-0 top-0 bottom-0 w-[260px] z-50 md:hidden border-r" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
               <div className="h-14 flex items-center justify-between px-4 border-b" style={{ borderColor: 'rgba(var(--border-default), 0.3)' }}>
-                <span className="font-syne font-bold" style={{ color: 'rgb(var(--text-primary))' }}>Menu</span>
+                <span className="font-heading font-bold" style={{ color: 'rgb(var(--text-primary))' }}>Menu</span>
                 <button onClick={() => setMobileOpen(false)}><X size={20} style={{ color: 'rgb(var(--text-muted))' }} /></button>
               </div>
               <nav className="py-4 px-2 space-y-1">
@@ -170,7 +164,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="hidden md:flex items-center justify-between h-16 px-6 border-b" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.3)' }}>
           <div>
             <span className="text-sm" style={{ color: 'rgb(var(--text-muted))' }}>Welcome back,</span>
-            <span className="font-syne font-bold text-sm ml-1" style={{ color: 'rgb(var(--text-primary))' }}>
+            <span className="font-heading font-bold text-sm ml-1" style={{ color: 'rgb(var(--text-primary))' }}>
               {profile?.full_name || user?.email?.split('@')[0] || 'User'}
             </span>
           </div>

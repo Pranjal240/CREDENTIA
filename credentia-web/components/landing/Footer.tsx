@@ -39,7 +39,7 @@ export default function Footer() {
               <div className="relative w-8 h-8 rounded-full overflow-hidden ring-2 ring-[rgb(var(--accent))]/20">
                 <Image src="/logo.png" alt="CREDENTIA" fill className="object-contain p-0.5" />
               </div>
-              <span className="font-syne text-lg font-extrabold text-[rgb(var(--text-primary))]">CREDENTIA</span>
+              <span className="font-heading text-lg font-extrabold text-[rgb(var(--text-primary))]">CREDENTIA</span>
             </Link>
             <p className="text-[rgb(var(--text-secondary))] text-sm leading-relaxed mb-4 max-w-xs">
               India&apos;s most trusted AI-powered credential verification platform. Verify once. Trusted forever.
@@ -60,7 +60,7 @@ export default function Footer() {
           {/* Link columns */}
           {Object.entries(links).map(([title, items]) => (
             <div key={title}>
-              <h4 className="font-syne text-sm font-bold text-[rgb(var(--text-primary))] mb-4">{title}</h4>
+              <h4 className="font-heading text-sm font-bold text-[rgb(var(--text-primary))] mb-4">{title}</h4>
               <ul className="space-y-2.5">
                 {items.map((item) => (
                   <li key={item.label}>

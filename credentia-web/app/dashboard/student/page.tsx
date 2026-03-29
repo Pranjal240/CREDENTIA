@@ -45,7 +45,7 @@ export default function StudentDashboard() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div>
-        <h1 className="font-syne text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>Student Dashboard</h1>
+        <h1 className="font-heading text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>Student Dashboard</h1>
         <p className="text-sm mt-1" style={{ color: 'rgb(var(--text-secondary))' }}>Track your verification progress</p>
       </div>
 
@@ -61,7 +61,7 @@ export default function StudentDashboard() {
             <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${stat.color} flex items-center justify-center mb-3`}>
               <stat.icon size={18} className="text-white" />
             </div>
-            <p className="font-syne text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>{stat.value}<span className="text-base font-normal" style={{ color: 'rgb(var(--text-muted))' }}>{stat.suffix}</span></p>
+            <p className="font-heading text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>{stat.value}<span className="text-base font-normal" style={{ color: 'rgb(var(--text-muted))' }}>{stat.suffix}</span></p>
             <p className="text-xs mt-0.5" style={{ color: 'rgb(var(--text-muted))' }}>{stat.label}</p>
           </motion.div>
         ))}
@@ -69,7 +69,7 @@ export default function StudentDashboard() {
 
       {/* Verification checklist */}
       <div className="rounded-2xl p-6 border" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
-        <h2 className="font-syne font-bold mb-4" style={{ color: 'rgb(var(--text-primary))' }}>Verification Checklist</h2>
+        <h2 className="font-heading font-bold mb-4" style={{ color: 'rgb(var(--text-primary))' }}>Verification Checklist</h2>
         <div className="space-y-3">
           {tasks.map((task, i) => {
             const status = getStatus(task.type)
@@ -94,7 +94,7 @@ export default function StudentDashboard() {
       {/* Quick action */}
       <Link href="/dashboard/student/my-link" className="block rounded-2xl p-6 border text-center transition-all hover:border-[rgb(var(--accent))]/30" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
         <Link2 size={24} className="mx-auto mb-2" style={{ color: 'rgb(var(--accent))' }} />
-        <p className="font-syne font-bold text-sm" style={{ color: 'rgb(var(--text-primary))' }}>Generate Your Verified Link</p>
+        <p className="font-heading font-bold text-sm" style={{ color: 'rgb(var(--text-primary))' }}>Generate Your Verified Link</p>
         <p className="text-xs mt-1" style={{ color: 'rgb(var(--text-muted))' }}>Share one link with every company you apply to</p>
       </Link>
     </div>

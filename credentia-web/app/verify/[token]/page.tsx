@@ -45,7 +45,7 @@ export default async function VerifyPage({ params }: { params: { token: string }
               {initials}
             </div>
             <div>
-              <h2 className="font-syne text-xl font-bold text-white">{name}</h2>
+              <h2 className="font-heading text-xl font-bold text-white">{name}</h2>
               {student.course && <p className="text-[#9999AA] text-sm">{student.course} {student.graduation_year ? `— ${student.graduation_year}` : ''}</p>}
             </div>
           </div>

@@ -66,7 +66,7 @@ export default function AdminDashboard() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div>
-        <h1 className="font-syne text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>Admin Dashboard</h1>
+        <h1 className="font-heading text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>Admin Dashboard</h1>
         <p className="text-sm mt-1" style={{ color: 'rgb(var(--text-secondary))' }}>Platform overview and management</p>
       </div>
 
@@ -84,7 +84,7 @@ export default function AdminDashboard() {
             <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${stat.color} flex items-center justify-center mb-3`}>
               <stat.icon size={18} className="text-white" />
             </div>
-            <p className="font-syne text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>{stat.value}</p>
+            <p className="font-heading text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>{stat.value}</p>
             <p className="text-xs" style={{ color: 'rgb(var(--text-muted))' }}>{stat.label}</p>
           </motion.div>
         ))}
@@ -93,14 +93,14 @@ export default function AdminDashboard() {
       {/* Police review queue */}
       <div className="rounded-2xl border" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
         <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(var(--border-default), 0.3)' }}>
-          <h2 className="font-syne font-bold" style={{ color: 'rgb(var(--text-primary))' }}>Police Review Queue</h2>
+          <h2 className="font-heading font-bold" style={{ color: 'rgb(var(--text-primary))' }}>Police Review Queue</h2>
           <span className="px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(var(--warning), 0.1)', color: 'rgb(var(--warning))' }}>{pendingQueue.length} pending</span>
         </div>
 
         {pendingQueue.length === 0 ? (
           <div className="p-10 text-center">
             <CheckCircle2 size={36} className="mx-auto mb-3" style={{ color: 'rgb(var(--success))' }} />
-            <p className="font-syne font-bold" style={{ color: 'rgb(var(--text-primary))' }}>All Clear!</p>
+            <p className="font-heading font-bold" style={{ color: 'rgb(var(--text-primary))' }}>All Clear!</p>
             <p className="text-sm" style={{ color: 'rgb(var(--text-muted))' }}>No pending police reviews</p>
           </div>
         ) : (

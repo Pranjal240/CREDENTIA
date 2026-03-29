@@ -23,7 +23,7 @@ export default function HowItWorks() {
           animate={inView ? { opacity: 1, y: 0 } : {}}
           className="text-center mb-16"
         >
-          <h2 className="font-syne text-3xl sm:text-4xl font-extrabold text-[rgb(var(--text-primary))] mb-4">
+          <h2 className="font-heading text-3xl sm:text-4xl font-extrabold text-[rgb(var(--text-primary))] mb-4">
             How It <span className="gradient-text">Works</span>
           </h2>
           <p className="text-[rgb(var(--text-secondary))] text-lg">Three simple steps to a verified professional profile</p>
@@ -49,7 +49,7 @@ export default function HowItWorks() {
                   {step.num.replace('0', '')}
                 </span>
               </div>
-              <h3 className="font-syne text-xl font-bold text-[rgb(var(--text-primary))] mb-2">{step.title}</h3>
+              <h3 className="font-heading text-xl font-bold text-[rgb(var(--text-primary))] mb-2">{step.title}</h3>
               <p className="text-[rgb(var(--text-secondary))] text-sm leading-relaxed max-w-xs mx-auto">{step.desc}</p>
             </motion.div>
           ))}

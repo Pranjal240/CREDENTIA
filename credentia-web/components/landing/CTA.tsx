@@ -35,7 +35,7 @@ export default function CTA() {
 
           <div className="relative z-10 px-8 py-16 sm:px-16 sm:py-20 text-center">
             <Sparkles size={32} className="text-white/80 mx-auto mb-4" />
-            <h2 className="font-syne text-3xl sm:text-4xl font-extrabold text-white mb-4 leading-tight">
+            <h2 className="font-heading text-3xl sm:text-4xl font-extrabold text-white mb-4 leading-tight">
               Ready to Transform Your Credentials?
             </h2>
             <p className="text-white/80 text-lg max-w-xl mx-auto mb-8">

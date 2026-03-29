@@ -57,9 +57,9 @@ export default function RegisterPage() {
             <div className="relative w-10 h-10 rounded-full overflow-hidden ring-2 ring-blue-500/30">
               <Image src="/logo.png" alt="CREDENTIA" fill className="object-contain p-0.5" />
             </div>
-            <span className="font-syne text-xl font-extrabold" style={{ color: 'rgb(var(--text-primary))' }}>CREDENTIA</span>
+            <span className="font-heading text-xl font-extrabold" style={{ color: 'rgb(var(--text-primary))' }}>CREDENTIA</span>
           </Link>
-          <h1 className="font-syne text-2xl font-extrabold" style={{ color: 'rgb(var(--text-primary))' }}>Create Account</h1>
+          <h1 className="font-heading text-2xl font-extrabold" style={{ color: 'rgb(var(--text-primary))' }}>Create Account</h1>
           <p className="text-sm mt-1" style={{ color: 'rgb(var(--text-secondary))' }}>Get started with CREDENTIA</p>
         </div>
 
@@ -77,7 +77,7 @@ export default function RegisterPage() {
                   >
                     <span className="text-3xl">{r.emoji}</span>
                     <div>
-                      <span className="font-syne font-bold block" style={{ color: 'rgb(var(--text-primary))' }}>{r.label}</span>
+                      <span className="font-heading font-bold block" style={{ color: 'rgb(var(--text-primary))' }}>{r.label}</span>
                       <span className="text-xs" style={{ color: 'rgb(var(--text-muted))' }}>{r.desc}</span>
                     </div>
                   </button>
@@ -133,7 +133,7 @@ export default function RegisterPage() {
           {step === 'success' && (
             <motion.div key="success" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-8">
               <CheckCircle2 size={48} className="mx-auto mb-4" style={{ color: 'rgb(var(--success))' }} />
-              <h2 className="font-syne text-xl font-bold mb-2" style={{ color: 'rgb(var(--text-primary))' }}>Check Your Email</h2>
+              <h2 className="font-heading text-xl font-bold mb-2" style={{ color: 'rgb(var(--text-primary))' }}>Check Your Email</h2>
               <p className="text-sm mb-6" style={{ color: 'rgb(var(--text-secondary))' }}>
                 We sent a confirmation link to <strong>{email}</strong>. Click it to activate your account.
               </p>

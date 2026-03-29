@@ -1,19 +1,19 @@
 import type { Metadata } from 'next'
-import { Syne, DM_Sans } from 'next/font/google'
+import { Inter, Space_Grotesk } from 'next/font/google'
 import { ThemeProvider } from 'next-themes'
 import './globals.css'
 
-const syne = Syne({
+const inter = Inter({
   subsets: ['latin'],
-  weight: ['400', '600', '700', '800'],
-  variable: '--font-syne',
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-inter',
   display: 'swap',
 })
 
-const dmSans = DM_Sans({
+const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
-  weight: ['300', '400', '500', '600'],
-  variable: '--font-dm-sans',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-heading',
   display: 'swap',
 })
 
@@ -32,8 +32,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${syne.variable} ${dmSans.variable}`}>
-      <body>
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${spaceGrotesk.variable}`}>
+      <body className="font-sans antialiased">
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange={false}>
           {children}
         </ThemeProvider>

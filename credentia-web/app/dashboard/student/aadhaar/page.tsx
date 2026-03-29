@@ -1,27 +1,35 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 import { useDropzone } from 'react-dropzone'
 import { motion } from 'framer-motion'
 import { Upload, CreditCard, Loader2, CheckCircle2, AlertCircle, Sparkles, RotateCcw, ShieldAlert, FileText } from 'lucide-react'
 
 export default function AadhaarPage() {
+  const [userId, setUserId] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setUserId(session.user.id)
+    })
+  }, [])
+
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) { setFile(acceptedFiles[0]); setResult(null); setError('') }
   }, [])
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps } = useDropzone({
     onDrop, accept: { 'application/pdf': ['.pdf'], 'image/*': ['.jpg', '.jpeg', '.png'] }, maxFiles: 1, maxSize: 10 * 1024 * 1024,
   })
 
   const handleUpload = async () => {
-    if (!file) return
+    if (!file || !userId) { setError('Please login first'); return }
     setUploading(true); setError('')
     try {
       const formData = new FormData(); formData.append('file', file); formData.append('folder', 'aadhaar')
@@ -29,9 +37,17 @@ export default function AadhaarPage() {
       if (!uploadRes.ok) throw new Error('Upload failed')
       const data = await uploadRes.json()
       setUploading(false); setAnalyzing(true)
-      const res = await fetch('/api/verify-aadhaar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: data.url, filename: data.filename }) })
-      if (!res.ok) throw new Error('Verification failed')
-      setResult(await res.json()); setAnalyzing(false)
+      const res = await fetch('/api/verify-aadhaar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileUrl: data.url, studentId: userId }),
+      })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || 'Verification failed')
+      }
+      const resData = await res.json()
+      setResult(resData.analysis || resData); setAnalyzing(false)
     } catch (err: any) { setError(err.message); setUploading(false); setAnalyzing(false) }
   }
 
@@ -40,11 +56,10 @@ export default function AadhaarPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
-        <h1 className="font-syne text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>Aadhaar Verification</h1>
+        <h1 className="font-heading text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>Aadhaar Verification</h1>
         <p className="text-sm mt-1" style={{ color: 'rgb(var(--text-secondary))' }}>Upload your Aadhaar card for privacy-first verification</p>
       </div>
 
-      {/* Privacy notice */}
       <div className="rounded-xl px-4 py-3 flex items-start gap-3" style={{ background: 'rgba(var(--accent), 0.05)', border: '1px solid rgba(var(--accent), 0.2)' }}>
         <ShieldAlert size={18} className="flex-shrink-0 mt-0.5" style={{ color: 'rgb(var(--accent))' }} />
         <div>
@@ -55,10 +70,10 @@ export default function AadhaarPage() {
 
       {!result ? (
         <div className="rounded-2xl p-6 border" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
-          <div {...getRootProps()} className="border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all" style={{ borderColor: file ? 'rgb(var(--success))' : 'rgba(var(--border-default), 0.6)' }}>
+          <div {...getRootProps()} className="border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all" style={{ borderColor: file ? '#22c55e' : 'rgba(var(--border-default), 0.6)' }}>
             <input {...getInputProps()} />
             {file ? (
-              <div className="flex flex-col items-center gap-2"><FileText size={36} style={{ color: 'rgb(var(--success))' }} /><p className="text-sm font-medium" style={{ color: 'rgb(var(--text-primary))' }}>{file.name}</p></div>
+              <div className="flex flex-col items-center gap-2"><FileText size={36} color="#22c55e" /><p className="text-sm font-medium" style={{ color: 'rgb(var(--text-primary))' }}>{file.name}</p></div>
             ) : (
               <div className="flex flex-col items-center gap-2"><Upload size={36} style={{ color: 'rgb(var(--text-muted))' }} /><p className="text-sm" style={{ color: 'rgb(var(--text-primary))' }}>Drop Aadhaar front/back here</p><p className="text-xs" style={{ color: 'rgb(var(--text-muted))' }}>PDF, JPG, PNG — Max 10MB</p></div>
             )}
@@ -74,8 +89,8 @@ export default function AadhaarPage() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
           <div className="rounded-2xl p-6 border" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
             <div className="flex items-center gap-3 mb-5">
-              {result.verified ? <CheckCircle2 size={24} style={{ color: 'rgb(var(--success))' }} /> : <AlertCircle size={24} style={{ color: 'rgb(var(--danger))' }} />}
-              <div><p className="font-syne font-bold" style={{ color: 'rgb(var(--text-primary))' }}>{result.verified ? 'Aadhaar Verified' : 'Verification Inconclusive'}</p><p className="text-sm" style={{ color: 'rgb(var(--text-muted))' }}>Confidence: {result.confidence}%</p></div>
+              {result.verified ? <CheckCircle2 size={24} color="#22c55e" /> : <AlertCircle size={24} color="#ef4444" />}
+              <div><p className="font-heading font-bold" style={{ color: 'rgb(var(--text-primary))' }}>{result.verified ? 'Aadhaar Verified' : 'Verification Inconclusive'}</p><p className="text-sm" style={{ color: 'rgb(var(--text-muted))' }}>Confidence: {result.confidence}%</p></div>
             </div>
             <div className="grid grid-cols-2 gap-4 text-sm">
               {[{ label: 'Name', value: result.name }, { label: 'DOB', value: result.dob }, { label: 'Gender', value: result.gender }, { label: 'State', value: result.state }, { label: 'Aadhaar', value: result.aadhaar_last4 ? `XXXX-XXXX-${result.aadhaar_last4}` : null }].filter(x => x.value).map((item, i) => (

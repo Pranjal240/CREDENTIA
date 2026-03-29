@@ -52,14 +52,14 @@
 body {
   background: rgb(var(--bg-base));
   color: rgb(var(--text-primary));
-  font-family: var(--font-dm-sans), 'DM Sans', system-ui, sans-serif;
+  font-family: var(--font-inter), 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-syne), 'Syne', system-ui, sans-serif;
+  font-family: var(--font-heading), 'Space Grotesk', system-ui, sans-serif;
   font-weight: 700;
   letter-spacing: -0.02em;
 }

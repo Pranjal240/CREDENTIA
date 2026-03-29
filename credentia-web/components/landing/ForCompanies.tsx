@@ -30,7 +30,7 @@ export default function ForCompanies() {
             <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[rgb(var(--teal))]/10 text-[rgb(var(--teal))] text-xs font-semibold mb-4">
               <Search size={12} /> FOR COMPANIES
             </span>
-            <h2 className="font-syne text-3xl sm:text-4xl font-extrabold text-[rgb(var(--text-primary))] mb-6 leading-tight">
+            <h2 className="font-heading text-3xl sm:text-4xl font-extrabold text-[rgb(var(--text-primary))] mb-6 leading-tight">
               Hire Faster.{' '}
               <span className="gradient-text">Trust More.</span>
             </h2>
@@ -62,13 +62,13 @@ export default function ForCompanies() {
           >
             <div className="glass rounded-2xl p-6 glow-card">
               <div className="flex items-center justify-between mb-5">
-                <h4 className="font-syne font-bold text-[rgb(var(--text-primary))]">Candidate Profile</h4>
+                <h4 className="font-heading font-bold text-[rgb(var(--text-primary))]">Candidate Profile</h4>
                 <Filter size={16} className="text-[rgb(var(--text-muted))]" />
               </div>
               <div className="flex items-center gap-4 mb-5">
                 <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-lg">R</div>
                 <div>
-                  <p className="font-syne font-bold text-[rgb(var(--text-primary))]">Rahul Sharma</p>
+                  <p className="font-heading font-bold text-[rgb(var(--text-primary))]">Rahul Sharma</p>
                   <p className="text-[rgb(var(--text-muted))] text-sm">B.Tech CSE — IIT Delhi — 2024</p>
                 </div>
               </div>
@@ -79,7 +79,7 @@ export default function ForCompanies() {
                     <circle cx="32" cy="32" r="28" stroke="rgba(var(--border-default),0.3)" strokeWidth="4" fill="none" />
                     <circle cx="32" cy="32" r="28" stroke="rgb(var(--accent))" strokeWidth="4" fill="none" strokeDasharray="176" strokeDashoffset="18" strokeLinecap="round" />
                   </svg>
-                  <span className="absolute inset-0 flex items-center justify-center font-syne font-bold text-[rgb(var(--accent))] text-sm">90</span>
+                  <span className="absolute inset-0 flex items-center justify-center font-heading font-bold text-[rgb(var(--accent))] text-sm">90</span>
                 </div>
                 <div>
                   <p className="text-[rgb(var(--text-primary))] font-semibold text-sm">ATS Score</p>

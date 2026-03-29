@@ -25,7 +25,7 @@ export default function Features() {
           animate={inView ? { opacity: 1, y: 0 } : {}}
           className="text-center mb-16"
         >
-          <h2 className="font-syne text-3xl sm:text-4xl font-extrabold text-[rgb(var(--text-primary))] mb-4">
+          <h2 className="font-heading text-3xl sm:text-4xl font-extrabold text-[rgb(var(--text-primary))] mb-4">
             Everything You Need to{' '}
             <span className="gradient-text">Get Verified</span>
           </h2>
@@ -46,7 +46,7 @@ export default function Features() {
               <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${f.gradient} flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300`}>
                 <f.icon size={22} className="text-white" />
               </div>
-              <h3 className="font-syne text-lg font-bold text-[rgb(var(--text-primary))] mb-2">{f.title}</h3>
+              <h3 className="font-heading text-lg font-bold text-[rgb(var(--text-primary))] mb-2">{f.title}</h3>
               <p className="text-[rgb(var(--text-secondary))] text-sm leading-relaxed">{f.desc}</p>
             </motion.div>
           ))}

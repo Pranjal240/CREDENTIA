@@ -39,7 +39,7 @@ export default function CompanyDashboard() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div>
-        <h1 className="font-syne text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>Company Dashboard</h1>
+        <h1 className="font-heading text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>Company Dashboard</h1>
         <p className="text-sm mt-1" style={{ color: 'rgb(var(--text-secondary))' }}>Browse verified candidates</p>
       </div>
 
@@ -70,7 +70,7 @@ export default function CompanyDashboard() {
         ].map((stat, i) => (
           <div key={i} className="rounded-2xl p-4 border text-center" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
             <stat.icon size={20} className="mx-auto mb-2" style={{ color: 'rgb(var(--accent))' }} />
-            <p className="font-syne text-xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>{stat.value}</p>
+            <p className="font-heading text-xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>{stat.value}</p>
             <p className="text-xs" style={{ color: 'rgb(var(--text-muted))' }}>{stat.label}</p>
           </div>
         ))}
@@ -87,7 +87,7 @@ export default function CompanyDashboard() {
                 {(s.profiles?.full_name || 'U')[0].toUpperCase()}
               </div>
               <div>
-                <p className="font-syne font-bold text-sm" style={{ color: 'rgb(var(--text-primary))' }}>{s.profiles?.full_name || 'Unknown'}</p>
+                <p className="font-heading font-bold text-sm" style={{ color: 'rgb(var(--text-primary))' }}>{s.profiles?.full_name || 'Unknown'}</p>
                 <p className="text-xs" style={{ color: 'rgb(var(--text-muted))' }}>{s.course} {s.branch} • {s.graduation_year}</p>
               </div>
             </div>
@@ -97,7 +97,7 @@ export default function CompanyDashboard() {
                   <span key={j} className="text-xs px-2 py-1 rounded-lg" style={{ background: b.ok ? 'rgba(var(--success), 0.1)' : 'rgba(var(--border-default), 0.3)', opacity: b.ok ? 1 : 0.4 }}>{b.label}</span>
                 ))}
               </div>
-              <span className="font-syne font-bold text-sm px-3 py-1 rounded-lg" style={{ background: 'rgba(var(--accent), 0.1)', color: 'rgb(var(--accent))' }}>{s.ats_score || 0}</span>
+              <span className="font-heading font-bold text-sm px-3 py-1 rounded-lg" style={{ background: 'rgba(var(--accent), 0.1)', color: 'rgb(var(--accent))' }}>{s.ats_score || 0}</span>
               {s.share_token && (
                 <a href={`/verify/${s.share_token}`} target="_blank" rel="noreferrer" className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ color: 'rgb(var(--text-muted))' }}>
                   <ExternalLink size={16} />
