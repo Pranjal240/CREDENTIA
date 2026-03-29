@@ -1,74 +1,62 @@
 import { NextResponse } from 'next/server'
 import { analyzeAadhaar } from '@/lib/groq'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase'
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const { fileUrl, studentId, textContent } = await req.json()
-    const supabase = createSupabaseServerClient()
+    const { fileUrl, studentId } = await request.json()
 
-    let content = textContent || ''
-
-    if (fileUrl) {
-      try {
-        const res = await fetch(fileUrl)
-        content = await res.text()
-      } catch {
-        content = `Aadhaar document from ${fileUrl}`
-      }
+    if (!fileUrl || !studentId) {
+      return NextResponse.json({ success: false, error: 'Missing fileUrl or studentId' }, { status: 400 })
     }
 
-    if (!content) {
-      return NextResponse.json({ error: 'No content provided' }, { status: 400 })
+    let content = ''
+    try {
+      const response = await fetch(fileUrl)
+      content = await response.text()
+    } catch {
+      content = `Aadhaar document URL: ${fileUrl}`
     }
 
     const analysis = await analyzeAadhaar(content)
 
-    // Save to verifications - NEVER store full Aadhaar
-    await supabase.from('verifications').upsert({
-      user_id: studentId,
-      type: 'aadhaar',
-      status: analysis.confidence >= 75 ? 'ai_approved' : 'needs_review',
-      document_url: fileUrl,
-      ai_confidence: analysis.confidence,
-      ai_result: {
-        verified: analysis.verified,
-        name: analysis.name,
-        dob: analysis.dob,
-        gender: analysis.gender,
-        state: analysis.state,
-        aadhaar_last4: analysis.aadhaar_last4,
-        confidence: analysis.confidence,
-        // NEVER store full Aadhaar number
-      },
-    }, { onConflict: 'user_id,type' })
-
-    // Update students table with safe data only
-    if (analysis.confidence >= 75) {
-      await supabase.from('students').update({
+    // Update student — NEVER store full Aadhaar
+    if (analysis.verified) {
+      await supabaseAdmin.from('students').update({
         aadhaar_verified: true,
-        aadhaar_last4: analysis.aadhaar_last4,
-        aadhaar_name: analysis.name,
-        aadhaar_state: analysis.state,
-        aadhaar_dob: analysis.dob,
+        aadhaar_last4: analysis.aadhaar_last4 || null,
+        aadhaar_name: analysis.name || null,
+        aadhaar_dob: analysis.dob || null,
+        aadhaar_state: analysis.state || null,
+        updated_at: new Date().toISOString(),
       }).eq('id', studentId)
     }
 
-    // Return safe data only (no full Aadhaar)
-    return NextResponse.json({
-      success: true,
-      analysis: {
-        verified: analysis.verified,
-        name: analysis.name,
-        dob: analysis.dob,
-        gender: analysis.gender,
-        state: analysis.state,
-        aadhaar_last4: analysis.aadhaar_last4,
-        confidence: analysis.confidence,
-      },
-    })
+    // Upsert verification
+    const { data: existing } = await supabaseAdmin.from('verifications')
+      .select('id').eq('student_id', studentId).eq('type', 'aadhaar').maybeSingle()
+
+    if (existing) {
+      await supabaseAdmin.from('verifications').update({
+        status: analysis.verified ? 'verified' : 'rejected',
+        ai_analysis: analysis,
+        file_url: fileUrl,
+        verified_at: new Date().toISOString(),
+      }).eq('id', existing.id)
+    } else {
+      await supabaseAdmin.from('verifications').insert({
+        student_id: studentId,
+        type: 'aadhaar',
+        status: analysis.verified ? 'verified' : 'rejected',
+        ai_analysis: analysis,
+        file_url: fileUrl,
+        verified_at: new Date().toISOString(),
+      })
+    }
+
+    return NextResponse.json({ success: true, analysis })
   } catch (error: any) {
     console.error('Aadhaar verification error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: error.message || 'Verification failed' }, { status: 500 })
   }
 }

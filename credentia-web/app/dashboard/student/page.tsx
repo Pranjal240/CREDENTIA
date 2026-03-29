@@ -1,294 +1,167 @@
 'use client'
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
-import {
-  LayoutDashboard, FileText, Shield, CreditCard,
-  GraduationCap, Link2, LogOut, CheckCircle2,
-  Circle, ExternalLink, Copy, Check
-} from 'lucide-react'
-
-const navItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard/student' },
-  { icon: FileText, label: 'Resume', href: '/dashboard/student/resume' },
-  { icon: Shield, label: 'Police Verify', href: '/dashboard/student/police' },
-  { icon: CreditCard, label: 'Aadhaar', href: '/dashboard/student/aadhaar' },
-  { icon: GraduationCap, label: 'Degree', href: '/dashboard/student/degree' },
-  { icon: Link2, label: 'My Link', href: '/dashboard/student/my-link' },
-]
+import { CheckCircle2, Circle, ExternalLink, Copy, Check, ArrowRight, FileText, Shield, CreditCard, GraduationCap, Link2, Clock } from 'lucide-react'
+import { getScoreColor } from '@/lib/utils'
 
 export default function StudentDashboard() {
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
   const [student, setStudent] = useState<any>(null)
+  const [verifications, setVerifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
-  const [generatingLink, setGeneratingLink] = useState(false)
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/login'); return }
 
-      setUser(user)
+      const [profileRes, studentRes, verificationsRes] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase.from('students').select('*').eq('id', user.id).single(),
+        supabase.from('verifications').select('*').eq('student_id', user.id),
+      ])
 
-      // Get profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      // Get or create student record
-      let { data: studentData } = await supabase
-        .from('students')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
+      let studentData = studentRes.data
       if (!studentData) {
         await supabase.from('students').insert({ id: user.id })
         const fresh = await supabase.from('students').select('*').eq('id', user.id).single()
         studentData = fresh.data
       }
 
-      setUser({ ...user, profile })
+      setCurrentUser(user)
+      setProfile(profileRes.data)
       setStudent(studentData)
+      setVerifications(verificationsRes.data || [])
       setLoading(false)
     }
     load()
   }, [router])
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
+  if (loading) return <div className="p-8 flex items-center justify-center min-h-[60vh]"><div className="w-8 h-8 border-2 border-[#F5C542] border-t-transparent rounded-full animate-spin" /></div>
 
-  const handleGenerateLink = async () => {
-    setGeneratingLink(true)
-    const res = await fetch('/api/generate-link', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentId: user.id }),
-    })
-    const data = await res.json()
-    if (data.token) {
-      setStudent((prev: any) => ({ ...prev, share_token: data.token }))
-    }
-    setGeneratingLink(false)
-  }
+  const atsScore = student?.ats_score || 0
+  const policeVerif = verifications.find((v: any) => v.type === 'police')
+  const displayName = profile?.full_name || currentUser?.email?.split('@')[0] || 'User'
+  const shareUrl = student?.share_token ? `${process.env.NEXT_PUBLIC_APP_URL || 'https://credentiaonline.in'}/verify/${student.share_token}` : null
+
+  const tasks = [
+    { label: 'Resume Analyzed', done: !!student?.resume_url, score: student?.ats_score, href: '/dashboard/student/resume', icon: FileText },
+    { label: 'Police Certificate', done: student?.police_verified, href: '/dashboard/student/police', icon: Shield, pending: policeVerif?.status === 'ai_approved' || policeVerif?.status === 'needs_review' },
+    { label: 'Aadhaar Verified', done: student?.aadhaar_verified, href: '/dashboard/student/aadhaar', icon: CreditCard },
+    { label: 'Degree Certificate', done: student?.degree_verified, href: '/dashboard/student/degree', icon: GraduationCap },
+  ]
+  const completed = tasks.filter(t => t.done).length
 
   const copyLink = () => {
-    const link = `${process.env.NEXT_PUBLIC_APP_URL}/verify/${student?.share_token}`
-    navigator.clipboard.writeText(link)
+    if (shareUrl) navigator.clipboard.writeText(shareUrl)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const tasks = [
-    { label: 'Resume Uploaded & Analyzed', done: !!student?.resume_url, href: '/dashboard/student/resume' },
-    { label: 'Police Certificate Submitted', done: student?.police_verified, href: '/dashboard/student/police' },
-    { label: 'Aadhaar Verified', done: student?.aadhaar_verified, href: '/dashboard/student/aadhaar' },
-    { label: 'Degree Certificate Verified', done: student?.degree_verified, href: '/dashboard/student/degree' },
-  ]
-  const completedTasks = tasks.filter(t => t.done).length
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#0A0A0F] flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-[#F5C542] border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
+  const generateLink = async () => {
+    const res = await fetch('/api/generate-link', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId: currentUser.id }) })
+    const data = await res.json()
+    if (data.success) {
+      setStudent({ ...student, share_token: data.token, profile_is_public: true })
+    }
   }
 
-  const displayName = user?.profile?.full_name || user?.email?.split('@')[0] || 'Student'
-  const atsScore = student?.ats_score || 0
-  const shareLink = student?.share_token
-    ? `credentiaonline.in/verify/${student.share_token}`
-    : null
-  const fullShareLink = student?.share_token
-    ? `${process.env.NEXT_PUBLIC_APP_URL}/verify/${student.share_token}`
-    : null
-
   return (
-    <div className="min-h-screen bg-[#0A0A0F] flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-[#13131A] border-r border-[#2A2A3A] flex flex-col fixed h-full z-10">
-        {/* Logo */}
-        <div className="p-6 border-b border-[#2A2A3A]">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#F5C542] flex items-center justify-center">
-              <span className="text-black font-black text-sm">C</span>
-            </div>
-            <span className="font-bold text-lg text-[#F5C542]" style={{fontFamily:'var(--font-syne)'}}>CREDENTIA</span>
-          </Link>
-        </div>
+    <div className="p-6 md:p-8 max-w-6xl">
+      {/* Header */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+        <h1 className="font-syne text-2xl md:text-3xl font-extrabold text-white">Hey {displayName}! 👋</h1>
+        <p className="text-[#9999AA] text-sm mt-1">Here&apos;s your verification overview</p>
+      </motion.div>
 
-        {/* Nav */}
-        <nav className="flex-1 p-4 space-y-1">
-          {navItems.map(item => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-3 px-4 py-3 rounded-xl text-[#9999AA] hover:text-white hover:bg-[#1C1C26] transition-all group"
-            >
-              <item.icon size={18} className="group-hover:text-[#F5C542] transition-colors" />
-              <span className="text-sm font-medium">{item.label}</span>
-            </Link>
-          ))}
-        </nav>
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {[
+          { label: 'ATS Score', value: atsScore ? `${atsScore}/100` : '—', color: getScoreColor(atsScore), icon: FileText },
+          { label: 'Police', value: student?.police_verified ? '✅ Verified' : policeVerif ? '⏳ Pending' : 'Not Submitted', color: student?.police_verified ? '#22C55E' : policeVerif ? '#F59E0B' : '#9999AA', icon: Shield },
+          { label: 'Aadhaar', value: student?.aadhaar_verified ? '✅ Verified' : 'Not Submitted', color: student?.aadhaar_verified ? '#22C55E' : '#9999AA', icon: CreditCard },
+          { label: 'Degree', value: student?.degree_verified ? '✅ Verified' : 'Not Submitted', color: student?.degree_verified ? '#22C55E' : '#9999AA', icon: GraduationCap },
+        ].map((stat, i) => (
+          <motion.div key={i} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-5 hover:border-[#F5C542]/30 transition-all">
+            <stat.icon size={18} className="text-[#9999AA] mb-3" />
+            <p className="font-syne text-xl font-bold" style={{ color: stat.color }}>{stat.value}</p>
+            <p className="text-[#9999AA] text-xs mt-1">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
 
-        {/* User + Logout */}
-        <div className="p-4 border-t border-[#2A2A3A]">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-full bg-[#F5C542] flex items-center justify-center text-black font-bold text-sm">
-              {displayName[0]?.toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-sm font-medium truncate">{displayName}</p>
-              <p className="text-[#9999AA] text-xs truncate">{user?.email}</p>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[#9999AA] hover:text-red-400 hover:bg-red-500/10 transition text-sm"
-          >
-            <LogOut size={15} />
-            Sign Out
-          </button>
-        </div>
-      </aside>
-
-      {/* Main content */}
-      <main className="ml-64 flex-1 p-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white" style={{fontFamily:'var(--font-syne)'}}>
-            Hey {displayName}! 👋
-          </h1>
-          <p className="text-[#9999AA] mt-1">Here&apos;s your verification dashboard</p>
-        </div>
-
-        {/* Stat cards */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          {[
-            { label: 'ATS Score', value: `${atsScore}/100`, color: atsScore > 60 ? 'text-green-400' : atsScore > 30 ? 'text-yellow-400' : 'text-[#9999AA]', sub: 'Resume score' },
-            { label: 'Police Status', value: student?.police_verified ? '✅ Verified' : '⏳ Pending', color: student?.police_verified ? 'text-green-400' : 'text-yellow-400', sub: 'Background check' },
-            { label: 'Aadhaar', value: student?.aadhaar_verified ? '✅ Verified' : '—', color: student?.aadhaar_verified ? 'text-green-400' : 'text-[#9999AA]', sub: 'Identity proof' },
-            { label: 'Degree', value: student?.degree_verified ? '✅ Verified' : '—', color: student?.degree_verified ? 'text-green-400' : 'text-[#9999AA]', sub: 'Education' },
-          ].map(card => (
-            <div key={card.label} className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-5">
-              <p className="text-[#9999AA] text-xs font-medium uppercase tracking-wide">{card.sub}</p>
-              <p className={`text-2xl font-bold mt-1 ${card.color}`} style={{fontFamily:'var(--font-syne)'}}>{card.value}</p>
-              <p className="text-[#555566] text-xs mt-1">{card.label}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Tasks + ATS row */}
-        <div className="grid grid-cols-5 gap-4 mb-6">
-          {/* Tasks */}
-          <div className="col-span-3 bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-white font-bold text-lg" style={{fontFamily:'var(--font-syne)'}}>Verification Tasks</h2>
-              <span className="text-[#9999AA] text-sm">{completedTasks}/4 done</span>
-            </div>
-            <div className="space-y-3 mb-5">
-              {tasks.map(task => (
-                <div key={task.label} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {task.done
-                      ? <CheckCircle2 size={18} className="text-green-400 flex-shrink-0" />
-                      : <Circle size={18} className="text-[#2A2A3A] flex-shrink-0" />
-                    }
-                    <span className={`text-sm ${task.done ? 'text-white' : 'text-[#9999AA]'}`}>{task.label}</span>
-                  </div>
-                  {!task.done && (
-                    <Link href={task.href} className="text-xs text-[#F5C542] hover:underline flex items-center gap-1">
-                      Upload <ExternalLink size={11} />
-                    </Link>
-                  )}
-                </div>
-              ))}
-            </div>
-            {/* Progress bar */}
-            <div className="h-2 bg-[#2A2A3A] rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#F5C542] rounded-full transition-all"
-                style={{ width: `${(completedTasks / 4) * 100}%` }}
-              />
-            </div>
-          </div>
-
-          {/* ATS Score circle */}
-          <div className="col-span-2 bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-6 flex flex-col items-center justify-center text-center">
-            <div className="relative w-32 h-32 mb-4">
-              <svg className="w-32 h-32 -rotate-90" viewBox="0 0 120 120">
-                <circle cx="60" cy="60" r="50" fill="none" stroke="#2A2A3A" strokeWidth="10" />
-                <circle
-                  cx="60" cy="60" r="50" fill="none"
-                  stroke={atsScore > 60 ? '#22C55E' : atsScore > 30 ? '#F5C542' : '#3A3A4A'}
-                  strokeWidth="10"
-                  strokeDasharray={`${(atsScore / 100) * 314} 314`}
-                  strokeLinecap="round"
-                  className="transition-all duration-1000"
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-3xl font-black text-white" style={{fontFamily:'var(--font-syne)'}}>{atsScore}</span>
-              </div>
-            </div>
-            <p className="text-white font-bold" style={{fontFamily:'var(--font-syne)'}}>ATS Score</p>
-            <p className="text-[#9999AA] text-xs mt-1 mb-4">
-              {atsScore === 0 ? 'Upload resume to get score' : atsScore > 75 ? 'Excellent!' : 'Room to improve'}
-            </p>
-            <Link
-              href="/dashboard/student/resume"
-              className="text-xs bg-[#F5C542] text-black font-bold px-4 py-2 rounded-lg hover:bg-[#D4A017] transition"
-            >
-              {atsScore === 0 ? 'Upload Resume' : 'Re-analyze'}
-            </Link>
-          </div>
-        </div>
-
-        {/* Share link card */}
-        <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-6">
-          <h2 className="text-white font-bold text-lg mb-2" style={{fontFamily:'var(--font-syne)'}}>
-            🔗 Your Verified Profile Link
-          </h2>
-          <p className="text-[#9999AA] text-sm mb-4">Share this link with companies to show your verified credentials.</p>
-
-          {shareLink ? (
-            <div className="flex items-center gap-3">
-              <div className="flex-1 bg-[#0A0A0F] border border-[#2A2A3A] rounded-xl px-4 py-3 text-[#9999AA] text-sm font-mono truncate">
-                {shareLink}
-              </div>
-              <button
-                onClick={copyLink}
-                className="flex items-center gap-2 bg-[#F5C542] text-black font-bold px-4 py-3 rounded-xl hover:bg-[#D4A017] transition text-sm whitespace-nowrap"
-              >
-                {copied ? <><Check size={14} /> Copied!</> : <><Copy size={14} /> Copy</>}
-              </button>
-              <Link
-                href={fullShareLink!}
-                target="_blank"
-                className="flex items-center gap-2 bg-[#1C1C26] border border-[#2A2A3A] text-white px-4 py-3 rounded-xl hover:border-[#F5C542] transition text-sm"
-              >
-                <ExternalLink size={14} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        {/* Tasks */}
+        <div className="lg:col-span-2 bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-6">
+          <h3 className="font-syne font-bold text-white mb-4">Verification Tasks</h3>
+          <div className="space-y-3 mb-4">
+            {tasks.map((task, i) => (
+              <Link key={i} href={task.href} className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#1C1C26] transition-all group">
+                {task.done ? <CheckCircle2 size={18} className="text-green-400" /> : task.pending ? <Clock size={18} className="text-yellow-400" /> : <Circle size={18} className="text-[#2A2A3A]" />}
+                <span className={`text-sm flex-1 ${task.done ? 'text-white' : 'text-[#9999AA]'}`}>
+                  {task.label} {task.score ? `(${task.score}/100)` : ''} {task.pending ? '— Under Review' : ''}
+                </span>
+                <ArrowRight size={14} className="text-[#2A2A3A] group-hover:text-[#F5C542] transition-colors" />
               </Link>
-            </div>
-          ) : (
-            <button
-              onClick={handleGenerateLink}
-              disabled={generatingLink}
-              className="bg-[#F5C542] text-black font-bold px-6 py-3 rounded-xl hover:bg-[#D4A017] transition text-sm disabled:opacity-60"
-            >
-              {generatingLink ? 'Generating...' : 'Generate My Link'}
-            </button>
-          )}
+            ))}
+          </div>
+          <div className="bg-[#1C1C26] rounded-full h-2 overflow-hidden">
+            <div className="bg-gradient-to-r from-[#F5C542] to-[#D4A017] h-full rounded-full transition-all duration-500" style={{ width: `${(completed / 4) * 100}%` }} />
+          </div>
+          <p className="text-[#9999AA] text-xs mt-2">{completed}/4 completed</p>
         </div>
-      </main>
+
+        {/* ATS Gauge */}
+        <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-6 flex flex-col items-center justify-center">
+          <h3 className="font-syne font-bold text-white mb-4">ATS Score</h3>
+          <div className="relative w-32 h-32">
+            <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="45" fill="none" stroke="#2A2A3A" strokeWidth="8" />
+              <circle cx="50" cy="50" r="45" fill="none" stroke={getScoreColor(atsScore)} strokeWidth="8" strokeLinecap="round" strokeDasharray={`${(atsScore / 100) * 283} 283`} className="transition-all duration-1000" />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="font-syne text-3xl font-extrabold text-white">{atsScore}</span>
+            </div>
+          </div>
+          <p className="text-[#9999AA] text-xs mt-2">{atsScore >= 75 ? 'Excellent' : atsScore >= 50 ? 'Good' : atsScore > 0 ? 'Needs Work' : 'Not Analyzed'}</p>
+        </div>
+      </div>
+
+      {/* Shareable Link */}
+      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Link2 size={18} className="text-[#F5C542]" />
+          <h3 className="font-syne font-bold text-white">Shareable Link</h3>
+        </div>
+        {shareUrl ? (
+          <>
+            <div className="flex items-center gap-3 mb-4 bg-[#1C1C26] rounded-xl px-4 py-3 border border-[#2A2A3A]">
+              <span className="text-[#9999AA] text-sm flex-1 truncate">{shareUrl}</span>
+              <button onClick={copyLink} className="text-[#F5C542] hover:text-white transition-colors flex-shrink-0">
+                {copied ? <Check size={16} /> : <Copy size={16} />}
+              </button>
+              <a href={shareUrl} target="_blank" rel="noreferrer" className="text-[#9999AA] hover:text-white transition-colors flex-shrink-0">
+                <ExternalLink size={16} />
+              </a>
+            </div>
+            <div className="flex gap-3">
+              <a href={`https://wa.me/?text=Verify my credentials: ${shareUrl}`} target="_blank" rel="noreferrer" className="text-xs bg-[#25D366]/10 text-[#25D366] px-4 py-2 rounded-lg hover:bg-[#25D366]/20 transition-all">WhatsApp</a>
+              <a href={`https://www.linkedin.com/sharing/share-offsite/?url=${shareUrl}`} target="_blank" rel="noreferrer" className="text-xs bg-[#0A66C2]/10 text-[#0A66C2] px-4 py-2 rounded-lg hover:bg-[#0A66C2]/20 transition-all">LinkedIn</a>
+            </div>
+          </>
+        ) : (
+          <button onClick={generateLink} className="bg-[#F5C542] text-black font-bold text-sm px-6 py-2.5 rounded-xl hover:bg-[#D4A017] transition-all">
+            Generate My Link
+          </button>
+        )}
+      </motion.div>
     </div>
   )
 }

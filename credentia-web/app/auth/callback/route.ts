@@ -4,8 +4,13 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export async function GET(request: NextRequest) {
-  const requestUrl = new URL(request.url)
-  const code = requestUrl.searchParams.get('code')
+  const url = new URL(request.url)
+  const code = url.searchParams.get('code')
+  const error = url.searchParams.get('error')
+
+  if (error) {
+    return NextResponse.redirect(new URL('/login?error=' + error, request.url))
+  }
 
   if (code) {
     const cookieStore = cookies()
@@ -14,30 +19,26 @@ export async function GET(request: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get(name) { return cookieStore.get(name)?.value },
-          set(name, value, options) {
-            try { cookieStore.set({ name, value, ...options }) } catch {}
-          },
-          remove(name, options) {
-            try { cookieStore.set({ name, value: '', ...options }) } catch {}
-          },
+          get(name: string) { return cookieStore.get(name)?.value },
+          set(name: string, value: string, options: any) { try { cookieStore.set({ name, value, ...options }) } catch {} },
+          remove(name: string, options: any) { try { cookieStore.set({ name, value: '', ...options }) } catch {} },
         },
       }
     )
 
-    await supabase.auth.exchangeCodeForSession(code)
+    const { data } = await supabase.auth.exchangeCodeForSession(code)
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
+    if (data.user) {
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', user.id)
+        .eq('id', data.user.id)
         .single()
+
       const role = profile?.role || 'student'
       return NextResponse.redirect(new URL(`/dashboard/${role}`, request.url))
     }
   }
 
-  return NextResponse.redirect(new URL('/login?error=auth_failed', request.url))
+  return NextResponse.redirect(new URL('/login', request.url))
 }

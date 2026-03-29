@@ -1,104 +1,111 @@
 'use client'
+
+import { useState } from 'react'
 import Image from 'next/image'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
+import { X } from 'lucide-react'
 
 const team = [
-  {
-    name: 'Pranjal',
-    image: '/owner/Pranjal.jpg',
-    role: 'Founder & Lead Developer',
-    desc: 'Full-stack engineer driving the technical vision behind Credentia.',
-  },
-  {
-    name: 'Nihal',
-    image: '/owner/Nihal.jpg',
-    role: 'Co-Founder & Developer',
-    desc: 'Backend architect building scalable verification infrastructure.',
-  },
-  {
-    name: 'Kriti',
-    image: '/owner/KRITI.jpeg',
-    role: 'Co-Founder & Strategy',
-    desc: 'Shaping product strategy and driving the business roadmap forward.',
-  },
-  {
-    name: 'Pragya',
-    image: '/owner/Pragya.jpg',
-    role: 'Co-Founder & Design',
-    desc: 'Crafting intuitive experiences and ensuring design excellence.',
-  },
+  { name: 'Pranjal', image: '/owner/Pranjal.jpg', role: 'Founder & Lead Developer', bio: 'Full-stack engineer driving CREDENTIA\u0027s technical vision. Passionate about solving India\u0027s credential trust problem.' },
+  { name: 'Nihal', image: '/owner/Nihal.jpg', role: 'Co-Founder & Backend', bio: 'Backend architect building the scalable infrastructure behind CREDENTIA\u0027s AI verification engine.' },
+  { name: 'Kriti', image: '/owner/KRITI.jpeg', role: 'Co-Founder & Strategy', bio: 'Shaping CREDENTIA\u0027s product roadmap and driving partnerships with universities and companies across India.' },
+  { name: 'Pragya', image: '/owner/Pragya.jpg', role: 'Co-Founder & Design', bio: 'Crafting the visual identity and user experience that makes CREDENTIA feel premium and trustworthy.' },
 ]
 
 export default function Team() {
+  const [selected, setSelected] = useState<number | null>(null)
+
   return (
     <section id="team" className="py-24 bg-[#0A0A0F]">
-      <div className="max-w-6xl mx-auto px-6">
+      <div className="max-w-6xl mx-auto px-5">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           className="text-center mb-16"
         >
-          <span className="text-[#F5C542] text-sm font-semibold tracking-widest uppercase">Our Team</span>
-          <h2 className="text-4xl md:text-5xl font-bold text-white mt-2 mb-4" style={{fontFamily:'var(--font-syne, sans-serif)'}}>
-            Meet the Founders
+          <span className="text-[#F5C542] text-sm font-semibold uppercase tracking-widest">Our Team</span>
+          <h2 className="font-syne text-3xl md:text-5xl font-extrabold text-white mt-3">
+            The Minds Behind CREDENTIA
           </h2>
-          <p className="text-[#9999AA] text-lg max-w-xl mx-auto">
-            The passionate minds building India&apos;s most trusted credential verification platform.
-          </p>
         </motion.div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-10">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-10">
           {team.map((member, i) => (
             <motion.div
-              key={member.name}
+              key={i}
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ delay: i * 0.12 }}
-              className="flex flex-col items-center text-center group"
+              transition={{ duration: 0.4, delay: i * 0.15 }}
+              className="text-center group cursor-pointer"
+              onClick={() => setSelected(i)}
             >
-              {/* Photo */}
-              <div className="relative mb-5">
-                <div className="w-32 h-32 rounded-full overflow-hidden ring-2 ring-[#2A2A3A] group-hover:ring-[#F5C542] transition-all duration-300 shadow-xl">
-                  <Image
-                    src={member.image}
-                    alt={member.name}
-                    width={128}
-                    height={128}
-                    className="w-full h-full object-cover object-top"
-                    onError={(e) => {
-                      const target = e.currentTarget as HTMLImageElement
-                      target.style.display = 'none'
-                      const parent = target.parentElement
-                      if (parent) {
-                        parent.style.background = '#1C1C26'
-                        parent.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:800;color:#F5C542;">${member.name[0]}</div>`
-                      }
-                    }}
-                  />
-                </div>
-                {/* Golden glow ring on hover */}
-                <div className="absolute inset-0 rounded-full ring-4 ring-[#F5C542]/40 blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+              <div className="relative w-36 h-36 mx-auto mb-4 rounded-full overflow-hidden ring-2 ring-transparent group-hover:ring-4 group-hover:ring-[#F5C542] group-hover:ring-offset-4 group-hover:ring-offset-[#0A0A0F] transition-all duration-300 group-hover:shadow-[0_0_40px_rgba(245,197,66,0.4)]">
+                <Image
+                  src={member.image}
+                  alt={member.name}
+                  fill
+                  className="object-cover object-top"
+                  onError={(e) => {
+                    const t = e.currentTarget as HTMLImageElement
+                    t.style.display = 'none'
+                    const p = t.parentElement
+                    if (p) p.innerHTML = `<div style="width:100%;height:100%;background:#1C1C26;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:800;color:#F5C542;">${member.name[0]}</div>`
+                  }}
+                />
               </div>
-
-              <h3 className="text-white font-bold text-lg" style={{fontFamily:'var(--font-syne, sans-serif)'}}>
-                {member.name}
-              </h3>
-              <p className="text-[#F5C542] text-xs font-semibold tracking-wide mt-1 mb-2">
-                {member.role}
-              </p>
-              <p className="text-[#9999AA] text-xs leading-relaxed mb-3">
-                {member.desc}
-              </p>
-              <button className="flex items-center gap-1.5 text-[#9999AA] hover:text-[#F5C542] text-xs transition-colors">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452z"/></svg>
-                Connect
-              </button>
+              <h4 className="font-syne font-bold text-white text-lg">{member.name}</h4>
+              <p className="text-[#9999AA] text-sm mt-1">{member.role}</p>
             </motion.div>
           ))}
         </div>
       </div>
+
+      {/* Modal */}
+      <AnimatePresence>
+        {selected !== null && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setSelected(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ type: 'spring', damping: 20 }}
+              className="glass rounded-3xl p-8 max-w-sm w-full mx-4 relative"
+              onClick={e => e.stopPropagation()}
+            >
+              <button onClick={() => setSelected(null)} className="absolute top-4 right-4 text-[#9999AA] hover:text-white">
+                <X size={20} />
+              </button>
+              <div className="text-center">
+                <div className="relative w-28 h-28 mx-auto mb-4 rounded-full overflow-hidden ring-4 ring-[#F5C542] ring-offset-4 ring-offset-[#13131A]">
+                  <Image
+                    src={team[selected].image}
+                    alt={team[selected].name}
+                    fill
+                    className="object-cover object-top"
+                    onError={(e) => {
+                      const t = e.currentTarget as HTMLImageElement
+                      t.style.display = 'none'
+                      const p = t.parentElement
+                      if (p) p.innerHTML = `<div style="width:100%;height:100%;background:#1C1C26;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:800;color:#F5C542;">${team[selected].name[0]}</div>`
+                    }}
+                  />
+                </div>
+                <h3 className="font-syne text-2xl font-extrabold text-white">{team[selected].name}</h3>
+                <p className="text-[#F5C542] text-sm font-medium mt-1">{team[selected].role}</p>
+                <p className="text-[#9999AA] text-sm mt-4 leading-relaxed">{team[selected].bio}</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   )
 }

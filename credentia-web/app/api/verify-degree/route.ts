@@ -1,45 +1,61 @@
 import { NextResponse } from 'next/server'
 import { analyzeDegree } from '@/lib/groq'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase'
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const { fileUrl, linkUrl, studentId, textContent } = await req.json()
-    const supabase = createSupabaseServerClient()
+    const { fileUrl, studentId } = await request.json()
 
-    let content = textContent || ''
-
-    if (fileUrl || linkUrl) {
-      try {
-        const res = await fetch(fileUrl || linkUrl)
-        content = await res.text()
-      } catch {
-        content = `Degree certificate from ${fileUrl || linkUrl}`
-      }
+    if (!fileUrl || !studentId) {
+      return NextResponse.json({ success: false, error: 'Missing fileUrl or studentId' }, { status: 400 })
     }
 
-    if (!content) {
-      return NextResponse.json({ error: 'No content provided' }, { status: 400 })
+    let content = ''
+    try {
+      const response = await fetch(fileUrl)
+      content = await response.text()
+    } catch {
+      content = `Degree certificate URL: ${fileUrl}`
     }
 
     const analysis = await analyzeDegree(content)
 
-    await supabase.from('verifications').upsert({
-      user_id: studentId,
-      type: 'degree',
-      status: analysis.confidence >= 75 ? 'ai_approved' : 'needs_review',
-      document_url: fileUrl,
-      external_link: linkUrl,
-      ai_confidence: analysis.confidence,
-      ai_result: analysis,
-    }, { onConflict: 'user_id,type' })
+    if (analysis.verified) {
+      await supabaseAdmin.from('students').update({
+        degree_verified: true,
+        university_name: analysis.university_name || null,
+        course: analysis.course || analysis.degree || null,
+        cgpa: analysis.grade_cgpa || null,
+        graduation_year: analysis.year_of_passing || null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', studentId)
+    }
 
-    if (analysis.confidence >= 75) {
-      await supabase.from('students').update({ degree_verified: true }).eq('id', studentId)
+    // Upsert verification
+    const { data: existing } = await supabaseAdmin.from('verifications')
+      .select('id').eq('student_id', studentId).eq('type', 'degree').maybeSingle()
+
+    if (existing) {
+      await supabaseAdmin.from('verifications').update({
+        status: analysis.verified ? 'verified' : 'rejected',
+        ai_analysis: analysis,
+        file_url: fileUrl,
+        verified_at: new Date().toISOString(),
+      }).eq('id', existing.id)
+    } else {
+      await supabaseAdmin.from('verifications').insert({
+        student_id: studentId,
+        type: 'degree',
+        status: analysis.verified ? 'verified' : 'rejected',
+        ai_analysis: analysis,
+        file_url: fileUrl,
+        verified_at: new Date().toISOString(),
+      })
     }
 
     return NextResponse.json({ success: true, analysis })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Degree verification error:', error)
+    return NextResponse.json({ success: false, error: error.message || 'Verification failed' }, { status: 500 })
   }
 }

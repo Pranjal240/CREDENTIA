@@ -1,50 +1,55 @@
 'use client'
 
-import Link from 'next/link'
-import { GraduationCap, Users, LogOut } from 'lucide-react'
-import { useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { GraduationCap, Users, Search } from 'lucide-react'
 
 export default function UniversityDashboard() {
-  const router = useRouter()
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/')
-    router.refresh()
-  }
+  const [students, setStudents] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from('students').select('*, profiles!inner(full_name, email)').limit(100)
+      setStudents(data || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  if (loading) return <div className="p-8 flex justify-center"><div className="w-8 h-8 border-2 border-[#F5C542] border-t-transparent rounded-full animate-spin" /></div>
 
   return (
-    <div className="min-h-screen dark:bg-[#0A0A0F] bg-[#F4F4F8]">
-      <nav className="sticky top-0 z-40 dark:bg-[#0A0A0F]/90 bg-white/90 backdrop-blur-xl border-b dark:border-[#2A2A3A] border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-          <span className="font-syne font-extrabold text-xl text-[#F5C542]">CREDENTIA</span>
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard/university/students" className="text-sm dark:text-[#9999AA] text-gray-500">My Students</Link>
-            <button onClick={handleLogout} className="text-sm text-red-400"><LogOut size={16} /></button>
-          </div>
+    <div className="p-6 md:p-8">
+      <h1 className="font-syne text-2xl font-extrabold text-white mb-6">University Dashboard</h1>
+      <div className="grid grid-cols-2 gap-4 mb-8">
+        <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-5">
+          <Users size={18} className="text-[#9999AA] mb-2" />
+          <p className="font-syne text-2xl font-extrabold text-white">{students.length}</p>
+          <p className="text-[#9999AA] text-xs">Total Students</p>
         </div>
-      </nav>
-
-      <div className="max-w-7xl mx-auto px-4 py-12">
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-10">
-          <h1 className="font-syne font-bold text-4xl dark:text-white text-gray-900 mb-2">University Dashboard</h1>
-          <p className="dark:text-[#9999AA] text-gray-500">Manage your students and verify academic credentials</p>
-        </motion.div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {[
-            { icon: <Users size={28} className="text-[#F5C542]" />, title: 'My Students', desc: 'View and verify registered students from your university', href: '/dashboard/university/students', color: 'from-[#F5C542]/20 to-orange-400/10' },
-            { icon: <GraduationCap size={28} className="text-purple-400" />, title: 'Verify Academic Records', desc: 'Approve or flag degree verifications for your students', href: '/dashboard/university/students', color: 'from-purple-600/20 to-indigo-600/10' },
-          ].map((c, i) => (
-            <motion.div key={c.title} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 * i }}>
-              <Link href={c.href} className={`block bg-gradient-to-br ${c.color} rounded-2xl border dark:border-[#2A2A3A] border-gray-100 p-8 hover:scale-[1.02] transition-all`}>
-                <div className="mb-4">{c.icon}</div>
-                <h3 className="font-syne font-bold text-xl dark:text-white text-gray-900 mb-2">{c.title}</h3>
-                <p className="text-sm dark:text-[#9999AA] text-gray-500">{c.desc}</p>
-              </Link>
-            </motion.div>
-          ))}
+        <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-5">
+          <GraduationCap size={18} className="text-[#9999AA] mb-2" />
+          <p className="font-syne text-2xl font-extrabold text-white">{students.filter((s: any) => s.degree_verified).length}</p>
+          <p className="text-[#9999AA] text-xs">Degree Verified</p>
+        </div>
+      </div>
+      <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-6">
+        <h3 className="font-syne font-bold text-white mb-4">Student Records</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-[#2A2A3A]"><th className="text-left py-3 text-[#9999AA] font-medium">Name</th><th className="text-left py-3 text-[#9999AA] font-medium">Email</th><th className="text-center py-3 text-[#9999AA] font-medium">Degree</th><th className="text-center py-3 text-[#9999AA] font-medium">CGPA</th></tr></thead>
+            <tbody>
+              {students.map((s: any) => (
+                <tr key={s.id} className="border-b border-[#2A2A3A] hover:bg-[#1C1C26]">
+                  <td className="py-3 text-white">{s.profiles?.full_name || '—'}</td>
+                  <td className="py-3 text-[#9999AA]">{s.profiles?.email || '—'}</td>
+                  <td className="py-3 text-center">{s.degree_verified ? '✅' : '⬜'}</td>
+                  <td className="py-3 text-center text-white">{s.cgpa || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

@@ -1,115 +1,99 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
-import { ArrowLeft, Upload, Loader2, CheckCircle, XCircle, Shield } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useDropzone } from 'react-dropzone'
 import { motion } from 'framer-motion'
+import { CreditCard, Upload, Loader2, AlertTriangle } from 'lucide-react'
 
 export default function AadhaarPage() {
-  const [frontFile, setFrontFile] = useState<File | null>(null)
-  const [backFile, setBackFile] = useState<File | null>(null)
+  const [file, setFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<Record<string, unknown> | null>(null)
+  const [result, setResult] = useState<any>(null)
   const [error, setError] = useState('')
 
-  const submit = async () => {
-    if (!frontFile) return
-    setLoading(true)
-    setError('')
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: { 'image/*': ['.jpg', '.jpeg', '.png'], 'application/pdf': ['.pdf'] },
+    maxFiles: 1,
+    onDrop: (files) => { setFile(files[0]); setError('') },
+  })
 
+  const verify = async () => {
+    setLoading(true); setError('')
     try {
-      const fd = new FormData()
-      fd.append('file', frontFile)
-      fd.append('folder', 'aadhaar')
-      const uploadRes = await fetch('/api/upload', { method: 'POST', body: fd })
-      const { url, success, error: uploadErr } = await uploadRes.json()
-      if (!success) throw new Error(uploadErr)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      let fileUrl = ''
+      if (file) {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('folder', 'aadhaar')
+        formData.append('studentId', user.id)
+        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
+        const uploadData = await uploadRes.json()
+        if (!uploadData.success) throw new Error(uploadData.error)
+        fileUrl = uploadData.url
+      }
 
       const res = await fetch('/api/verify-aadhaar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId: user.id, fileUrl: url }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileUrl, studentId: user.id }),
       })
       const data = await res.json()
       if (!data.success) throw new Error(data.error)
       setResult(data.analysis)
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
+    } catch (err: any) { setError(err.message) }
+    setLoading(false)
   }
 
   return (
-    <div className="min-h-screen dark:bg-[#0A0A0F] bg-[#F4F4F8] pb-16">
-      <div className="max-w-3xl mx-auto px-4 py-6">
-        <Link href="/dashboard/student" className="inline-flex items-center gap-2 dark:text-[#9999AA] text-gray-500 mb-6 hover:dark:text-white">
-          <ArrowLeft size={16} /> Back
-        </Link>
-        <h1 className="font-syne font-bold text-3xl dark:text-white text-gray-900 mb-2">Aadhaar Verification</h1>
-        <p className="dark:text-[#9999AA] text-gray-500 mb-8">Privacy-first verification. Your full Aadhaar number is NEVER stored.</p>
+    <div className="p-6 md:p-8 max-w-4xl">
+      <div className="flex items-center gap-3 mb-6">
+        <CreditCard size={24} className="text-[#F5C542]" />
+        <h1 className="font-syne text-2xl font-extrabold text-white">Aadhaar Verification</h1>
+      </div>
 
-        {/* Privacy notice */}
-        <div className="dark:bg-green-500/10 bg-green-50 border dark:border-green-500/20 border-green-200 rounded-xl px-4 py-3 mb-6 flex items-start gap-3">
-          <Shield className="text-green-400 flex-shrink-0 mt-0.5" size={18} />
-          <div>
-            <p className="text-sm font-medium dark:text-green-300 text-green-700">Your data is safe</p>
-            <p className="text-xs dark:text-green-400/80 text-green-600 mt-1">Only last 4 digits, name, date of birth, and state are extracted. No biometric data is stored.</p>
+      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-4 py-3 mb-6 flex items-start gap-3">
+        <AlertTriangle size={18} className="text-yellow-400 flex-shrink-0 mt-0.5" />
+        <p className="text-yellow-300 text-sm">PRIVACY FIRST: Your full Aadhaar number is NEVER stored. Only last 4 digits and non-sensitive details are saved.</p>
+      </div>
+
+      {!result ? (
+        <div className="space-y-6">
+          <div {...getRootProps()} className={`bg-[#13131A] border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all ${isDragActive ? 'border-[#F5C542] bg-[#F5C542]/5' : 'border-[#2A2A3A] hover:border-[#F5C542]/50'}`}>
+            <input {...getInputProps()} />
+            <Upload size={40} className="text-[#9999AA] mx-auto mb-4" />
+            {file ? <p className="text-white font-medium">{file.name}</p> : <><p className="text-white font-medium mb-1">Upload Aadhaar Card</p><p className="text-[#9999AA] text-sm">Front or back — JPG, PNG, or PDF</p></>}
           </div>
-        </div>
-
-        <div className="dark:bg-[#13131A] bg-white rounded-2xl border dark:border-[#2A2A3A] border-gray-100 p-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            {[
-              { label: 'Aadhaar Front', set: setFrontFile, file: frontFile },
-              { label: 'Aadhaar Back (optional)', set: setBackFile, file: backFile },
-            ].map(({ label, set, file }) => (
-              <label key={label} className="block rounded-2xl border-2 border-dashed dark:border-[#2A2A3A] border-gray-200 p-8 text-center cursor-pointer hover:dark:border-[#F5C542] hover:border-[#F5C542] transition-all">
-                <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => set(e.target.files?.[0] || null)} />
-                <span className="text-3xl block mb-2">🪪</span>
-                <p className="text-sm dark:text-white text-gray-900 font-medium">{file ? file.name : label}</p>
-                <p className="text-xs dark:text-[#9999AA] text-gray-400 mt-1">JPG, PNG, PDF</p>
-              </label>
-            ))}
-          </div>
-
-          {result && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 p-4 dark:bg-[#0A0A0F] bg-gray-50 rounded-xl border dark:border-[#2A2A3A] border-gray-200">
-              <p className="text-sm font-medium dark:text-white text-gray-900 mb-3 flex items-center gap-2">
-                <span className="text-green-400">✅</span> Verification Complete
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  ['Name', result.name as string],
-                  ['DOB', result.dob as string],
-                  ['Gender', result.gender as string],
-                  ['State', result.state as string],
-                  ['Last 4 Digits', result.aadhaar_last4 ? `XXXX-XXXX-${result.aadhaar_last4}` : 'N/A'],
-                  ['Confidence', `${result.confidence}%`],
-                ].map(([key, val]) => (
-                  <div key={key}>
-                    <p className="text-xs dark:text-[#9999AA] text-gray-500">{key}</p>
-                    <p className="text-sm dark:text-white text-gray-900 font-medium">{val || '—'}</p>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          {error && <p className="text-red-400 text-sm mb-4 bg-red-400/10 rounded-xl px-3 py-2">{error}</p>}
-
-          <button
-            onClick={submit}
-            disabled={loading || !frontFile}
-            className="w-full py-4 rounded-xl bg-[#F5C542] text-black font-semibold text-lg hover:bg-[#D4A017] transition-all disabled:opacity-40 flex items-center justify-center gap-2"
-          >
-            {loading ? <><Loader2 size={20} className="animate-spin" /> Verifying...</> : 'Verify Aadhaar →'}
+          {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-xl px-4 py-3">{error}</div>}
+          <button onClick={verify} disabled={!file || loading} className="bg-[#F5C542] text-black font-bold h-12 px-8 rounded-xl hover:bg-[#D4A017] transition-all disabled:opacity-50 flex items-center gap-2">
+            {loading ? <><Loader2 size={18} className="animate-spin" /> Verifying...</> : 'Verify Aadhaar →'}
           </button>
         </div>
-      </div>
+      ) : (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-6">
+            <p className={`font-syne font-bold text-lg mb-4 ${result.verified ? 'text-green-400' : 'text-red-400'}`}>{result.verified ? '✅ Aadhaar Verified' : '❌ Verification Failed'}</p>
+            <div className="space-y-3">
+              {[
+                { label: 'Name', value: result.name },
+                { label: 'Date of Birth', value: result.dob },
+                { label: 'Gender', value: result.gender },
+                { label: 'State', value: result.state },
+                { label: 'Aadhaar', value: result.aadhaar_last4 ? `XXXX-XXXX-${result.aadhaar_last4}` : null },
+                { label: 'Confidence', value: result.confidence ? `${result.confidence}%` : null },
+              ].filter(f => f.value).map((f, i) => (
+                <div key={i} className="flex justify-between py-2 border-b border-[#2A2A3A] last:border-0">
+                  <span className="text-[#9999AA] text-sm">{f.label}</span>
+                  <span className="text-white text-sm font-medium">{f.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <button onClick={() => { setResult(null); setFile(null) }} className="mt-4 text-[#F5C542] text-sm hover:underline">← Upload another</button>
+        </motion.div>
+      )}
     </div>
   )
 }

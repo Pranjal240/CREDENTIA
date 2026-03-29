@@ -1,126 +1,133 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import Link from 'next/link'
-import { motion } from 'framer-motion'
-import { Building2, GraduationCap, Shield, BarChart3, LogOut } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-
-const cards = [
-  {
-    icon: <GraduationCap size={28} className="text-[#F5C542]" />,
-    title: 'Police Verified',
-    desc: 'Review police certificates pending admin approval',
-    href: '/dashboard/admin/police-verified',
-    count: 'Pending',
-    gradient: 'from-[#F5C542]/20 to-orange-500/10',
-    border: 'border-[#F5C542]/30',
-  },
-  {
-    icon: <Building2 size={28} className="text-blue-400" />,
-    title: 'Companies',
-    desc: 'Manage company accounts and approvals',
-    href: '/dashboard/admin/companies',
-    count: 'Manage',
-    gradient: 'from-blue-600/20 to-indigo-600/10',
-    border: 'border-blue-500/30',
-  },
-  {
-    icon: <Shield size={28} className="text-green-400" />,
-    title: 'Universities',
-    desc: 'Manage university accounts and ERP keys',
-    href: '/dashboard/admin/universities',
-    count: 'Manage',
-    gradient: 'from-green-600/20 to-teal-600/10',
-    border: 'border-green-500/30',
-  },
-  {
-    icon: <BarChart3 size={28} className="text-purple-400" />,
-    title: 'Analytics',
-    desc: 'Platform-wide verification analytics',
-    href: '/dashboard/admin/analytics',
-    count: 'View',
-    gradient: 'from-purple-600/20 to-pink-600/10',
-    border: 'border-purple-500/30',
-  },
-]
+import { supabase } from '@/lib/supabase'
+import { motion } from 'framer-motion'
+import { Users, Shield, BarChart3, Building2, GraduationCap, CheckCircle2, XCircle, Eye, Loader2 } from 'lucide-react'
 
 export default function AdminDashboard() {
   const router = useRouter()
-  const [verifications, setVerifications] = useState<any[]>([])
+  const [stats, setStats] = useState({ students: 0, policeVerified: 0, policePending: 0, aadhaar: 0, companies: 0, universities: 0 })
+  const [pendingPolice, setPendingPolice] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchPending()
-  }, [])
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user || user.email !== 'pranjalmishra2409@gmail.com') { router.push('/login'); return }
 
-  const fetchPending = async () => {
-    const { data } = await supabase
-      .from('verifications')
-      .select('*, profiles(full_name, email)')
-      .eq('status', 'needs_review')
-      .order('created_at', { ascending: false })
+      const [stu, pol, pend, aad, comp, uni] = await Promise.all([
+        supabase.from('students').select('*', { count: 'exact', head: true }),
+        supabase.from('verifications').select('*', { count: 'exact', head: true }).eq('type', 'police').eq('status', 'admin_verified'),
+        supabase.from('verifications').select('*, students!inner(profiles!inner(full_name, email))').eq('type', 'police').in('status', ['ai_approved', 'needs_review']),
+        supabase.from('students').select('*', { count: 'exact', head: true }).eq('aadhaar_verified', true),
+        supabase.from('companies').select('*', { count: 'exact', head: true }),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'university'),
+      ])
 
-    setVerifications(data || [])
-    setLoading(false)
-  }
+      setStats({
+        students: stu.count || 0,
+        policeVerified: pol.count || 0,
+        policePending: pend.data?.length || 0,
+        aadhaar: aad.count || 0,
+        companies: comp.count || 0,
+        universities: uni.count || 0,
+      })
+      setPendingPolice(pend.data || [])
+      setLoading(false)
+    }
+    load()
+  }, [router])
 
-  const handleAction = async (id: string, newStatus: string) => {
-    setActionLoading(id)
-    await supabase.from('verifications').update({ status: newStatus }).eq('id', id)
-    setVerifications((prev) => prev.filter((v) => v.id !== id))
+  const handlePoliceAction = async (verificationId: string, action: 'approve' | 'reject') => {
+    setActionLoading(verificationId)
+    const res = await fetch('/api/admin/police-action', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ verificationId, action }),
+    })
+    const data = await res.json()
+    if (data.success) {
+      setPendingPolice(prev => prev.filter(p => p.id !== verificationId))
+      setStats(prev => ({
+        ...prev,
+        policePending: prev.policePending - 1,
+        policeVerified: action === 'approve' ? prev.policeVerified + 1 : prev.policeVerified,
+      }))
+    }
     setActionLoading(null)
   }
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
+  if (loading) return <div className="p-8 flex justify-center"><div className="w-8 h-8 border-2 border-[#F5C542] border-t-transparent rounded-full animate-spin" /></div>
 
   return (
-    <div className="min-h-screen dark:bg-[#0A0A0F] bg-[#F4F4F8]">
-      <div className="border-b dark:border-[#2A2A3A] border-gray-100 dark:bg-[#0A0A0F]/90 bg-white/90 backdrop-blur-xl sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-          <span className="font-syne font-extrabold text-xl text-[#F5C542]">CREDENTIA Admin</span>
-          <button onClick={handleLogout} className="flex items-center gap-2 text-sm dark:text-[#9999AA] text-gray-500 hover:text-red-400 transition-colors">
-            <LogOut size={16} /> Logout
-          </button>
-        </div>
+    <div className="p-6 md:p-8">
+      <h1 className="font-syne text-2xl font-extrabold text-white mb-6">Admin Dashboard</h1>
+
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        {[
+          { label: 'Total Students', value: stats.students, icon: Users, color: '#3B82F6' },
+          { label: 'Police Verified', value: stats.policeVerified, icon: Shield, color: '#22C55E' },
+          { label: 'Police Pending', value: stats.policePending, icon: Shield, color: '#F59E0B' },
+          { label: 'Aadhaar Verified', value: stats.aadhaar, icon: Shield, color: '#8B5CF6' },
+          { label: 'Companies', value: stats.companies, icon: Building2, color: '#EF4444' },
+          { label: 'Universities', value: stats.universities, icon: GraduationCap, color: '#F5C542' },
+        ].map((s, i) => (
+          <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-5">
+            <s.icon size={18} className="mb-2" style={{ color: s.color }} />
+            <p className="font-syne text-2xl font-extrabold text-white">{s.value}</p>
+            <p className="text-[#9999AA] text-xs">{s.label}</p>
+          </motion.div>
+        ))}
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-12">
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-12 text-center">
-          <div className="w-20 h-20 rounded-full bg-[#F5C542] flex items-center justify-center text-black font-bold text-3xl mx-auto mb-4">A</div>
-          <h1 className="font-syne font-bold text-4xl dark:text-white text-gray-900 mb-2">Admin Panel</h1>
-          <p className="dark:text-[#9999AA] text-gray-500">CREDENTIA Platform Administration</p>
-        </motion.div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {cards.map((card, i) => (
-            <motion.div
-              key={card.title}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 * i }}
-            >
-              <Link
-                href={card.href}
-                className={`block bg-gradient-to-br ${card.gradient} rounded-2xl border ${card.border} p-8 hover:scale-[1.02] transition-all duration-200`}
-              >
-                <div className="flex items-start justify-between mb-6">
-                  {card.icon}
-                  <span className="text-xs px-3 py-1 rounded-full dark:bg-[#2A2A3A] bg-white/80 dark:text-[#9999AA] text-gray-600">
-                    {card.count}
-                  </span>
+      {/* Pending Police Verifications */}
+      <div className="bg-[#13131A] border border-[#2A2A3A] rounded-2xl p-6">
+        <h3 className="font-syne font-bold text-white mb-4">🚨 Pending Police Reviews ({pendingPolice.length})</h3>
+        {pendingPolice.length > 0 ? (
+          <div className="space-y-4">
+            {pendingPolice.map((v: any) => (
+              <div key={v.id} className="bg-[#1C1C26] border border-[#2A2A3A] rounded-xl p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <p className="text-white font-semibold text-sm">{v.students?.profiles?.full_name || 'Unknown'}</p>
+                    <p className="text-[#9999AA] text-xs">{v.students?.profiles?.email}</p>
+                    <span className={`text-xs font-medium mt-1 inline-block px-2 py-0.5 rounded-full ${v.status === 'ai_approved' ? 'bg-green-500/10 text-green-400' : 'bg-orange-500/10 text-orange-400'}`}>
+                      {v.status === 'ai_approved' ? '✅ AI Approved' : '⚠️ Needs Review'}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handlePoliceAction(v.id, 'approve')}
+                      disabled={actionLoading === v.id}
+                      className="bg-green-500/10 text-green-400 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-green-500/20 transition-all disabled:opacity-50"
+                    >
+                      {actionLoading === v.id ? <Loader2 size={12} className="animate-spin" /> : '✅ Approve'}
+                    </button>
+                    <button
+                      onClick={() => handlePoliceAction(v.id, 'reject')}
+                      disabled={actionLoading === v.id}
+                      className="bg-red-500/10 text-red-400 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-red-500/20 transition-all disabled:opacity-50"
+                    >
+                      ❌ Reject
+                    </button>
+                  </div>
                 </div>
-                <h3 className="font-syne font-bold text-xl dark:text-white text-gray-900 mb-2">{card.title}</h3>
-                <p className="text-sm dark:text-[#9999AA] text-gray-500">{card.desc}</p>
-              </Link>
-            </motion.div>
-          ))}
-        </div>
+                {v.ai_analysis && (
+                  <div className="text-xs text-[#9999AA] space-y-1">
+                    <p>Certificate: {v.ai_analysis.certificate_number || 'N/A'}</p>
+                    <p>Authority: {v.ai_analysis.issuing_authority || 'N/A'}</p>
+                    <p>AI Confidence: {v.ai_analysis.confidence || 0}%</p>
+                  </div>
+                )}
+                {v.file_url && <a href={v.file_url} target="_blank" rel="noreferrer" className="text-[#F5C542] text-xs hover:underline mt-2 inline-flex items-center gap-1"><Eye size={12} /> View Document</a>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[#9999AA] text-sm">No pending reviews. All caught up! 🎉</p>
+        )}
       </div>
     </div>
   )

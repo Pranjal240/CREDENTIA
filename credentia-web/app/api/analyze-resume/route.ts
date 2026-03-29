@@ -1,47 +1,59 @@
 import { NextResponse } from 'next/server'
 import { analyzeResume } from '@/lib/groq'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase'
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const { fileUrl, linkUrl, studentId, textContent } = await req.json()
-    const supabase = createSupabaseServerClient()
+    const { fileUrl, studentId } = await request.json()
 
-    let content = textContent || ''
-
-    if (fileUrl || linkUrl) {
-      const url = fileUrl || linkUrl
-      try {
-        const res = await fetch(url)
-        content = await res.text()
-      } catch {
-        content = `Resume from URL: ${url}. Please analyze as a professional resume.`
-      }
+    if (!fileUrl || !studentId) {
+      return NextResponse.json({ success: false, error: 'Missing fileUrl or studentId' }, { status: 400 })
     }
 
-    if (!content) {
-      return NextResponse.json({ error: 'No content provided' }, { status: 400 })
+    // Fetch file content (for text-based analysis)
+    let content = ''
+    try {
+      const response = await fetch(fileUrl)
+      content = await response.text()
+    } catch {
+      content = `Resume URL: ${fileUrl}`
     }
 
     const analysis = await analyzeResume(content)
 
-    // Save to Supabase
-    await supabase.from('verifications').upsert({
-      user_id: studentId,
-      type: 'resume',
-      status: analysis.ats_score >= 60 ? 'ai_approved' : 'needs_review',
-      document_url: fileUrl,
-      external_link: linkUrl,
-      ai_confidence: analysis.ats_score,
-      ai_result: analysis,
-    }, { onConflict: 'user_id,type' })
+    // Update student record
+    await supabaseAdmin.from('students').update({
+      resume_url: fileUrl,
+      ats_score: analysis.ats_score || 0,
+      resume_analysis: analysis,
+      updated_at: new Date().toISOString(),
+    }).eq('id', studentId)
 
-    // Update ats_score on profiles instead of students
-    await supabase.from('profiles').update({ ats_score: analysis.ats_score }).eq('id', studentId)
+    // Upsert verification record
+    const { data: existing } = await supabaseAdmin.from('verifications')
+      .select('id').eq('student_id', studentId).eq('type', 'resume').maybeSingle()
+
+    if (existing) {
+      await supabaseAdmin.from('verifications').update({
+        status: 'verified',
+        ai_analysis: analysis,
+        file_url: fileUrl,
+        verified_at: new Date().toISOString(),
+      }).eq('id', existing.id)
+    } else {
+      await supabaseAdmin.from('verifications').insert({
+        student_id: studentId,
+        type: 'resume',
+        status: 'verified',
+        ai_analysis: analysis,
+        file_url: fileUrl,
+        verified_at: new Date().toISOString(),
+      })
+    }
 
     return NextResponse.json({ success: true, analysis })
   } catch (error: any) {
     console.error('Resume analysis error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: error.message || 'Analysis failed' }, { status: 500 })
   }
 }

@@ -1,56 +1,81 @@
 import { NextResponse } from 'next/server'
-import { analyzePoliceDocument } from '@/lib/groq'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { analyzePoliceDoc } from '@/lib/groq'
+import { supabaseAdmin } from '@/lib/supabase'
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const { fileUrl, linkUrl, manualData, studentId } = await req.json()
-    const supabase = createSupabaseServerClient()
+    const { fileUrl, manualData, studentId } = await request.json()
 
-    let content = ''
+    if (!studentId) {
+      return NextResponse.json({ success: false, error: 'Missing studentId' }, { status: 400 })
+    }
 
-    if (manualData) {
-      content = `Police Verification Certificate Details:
-Certificate Number: ${manualData.certificateNumber || 'Not provided'}
-Issue Date: ${manualData.issueDate || 'Not provided'}
-Issuing Authority: ${manualData.issuingAuthority || 'Not provided'}
-District: ${manualData.district || 'Not provided'}
-State: ${manualData.state || 'Not provided'}
-This is a police verification certificate submission.`
-    } else if (fileUrl || linkUrl) {
-      const url = fileUrl || linkUrl
-      try {
-        const res = await fetch(url)
-        content = await res.text()
-      } catch {
-        content = `Police certificate from URL: ${url}. Treat as a police verification certificate from India.`
+    let analysis: any = {}
+    let status = 'needs_review'
+
+    if (manualData && Object.values(manualData).some((v: any) => v?.trim())) {
+      // Manual entry
+      analysis = {
+        is_police_certificate: true,
+        confidence: 60,
+        certificate_number: manualData.certificateNumber || null,
+        issuing_authority: manualData.issuingAuthority || null,
+        issue_date: manualData.dateOfIssue || null,
+        district: manualData.district || null,
+        state: manualData.state || null,
+        status: 'NEEDS_REVIEW',
+        fraud_indicators: [],
+        issues: ['Manual entry — requires admin verification'],
       }
+      status = 'needs_review'
+    } else if (fileUrl) {
+      // AI analysis
+      let content = ''
+      try {
+        const response = await fetch(fileUrl)
+        content = await response.text()
+      } catch {
+        content = `Police certificate URL: ${fileUrl}`
+      }
+
+      analysis = await analyzePoliceDoc(content)
+
+      if (analysis.confidence >= 80 && analysis.is_police_certificate) {
+        status = 'ai_approved'
+      } else if (analysis.is_police_certificate) {
+        status = 'needs_review'
+      } else {
+        status = 'rejected'
+      }
+    } else {
+      return NextResponse.json({ success: false, error: 'Provide file or manual data' }, { status: 400 })
     }
 
-    if (!content) {
-      return NextResponse.json({ error: 'No content provided' }, { status: 400 })
+    // Upsert verification
+    const { data: existing } = await supabaseAdmin.from('verifications')
+      .select('id').eq('student_id', studentId).eq('type', 'police').maybeSingle()
+
+    if (existing) {
+      await supabaseAdmin.from('verifications').update({
+        status,
+        ai_analysis: analysis,
+        file_url: fileUrl || null,
+        verified_at: new Date().toISOString(),
+      }).eq('id', existing.id)
+    } else {
+      await supabaseAdmin.from('verifications').insert({
+        student_id: studentId,
+        type: 'police',
+        status,
+        ai_analysis: analysis,
+        file_url: fileUrl || null,
+        verified_at: new Date().toISOString(),
+      })
     }
-
-    const analysis = await analyzePoliceDocument(content)
-
-    // Determine status based on confidence
-    let status = 'rejected'
-    if (analysis.confidence >= 85) status = 'ai_approved'
-    else if (analysis.confidence >= 60) status = 'needs_review'
-
-    await supabase.from('verifications').upsert({
-      user_id: studentId,
-      type: 'police',
-      status,
-      document_url: fileUrl,
-      external_link: linkUrl,
-      ai_confidence: analysis.confidence,
-      ai_result: analysis,
-    }, { onConflict: 'user_id,type' })
 
     return NextResponse.json({ success: true, analysis, status })
   } catch (error: any) {
     console.error('Police verification error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: error.message || 'Verification failed' }, { status: 500 })
   }
 }
