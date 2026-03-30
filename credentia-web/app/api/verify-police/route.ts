@@ -2,6 +2,15 @@ import { NextResponse } from 'next/server'
 import { analyzePoliceDoc } from '@/lib/groq'
 import { supabaseAdmin } from '@/lib/supabase'
 
+export const runtime = 'nodejs'
+
+async function extractPdfText(buffer: Buffer): Promise<string> {
+  const { extractText, getDocumentProxy } = await import('unpdf')
+  const pdf = await getDocumentProxy(new Uint8Array(buffer))
+  const { text } = await extractText(pdf, { mergePages: true })
+  return text
+}
+
 export async function POST(request: Request) {
   try {
     const { fileUrl, manualData, studentId } = await request.json()
@@ -14,7 +23,6 @@ export async function POST(request: Request) {
     let status = 'needs_review'
 
     if (manualData && Object.values(manualData).some((v: any) => v?.trim())) {
-      // Manual entry
       analysis = {
         is_police_certificate: true,
         confidence: 60,
@@ -29,35 +37,42 @@ export async function POST(request: Request) {
       }
       status = 'needs_review'
     } else if (fileUrl) {
-      // AI analysis
       let content = ''
       let isImage = false
       const lowerUrl = fileUrl.toLowerCase()
 
       try {
-        if (lowerUrl.includes('.png') || lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.webp')) {
+        if (
+          lowerUrl.includes('.png') ||
+          lowerUrl.includes('.jpg') ||
+          lowerUrl.includes('.jpeg') ||
+          lowerUrl.includes('.webp')
+        ) {
           const response = await fetch(fileUrl)
           const arrayBuffer = await response.arrayBuffer()
           const base64 = Buffer.from(arrayBuffer).toString('base64')
-          const mimeType = lowerUrl.endsWith('.png') ? 'image/png' : lowerUrl.endsWith('.webp') ? 'image/webp' : 'image/jpeg'
+          const mimeType = lowerUrl.endsWith('.png')
+            ? 'image/png'
+            : lowerUrl.endsWith('.webp')
+            ? 'image/webp'
+            : 'image/jpeg'
           content = `data:${mimeType};base64,${base64}`
           isImage = true
         } else if (lowerUrl.includes('.pdf')) {
-          // Parse PDF text securely
           const response = await fetch(fileUrl)
           const arrayBuffer = await response.arrayBuffer()
           const buffer = Buffer.from(arrayBuffer)
-          const pdfParse = require('pdf-parse')
-          const pdfData = await pdfParse(buffer)
-          content = pdfData.text
+          content = await extractPdfText(buffer)
         } else {
-          // Fallback text parser
           const response = await fetch(fileUrl)
           content = await response.text()
         }
       } catch (err: any) {
         console.error('Police file fetch error:', err)
-        return NextResponse.json({ success: false, error: 'Could not read document content: ' + err.message }, { status: 400 })
+        return NextResponse.json(
+          { success: false, error: 'Could not read document content: ' + err.message },
+          { status: 400 }
+        )
       }
 
       analysis = await analyzePoliceDoc(content, isImage)
@@ -70,21 +85,30 @@ export async function POST(request: Request) {
         status = 'rejected'
       }
     } else {
-      return NextResponse.json({ success: false, error: 'Provide file or manual data' }, { status: 400 })
+      return NextResponse.json(
+        { success: false, error: 'Provide file or manual data' },
+        { status: 400 }
+      )
     }
 
-    // Upsert verification — correct column names
-    const { data: existing } = await supabaseAdmin.from('verifications')
-      .select('id').eq('student_id', studentId).eq('type', 'police').maybeSingle()
+    const { data: existing } = await supabaseAdmin
+      .from('verifications')
+      .select('id')
+      .eq('student_id', studentId)
+      .eq('type', 'police')
+      .maybeSingle()
 
     if (existing) {
-      await supabaseAdmin.from('verifications').update({
-        status,
-        ai_result: analysis,
-        ai_confidence: analysis.confidence || 0,
-        document_url: fileUrl || null,
-        updated_at: new Date().toISOString(),
-      }).eq('id', existing.id)
+      await supabaseAdmin
+        .from('verifications')
+        .update({
+          status,
+          ai_result: analysis,
+          ai_confidence: analysis.confidence || 0,
+          document_url: fileUrl || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id)
     } else {
       await supabaseAdmin.from('verifications').insert({
         student_id: studentId,
@@ -99,6 +123,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, analysis, status })
   } catch (error: any) {
     console.error('Police verification error:', error)
-    return NextResponse.json({ success: false, error: error.message || 'Verification failed' }, { status: 500 })
+    return NextResponse.json(
+      { success: false, error: error.message || 'Verification failed' },
+      { status: 500 }
+    )
   }
 }
