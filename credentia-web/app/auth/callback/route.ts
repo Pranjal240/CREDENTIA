@@ -4,7 +4,6 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const ADMIN_EMAIL = 'pranjalmishra2409@gmail.com'
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url)
@@ -73,13 +72,8 @@ export async function GET(request: NextRequest) {
   let role = 'student'
 
   if (profileError || !existingProfile) {
-    // First-time login — determine role
-    // Force admin role for the admin email
-    if (user.email === ADMIN_EMAIL) {
-      role = 'admin'
-    }
-
     // Create profile
+
     await supabaseAdmin.from('profiles').upsert({
       id: user.id,
       email: user.email,
@@ -103,12 +97,8 @@ export async function GET(request: NextRequest) {
 
     console.log(`[auth/callback] Created new profile for ${user.email} with role=${role}`)
   } else {
-    // Existing user — update admin role if email matches
+    // Existing user
     role = existingProfile.role || 'student'
-    if (user.email === ADMIN_EMAIL && role !== 'admin') {
-      await supabaseAdmin.from('profiles').update({ role: 'admin', updated_at: new Date().toISOString() }).eq('id', user.id)
-      role = 'admin'
-    }
   }
 
   // Step 4: Redirect to role-specific dashboard

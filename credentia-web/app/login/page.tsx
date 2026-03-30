@@ -76,15 +76,16 @@ function LoginContent() {
         return
       }
 
-      if (selectedRole === 'admin' && data.user.email !== 'pranjalmishra2409@gmail.com') {
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.user.id).single()
+      const role = profile?.role || 'student'
+
+      if (selectedRole === 'admin' && role !== 'admin') {
         await supabase.auth.signOut()
         setError('Unauthorized: Admin access is restricted.')
         setLoading(false)
         return
       }
 
-      const { data: profile } = await supabase.from('profiles').select('role').eq('id', data.user.id).single()
-      const role = profile?.role || 'student'
       router.push(`/dashboard/${role}`)
       router.refresh()
     } catch (err: any) {

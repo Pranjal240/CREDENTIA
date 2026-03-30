@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function POST(req: Request) {
   try {
@@ -12,27 +12,22 @@ export async function POST(req: Request) {
     const { data: callerProfile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single()
     if (callerProfile?.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
 
-    const { studentId, isPublic } = await req.json()
-    if (!studentId) return NextResponse.json({ error: 'Missing student ID' }, { status: 400 })
+    const { userId, newRole } = await req.json()
+    if (!userId || !['student', 'company', 'university', 'admin'].includes(newRole)) {
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+    }
 
-    const { error } = await supabaseAdmin
-      .from('students')
-      .update({
-        profile_is_public: isPublic,
-        police_share_with_companies: isPublic
-      })
-      .eq('id', studentId)
-
+    const { error } = await supabaseAdmin.from('profiles').update({ role: newRole, updated_at: new Date().toISOString() }).eq('id', userId)
     if (error) throw error
 
     // Audit log
     await supabaseAdmin.from('audit_logs').insert({
       actor_id: user.id,
-      actor_email: user.email || '',
-      action: isPublic ? 'enable_company_access' : 'disable_company_access',
-      target_type: 'student',
-      target_id: studentId,
-      details: { profile_is_public: isPublic },
+      actor_email: user.email,
+      action: 'change_role',
+      target_type: 'user',
+      target_id: userId,
+      details: { new_role: newRole },
     })
 
     return NextResponse.json({ success: true })

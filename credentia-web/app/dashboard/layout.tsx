@@ -8,30 +8,47 @@ import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, FileText, Shield, CreditCard, GraduationCap, Link2,
-  ChevronLeft, ChevronRight, LogOut, Menu, X, Home, Users
+  ChevronLeft, ChevronRight, LogOut, Menu, X, Home, Users, Settings,
+  BookmarkCheck, BarChart3, ClipboardList, Building2, Briefcase,
+  ScrollText, Bell, Search
 } from 'lucide-react'
 
 const sidebarLinks: Record<string, { label: string; icon: any; href: string }[]> = {
   student: [
-    { label: 'Overview', icon: LayoutDashboard, href: '/dashboard/student' },
+    { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/student' },
+    { label: 'Overview', icon: ClipboardList, href: '/dashboard/student/overview' },
     { label: 'Resume', icon: FileText, href: '/dashboard/student/resume' },
     { label: 'Police', icon: Shield, href: '/dashboard/student/police' },
     { label: 'Aadhaar', icon: CreditCard, href: '/dashboard/student/aadhaar' },
     { label: 'Degree', icon: GraduationCap, href: '/dashboard/student/degree' },
+    { label: 'My Verifications', icon: BookmarkCheck, href: '/dashboard/student/saved' },
     { label: 'My Link', icon: Link2, href: '/dashboard/student/my-link' },
+    { label: 'Settings', icon: Settings, href: '/dashboard/student/settings' },
     { label: 'Home', icon: Home, href: '/' },
   ],
   company: [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/company' },
+    { label: 'Talent Search', icon: Search, href: '/dashboard/company' },
+    { label: 'Saved Candidates', icon: BookmarkCheck, href: '/dashboard/company/saved' },
+    { label: 'Analytics', icon: BarChart3, href: '/dashboard/company/analytics' },
+    { label: 'Settings', icon: Settings, href: '/dashboard/company/settings' },
     { label: 'Home', icon: Home, href: '/' },
   ],
   university: [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/university' },
+    { label: 'Student Registry', icon: Users, href: '/dashboard/university' },
+    { label: 'Analytics', icon: BarChart3, href: '/dashboard/university/analytics' },
+    { label: 'Settings', icon: Settings, href: '/dashboard/university/settings' },
     { label: 'Home', icon: Home, href: '/' },
   ],
   admin: [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/admin' },
-    { label: 'Users', icon: Users, href: '/dashboard/admin/users' },
+    { label: 'All Users', icon: Users, href: '/dashboard/admin/users' },
+    { label: 'Verifications', icon: Shield, href: '/dashboard/admin/verifications' },
+    { label: 'Audit Logs', icon: ScrollText, href: '/dashboard/admin/audit' },
+    { label: 'Universities', icon: Building2, href: '/dashboard/admin/outreach' },
+    { label: 'Companies', icon: Briefcase, href: '/dashboard/admin/companies' },
+    { label: 'Settings', icon: Settings, href: '/dashboard/admin/settings' },
     { label: 'Home', icon: Home, href: '/' },
   ],
 }
@@ -77,6 +94,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const links = sidebarLinks[role] || sidebarLinks.student
 
+  const roleColors: Record<string, { bg: string; text: string; border: string }> = {
+    student: { bg: 'rgba(59,130,246,0.12)', text: 'rgba(96,165,250,0.9)', border: 'rgba(59,130,246,0.2)' },
+    company: { bg: 'rgba(16,185,129,0.12)', text: 'rgba(52,211,153,0.9)', border: 'rgba(16,185,129,0.2)' },
+    university: { bg: 'rgba(139,92,246,0.12)', text: 'rgba(167,139,250,0.9)', border: 'rgba(139,92,246,0.2)' },
+    admin: { bg: 'rgba(239,68,68,0.12)', text: 'rgba(248,113,113,0.9)', border: 'rgba(239,68,68,0.2)' },
+  }
+
+  const rc = roleColors[role] || roleColors.student
+
   return (
     <div className="min-h-screen flex bg-[#0A0A0F]">
 
@@ -110,36 +136,36 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Nav links */}
-        <nav className="flex-1 py-4 px-2 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 py-4 px-2 space-y-0.5 overflow-y-auto scrollbar-thin">
           {links.map((link) => {
-            const active = pathname === link.href
+            const active = pathname === link.href || (link.href !== '/' && link.href !== '/dashboard/student' && link.href !== '/dashboard/company' && link.href !== '/dashboard/university' && link.href !== '/dashboard/admin' && pathname.startsWith(link.href))
+            const exactActive = pathname === link.href
             return (
               <Link
-                key={link.href}
+                key={link.href + link.label}
                 href={link.href}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 relative group"
                 style={{
-                  color: active ? 'white' : 'rgba(255,255,255,0.45)',
-                  background: active ? 'rgba(59,130,246,0.15)' : 'transparent',
+                  color: exactActive ? 'white' : 'rgba(255,255,255,0.45)',
+                  background: exactActive ? 'rgba(59,130,246,0.15)' : 'transparent',
                 }}
                 title={collapsed ? link.label : undefined}
               >
-                {/* Active glow bar */}
-                {active && (
+                {exactActive && (
                   <motion.div
                     layoutId="sidebar-active"
                     className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-blue-500"
                     style={{ boxShadow: '0 0 12px rgba(59,130,246,0.6)' }}
                   />
                 )}
-                <link.icon size={18} className={`flex-shrink-0 transition-colors ${active ? 'text-blue-400' : 'group-hover:text-white/70'}`} />
+                <link.icon size={18} className={`flex-shrink-0 transition-colors ${exactActive ? 'text-blue-400' : 'group-hover:text-white/70'}`} />
                 <AnimatePresence>
                   {!collapsed && (
                     <motion.span
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className={active ? '' : 'group-hover:text-white/70'}
+                      className={exactActive ? '' : 'group-hover:text-white/70'}
                     >
                       {link.label}
                     </motion.span>
@@ -152,7 +178,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Bottom actions */}
         <div className="p-3 space-y-1" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          {/* User info */}
           {!collapsed && profile && (
             <div className="px-3 py-2 mb-2">
               <p className="text-[11px] text-white/30 uppercase tracking-wider font-medium">Signed in as</p>
@@ -223,12 +248,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <span className="font-heading font-bold text-sm text-white tracking-wide">Menu</span>
                 <button onClick={() => setMobileOpen(false)} className="text-white/40 hover:text-white/80 transition-colors"><X size={20} /></button>
               </div>
-              <nav className="flex-1 py-4 px-2 space-y-0.5">
+              <nav className="flex-1 py-4 px-2 space-y-0.5 overflow-y-auto">
                 {links.map((link) => {
                   const active = pathname === link.href
                   return (
                     <Link
-                      key={link.href}
+                      key={link.href + link.label}
                       href={link.href}
                       onClick={() => setMobileOpen(false)}
                       className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-all"
@@ -267,7 +292,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
           <span
             className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
-            style={{ background: 'rgba(59,130,246,0.12)', color: 'rgba(96,165,250,0.9)', border: '1px solid rgba(59,130,246,0.2)' }}
+            style={{ background: rc.bg, color: rc.text, border: `1px solid ${rc.border}` }}
           >
             {role}
           </span>

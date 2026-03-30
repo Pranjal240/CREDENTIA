@@ -12,7 +12,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     }
 
-    if (user.email !== 'pranjalmishra2409@gmail.com') {
+    const { data: callerProfile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single()
+    if (callerProfile?.role !== 'admin') {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 })
     }
 

@@ -1,22 +1,105 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { motion } from 'framer-motion'
+import { Building, Users, CheckCircle2, AlertCircle, Globe, MapPin } from 'lucide-react'
+
 export default function UniversityOutreach() {
+  const [universities, setUniversities] = useState<any[]>([])
+  const [companies, setCompanies] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'universities' | 'companies'>('universities')
+
+  useEffect(() => {
+    const load = async () => {
+      const [{ data: u }, { data: c }] = await Promise.all([
+        supabase.from('universities').select('*, profiles!universities_id_fkey(full_name, email)'),
+        supabase.from('companies').select('*, profiles!companies_id_fkey(full_name, email)'),
+      ])
+      setUniversities(u || [])
+      setCompanies(c || [])
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" /></div>
+
   return (
-    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
+    <div className="max-w-5xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold font-heading text-white">University Outreach</h1>
-        <p className="text-white/50 text-sm mt-1">Review and approve pending university registration requests.</p>
+        <h1 className="font-heading text-2xl font-bold text-white flex items-center gap-2"><Building size={24} className="text-emerald-400" /> Institutions & Companies</h1>
+        <p className="text-sm text-white/40 mt-1">Manage university and company registrations on the platform.</p>
       </div>
-      <div className="p-8 rounded-2xl bg-white/5 border border-white/10 flex flex-col items-center justify-center min-h-[400px]">
-        <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4">
-          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
-          </svg>
-        </div>
-        <h2 className="text-xl font-bold font-heading text-white">University Affiliations</h2>
-        <p className="text-sm text-white/40 max-w-sm text-center mt-2">
-          No pending university requests require your attention at the moment.
-        </p>
+
+      {/* Tab switcher */}
+      <div className="flex gap-1 bg-white/[0.03] rounded-xl p-1 border border-white/5">
+        <button onClick={() => setActiveTab('universities')} className={`flex-1 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all ${activeTab === 'universities' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60'}`}><Building size={14} /> Universities ({universities.length})</button>
+        <button onClick={() => setActiveTab('companies')} className={`flex-1 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all ${activeTab === 'companies' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60'}`}><Globe size={14} /> Companies ({companies.length})</button>
       </div>
+
+      {activeTab === 'universities' && (
+        universities.length === 0 ? (
+          <div className="text-center py-16 rounded-2xl border border-white/5 bg-white/[0.01]">
+            <Building size={40} className="mx-auto mb-4 text-white/10" />
+            <p className="text-white/50 font-medium">No universities registered yet</p>
+            <p className="text-sm text-white/30 mt-1">Universities that sign up will appear here for approval.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {universities.map((u, i) => (
+              <motion.div key={u.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+                className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 flex items-center gap-4 hover:bg-white/[0.04] transition-colors"
+              >
+                <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 flex-shrink-0"><Building size={22} /></div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-heading font-bold text-white text-sm">{u.university_name || u.profiles?.full_name || 'Unnamed University'}</p>
+                  <p className="text-xs text-white/30 mt-0.5">{u.profiles?.email || 'No email'} {u.state ? `• ${u.city || ''}, ${u.state}` : ''}</p>
+                  <div className="flex gap-2 mt-2">
+                    {u.ugc_id && <span className="text-[9px] px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">UGC: {u.ugc_id}</span>}
+                    {u.naac_grade && <span className="text-[9px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">NAAC: {u.naac_grade}</span>}
+                  </div>
+                </div>
+                <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-lg border ${u.is_verified ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
+                  {u.is_verified ? 'Verified' : 'Pending'}
+                </span>
+              </motion.div>
+            ))}
+          </div>
+        )
+      )}
+
+      {activeTab === 'companies' && (
+        companies.length === 0 ? (
+          <div className="text-center py-16 rounded-2xl border border-white/5 bg-white/[0.01]">
+            <Globe size={40} className="mx-auto mb-4 text-white/10" />
+            <p className="text-white/50 font-medium">No companies registered yet</p>
+            <p className="text-sm text-white/30 mt-1">Companies that sign up will appear here.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {companies.map((c, i) => (
+              <motion.div key={c.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+                className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 flex items-center gap-4 hover:bg-white/[0.04] transition-colors"
+              >
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 flex-shrink-0"><Globe size={22} /></div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-heading font-bold text-white text-sm">{c.company_name || c.profiles?.full_name || 'Unnamed Company'}</p>
+                  <p className="text-xs text-white/30 mt-0.5">{c.profiles?.email || 'No email'} {c.industry ? `• ${c.industry}` : ''}</p>
+                  <div className="flex gap-2 mt-2">
+                    {c.company_size && <span className="text-[9px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">{c.company_size}</span>}
+                    {c.website && <a href={c.website} target="_blank" rel="noreferrer" className="text-[9px] px-2 py-0.5 rounded bg-teal-500/10 text-teal-400 border border-teal-500/20 hover:bg-teal-500/20 transition-colors">Website ↗</a>}
+                  </div>
+                </div>
+                <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-lg border ${c.is_verified ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
+                  {c.is_verified ? 'Verified' : 'Pending'}
+                </span>
+              </motion.div>
+            ))}
+          </div>
+        )
+      )}
     </div>
   )
 }
