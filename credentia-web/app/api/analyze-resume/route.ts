@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { analyzeResume } from '@/lib/groq'
 import { supabaseAdmin } from '@/lib/supabase'
 
+export const runtime = 'nodejs'
+
 export async function POST(request: Request) {
   try {
     const { fileUrl, studentId } = await request.json()
@@ -10,13 +12,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Missing fileUrl or studentId' }, { status: 400 })
     }
 
-    // Fetch file content (for text-based analysis)
+    // Fetch file content and extract text if it's a PDF
     let content = ''
     try {
       const response = await fetch(fileUrl)
-      content = await response.text()
-    } catch {
-      content = `Resume URL: ${fileUrl}`
+      if (!response.ok) throw new Error('Failed to fetch file from storage')
+      
+      const arrayBuffer = await response.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+      
+      if (fileUrl.toLowerCase().includes('.pdf')) {
+        const pdfParseModule = await import('pdf-parse')
+        const parsePdf = (pdfParseModule as any).default || pdfParseModule
+        const pdfData = await (parsePdf as any)(buffer)
+        content = pdfData.text
+      } else {
+        content = buffer.toString('utf-8')
+      }
+    } catch (err: any) {
+      console.error('File parsing error:', err)
+      return NextResponse.json({ success: false, error: 'Could not read document content: ' + err.message }, { status: 400 })
+    }
+
+    if (!content.trim()) {
+      return NextResponse.json({ success: false, error: 'Document appears to be empty or unreadable' }, { status: 400 })
     }
 
     const analysis = await analyzeResume(content)
