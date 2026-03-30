@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, FileText, Shield, CreditCard, GraduationCap, Link2,
-  ChevronLeft, ChevronRight, LogOut, Menu, X
+  ChevronLeft, ChevronRight, LogOut, Menu, X, Home, Users
 } from 'lucide-react'
 
 const sidebarLinks: Record<string, { label: string; icon: any; href: string }[]> = {
@@ -19,15 +19,20 @@ const sidebarLinks: Record<string, { label: string; icon: any; href: string }[]>
     { label: 'Aadhaar', icon: CreditCard, href: '/dashboard/student/aadhaar' },
     { label: 'Degree', icon: GraduationCap, href: '/dashboard/student/degree' },
     { label: 'My Link', icon: Link2, href: '/dashboard/student/my-link' },
+    { label: 'Home', icon: Home, href: '/' },
   ],
   company: [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/company' },
+    { label: 'Home', icon: Home, href: '/' },
   ],
   university: [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/university' },
+    { label: 'Home', icon: Home, href: '/' },
   ],
   admin: [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/admin' },
+    { label: 'Users', icon: Users, href: '/dashboard/admin/users' },
+    { label: 'Home', icon: Home, href: '/' },
   ],
 }
 

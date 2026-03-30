@@ -76,7 +76,7 @@ export default function Team() {
                       src={member.img}
                       alt={member.name}
                       fill
-                      className="object-cover object-top group-hover:scale-110 transition-transform duration-700"
+                      className="object-contain object-bottom pt-2 group-hover:scale-110 transition-transform duration-700"
                       sizes="144px"
                     />
                   </div>

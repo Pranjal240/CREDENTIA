@@ -53,9 +53,11 @@ export default function StudentDashboard() {
   return (
     <div className="max-w-5xl mx-auto space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-sm mt-1 text-white/40">Track your verification progress and manage credentials</p>
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="font-heading text-3xl font-bold text-white mb-1">Student Dashboard</h1>
+          <p className="text-sm text-white/40">Track your verification progress and manage your digital credentials.</p>
+        </div>
       </div>
 
       {/* ── Stat Cards ── */}
@@ -168,6 +170,47 @@ export default function StudentDashboard() {
           <ArrowRight size={18} className="text-white/20 group-hover:text-blue-400 transition-all group-hover:translate-x-1" />
         </Link>
       </motion.div>
+
+      {/* ── Recent Activity / Timeline ── */}
+      <div className="mt-8">
+        <h2 className="font-heading font-bold text-white text-sm mb-4">Recent Activity</h2>
+        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
+          {verifications.length === 0 ? (
+            <div className="text-center py-8">
+              <Clock size={32} className="mx-auto text-white/10 mb-2" />
+              <p className="text-sm text-white/40">No activity yet. Start your first verification above.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {verifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5).map((v, i) => (
+                <div key={i} className="flex gap-4 relative">
+                  {i !== verifications.slice(0, 5).length - 1 && (
+                    <div className="absolute left-[11px] top-6 bottom-[-16px] w-[2px] bg-white/5" />
+                  )}
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 z-10 ${
+                    v.status === 'ai_approved' || v.status === 'verified' ? 'bg-emerald-500/20 text-emerald-400' :
+                    v.status === 'pending' || v.status === 'needs_review' ? 'bg-amber-500/20 text-amber-400' :
+                    'bg-white/10 text-white/40'
+                  }`}>
+                    {v.status === 'ai_approved' || v.status === 'verified' ? <CheckCircle2 size={12} /> : 
+                     v.status === 'pending' || v.status === 'needs_review' ? <Clock size={12} /> : 
+                     <AlertCircle size={12} />}
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm text-white/90">
+                      {v.type === 'resume' ? 'Resume Analysis' :
+                       v.type === 'police' ? 'Police Verification' :
+                       v.type === 'aadhaar' ? 'Aadhaar Identity' : 'Degree Verification'} 
+                      {' '}<span className="text-white/40 font-normal">was {v.status.replace('_', ' ')}</span>
+                    </p>
+                    <p className="text-xs text-white/30 mt-0.5">{new Date(v.created_at).toLocaleString()}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

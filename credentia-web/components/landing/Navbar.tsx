@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { useTheme } from 'next-themes'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Menu, X, Sun, Moon } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 const navLinks = [
   { label: 'Features', href: '#features' },
@@ -19,12 +20,16 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  const [session, setSession] = useState<any>(null)
 
   useEffect(() => { setMounted(true) }, [])
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 20)
     window.addEventListener('scroll', handler)
     return () => window.removeEventListener('scroll', handler)
+  }, [])
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session))
   }, [])
 
   return (
@@ -74,18 +79,29 @@ export default function Navbar() {
                 </motion.div>
               </button>
             )}
-            <Link
-              href="/login"
-              className="px-4 py-2 text-sm font-medium text-[rgb(var(--text-secondary))] hover:text-[rgb(var(--text-primary))] transition-colors"
-            >
-              Login
-            </Link>
-            <Link
-              href="/register"
-              className="btn-primary px-5 py-2.5 text-sm"
-            >
-              Get Started
-            </Link>
+            {session ? (
+              <Link
+                href={`/dashboard/${session.user.user_metadata?.role || 'student'}`}
+                className="btn-primary px-5 py-2.5 text-sm"
+              >
+                Go to Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="px-4 py-2 text-sm font-medium text-[rgb(var(--text-secondary))] hover:text-[rgb(var(--text-primary))] transition-colors"
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/register"
+                  className="btn-primary px-5 py-2.5 text-sm"
+                >
+                  Get Started
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile burger */}
@@ -119,8 +135,14 @@ export default function Navbar() {
                 </a>
               ))}
               <div className="pt-3 space-y-2">
-                <Link href="/login" className="block w-full text-center px-4 py-2.5 rounded-xl text-sm font-medium border border-[rgb(var(--border-default))] text-[rgb(var(--text-primary))] hover:border-[rgb(var(--accent))]/50 transition-all">Login</Link>
-                <Link href="/register" className="block w-full text-center btn-primary px-4 py-2.5 text-sm">Get Started</Link>
+                {session ? (
+                  <Link href={`/dashboard/${session.user.user_metadata?.role || 'student'}`} className="block w-full text-center btn-primary px-4 py-2.5 text-sm">Go to Dashboard</Link>
+                ) : (
+                  <>
+                    <Link href="/login" className="block w-full text-center px-4 py-2.5 rounded-xl text-sm font-medium border border-[rgb(var(--border-default))] text-[rgb(var(--text-primary))] hover:border-[rgb(var(--accent))]/50 transition-all">Login</Link>
+                    <Link href="/register" className="block w-full text-center btn-primary px-4 py-2.5 text-sm">Get Started</Link>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>

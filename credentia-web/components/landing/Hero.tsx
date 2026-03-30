@@ -69,18 +69,17 @@ export default function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.6 }}
-          className="flex items-center justify-center gap-3 mb-10"
+          className="flex items-center justify-center mb-10"
         >
-          <div className="flex -space-x-2">
-            {['bg-blue-500', 'bg-teal-500', 'bg-indigo-500', 'bg-emerald-500', 'bg-violet-500'].map((bg, i) => (
-              <div key={i} className={`w-8 h-8 rounded-full ${bg} border-2 border-[rgb(var(--bg-base))] flex items-center justify-center text-white text-xs font-bold`}>
-                {String.fromCharCode(65 + i)}
-              </div>
-            ))}
+          <div className="px-5 py-2.5 rounded-full border border-[rgb(var(--border-default))] glass flex items-center gap-2">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[rgb(var(--success))] opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-[rgb(var(--success))]"></span>
+            </span>
+            <span className="text-[rgb(var(--text-secondary))] text-sm font-medium">
+              Join <strong className="text-[rgb(var(--text-primary))]">50,000+</strong> students already verified
+            </span>
           </div>
-          <span className="text-[rgb(var(--text-secondary))] text-sm">
-            Join <strong className="text-[rgb(var(--text-primary))]">50,000+</strong> students already verified
-          </span>
         </motion.div>
 
         {/* Floating verification badges */}

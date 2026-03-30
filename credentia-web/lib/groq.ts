@@ -26,7 +26,7 @@ export async function analyzeResume(content: string) {
     ],
     response_format: { type: 'json_object' },
     temperature: 0.1,
-    max_tokens: 1500,
+    max_tokens: 4000,
   })
   return JSON.parse(result.choices[0].message.content || '{}')
 }
