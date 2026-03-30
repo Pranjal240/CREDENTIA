@@ -11,14 +11,30 @@ export async function POST(request: Request) {
     }
 
     let content = ''
+    let isImage = false
+    const lowerUrl = fileUrl.toLowerCase()
+
     try {
-      const response = await fetch(fileUrl)
-      content = await response.text()
-    } catch {
-      content = `Aadhaar document URL: ${fileUrl}`
+      if (lowerUrl.includes('.png') || lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.webp')) {
+        content = fileUrl
+        isImage = true
+      } else if (lowerUrl.includes('.pdf')) {
+        const response = await fetch(fileUrl)
+        const arrayBuffer = await response.arrayBuffer()
+        const buffer = Buffer.from(arrayBuffer)
+        const pdfParse = require('pdf-parse')
+        const pdfData = await pdfParse(buffer)
+        content = pdfData.text
+      } else {
+        const response = await fetch(fileUrl)
+        content = await response.text()
+      }
+    } catch (err: any) {
+      console.error('Aadhaar file fetch error:', err)
+      return NextResponse.json({ success: false, error: 'Could not read document content: ' + err.message }, { status: 400 })
     }
 
-    const analysis = await analyzeAadhaar(content)
+    const analysis = await analyzeAadhaar(content, isImage)
 
     // Update student — NEVER store full Aadhaar
     if (analysis.verified) {

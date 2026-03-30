@@ -17,24 +17,32 @@ export async function POST(request: Request) {
 
     // Fetch file content and extract text if it's a PDF
     let content = ''
+    let isImage = false
+    const lowerUrl = fileUrl.toLowerCase()
+
     try {
-      const response = await fetch(fileUrl)
-      if (!response.ok) throw new Error('Failed to fetch file from storage')
-      
-      const arrayBuffer = await response.arrayBuffer()
-      const buffer = Buffer.from(arrayBuffer)
-      
-      if (fileUrl.toLowerCase().includes('.pdf')) {
-        // Polyfill DOMMatrix for pdf.js running in Node.js
-        if (typeof global !== 'undefined') {
-          if (!(global as any).DOMMatrix) (global as any).DOMMatrix = class DOMMatrix {}
-          if (!(global as any).DOMPoint) (global as any).DOMPoint = class DOMPoint {}
-        }
-        
-        const pdfData = await pdfParse(buffer)
-        content = pdfData.text
+      if (lowerUrl.includes('.png') || lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.webp')) {
+        content = fileUrl
+        isImage = true
       } else {
-        content = buffer.toString('utf-8')
+        const response = await fetch(fileUrl)
+        if (!response.ok) throw new Error('Failed to fetch file from storage')
+        
+        const arrayBuffer = await response.arrayBuffer()
+        const buffer = Buffer.from(arrayBuffer)
+        
+        if (lowerUrl.includes('.pdf')) {
+          // Polyfill DOMMatrix for pdf.js running in Node.js
+          if (typeof global !== 'undefined') {
+            if (!(global as any).DOMMatrix) (global as any).DOMMatrix = class DOMMatrix {}
+            if (!(global as any).DOMPoint) (global as any).DOMPoint = class DOMPoint {}
+          }
+          
+          const pdfData = await pdfParse(buffer)
+          content = pdfData.text
+        } else {
+          content = buffer.toString('utf-8')
+        }
       }
     } catch (err: any) {
       console.error('File parsing error:', err)
@@ -45,7 +53,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Document appears to be empty or unreadable' }, { status: 400 })
     }
 
-    const analysis = await analyzeResume(content)
+    const analysis = await analyzeResume(content, isImage)
 
     // Update student record — only columns that actually exist
     await supabaseAdmin.from('students').update({

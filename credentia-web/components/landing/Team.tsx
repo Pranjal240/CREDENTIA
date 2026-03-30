@@ -12,6 +12,7 @@ const team = [
     img: '/team/pranjal.png',
     bio: 'Visionary entrepreneur dedicated to building India\'s trust infrastructure for the next generation. Leading the charge to eliminate hiring fraud and empower students with verifiable credentials.',
     linkedin: '#',
+    imageStyle: 'object-cover object-top scale-[1.7] translate-y-3',
   },
   {
     name: 'Kriti Ahlawat',
@@ -19,6 +20,7 @@ const team = [
     img: '/team/kriti.png',
     bio: 'Driving strategic operations and forging partnerships across India\'s education and corporate landscape. Passionate about creating seamless verification experiences at scale.',
     linkedin: '#',
+    imageStyle: 'object-cover object-top scale-[1.1]',
   },
   {
     name: 'Nihal Kumar',
@@ -26,6 +28,7 @@ const team = [
     img: '/team/nihal.png',
     bio: 'Architecting scalable AI-powered verification systems using cutting-edge technologies. Expert in building secure, high-throughput platforms that handle millions of document verifications.',
     linkedin: '#',
+    imageStyle: 'object-cover object-top scale-[1.7] translate-y-3',
   },
   {
     name: 'Pragya Mishra',
@@ -33,6 +36,7 @@ const team = [
     img: '/team/pragya.png',
     bio: 'Ensuring seamless verification workflows and exceptional user experiences. Managing end-to-end operations from university onboarding to enterprise client success.',
     linkedin: '#',
+    imageStyle: 'object-cover object-top scale-[2.0] translate-y-4',
   },
 ]
 
@@ -76,7 +80,7 @@ export default function Team() {
                       src={member.img}
                       alt={member.name}
                       fill
-                      className="object-cover group-hover:scale-110 transition-transform duration-700"
+                      className={`group-hover:scale-[1.2] transition-transform duration-700 ${member.imageStyle || 'object-cover'}`}
                       sizes="144px"
                     />
                   </div>

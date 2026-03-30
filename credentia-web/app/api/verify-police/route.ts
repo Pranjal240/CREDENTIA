@@ -31,14 +31,33 @@ export async function POST(request: Request) {
     } else if (fileUrl) {
       // AI analysis
       let content = ''
+      let isImage = false
+      const lowerUrl = fileUrl.toLowerCase()
+
       try {
-        const response = await fetch(fileUrl)
-        content = await response.text()
-      } catch {
-        content = `Police certificate URL: ${fileUrl}`
+        if (lowerUrl.includes('.png') || lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.webp')) {
+          // Pass the URL directly to the Multi-modal Vision API
+          content = fileUrl
+          isImage = true
+        } else if (lowerUrl.includes('.pdf')) {
+          // Parse PDF text securely
+          const response = await fetch(fileUrl)
+          const arrayBuffer = await response.arrayBuffer()
+          const buffer = Buffer.from(arrayBuffer)
+          const pdfParse = require('pdf-parse')
+          const pdfData = await pdfParse(buffer)
+          content = pdfData.text
+        } else {
+          // Fallback text parser
+          const response = await fetch(fileUrl)
+          content = await response.text()
+        }
+      } catch (err: any) {
+        console.error('Police file fetch error:', err)
+        return NextResponse.json({ success: false, error: 'Could not read document content: ' + err.message }, { status: 400 })
       }
 
-      analysis = await analyzePoliceDoc(content)
+      analysis = await analyzePoliceDoc(content, isImage)
 
       if (analysis.confidence >= 80 && analysis.is_police_certificate) {
         status = 'ai_approved'

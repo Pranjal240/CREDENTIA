@@ -17,13 +17,27 @@ function parseGroqJSON(content: string) {
   }
 }
 
-export async function analyzeResume(content: string) {
-  const result = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
-    messages: [
-      {
-        role: 'system',
-        content: `You are an expert ATS resume analyzer for Indian job market. Return ONLY valid JSON:
+function buildMessages(systemPrompt: string, content: string, isImage: boolean = false): any[] {
+  if (isImage) {
+    return [
+      { role: 'system', content: systemPrompt },
+      { 
+        role: 'user', 
+        content: [
+          { type: 'text', text: 'Extract information from this document image according to the system instructions.' },
+          { type: 'image_url', image_url: { url: content } }
+        ]
+      }
+    ]
+  }
+  return [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: `Analyze:\n\n${content.substring(0, 8000)}` }
+  ]
+}
+
+export async function analyzeResume(content: string, isImage: boolean = false) {
+  const systemPrompt = `You are an expert ATS resume analyzer for Indian job market. Return ONLY valid JSON:
         {
           "ats_score": <0-100>,
           "authenticity_score": <0-100>,
@@ -36,9 +50,10 @@ export async function analyzeResume(content: string) {
           "top_skills": ["skill1","skill2","skill3","skill4","skill5"],
           "summary": "<2-3 sentence assessment>"
         }`
-      },
-      { role: 'user', content: `Analyze:\n\n${content.substring(0, 8000)}` }
-    ],
+        
+  const result = await groq.chat.completions.create({
+    model: isImage ? 'llama-3.2-90b-vision-preview' : 'llama-3.3-70b-versatile',
+    messages: buildMessages(systemPrompt, content, isImage),
     response_format: { type: 'json_object' },
     temperature: 0.1,
     max_tokens: 4000,
@@ -46,13 +61,8 @@ export async function analyzeResume(content: string) {
   return parseGroqJSON(result.choices[0].message.content || '')
 }
 
-export async function analyzePoliceDoc(content: string) {
-  const result = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
-    messages: [
-      {
-        role: 'system',
-        content: `You are an Indian police certificate verifier. Return ONLY valid JSON:
+export async function analyzePoliceDoc(content: string, isImage: boolean = false) {
+  const systemPrompt = `You are an Indian police certificate verifier. Return ONLY valid JSON:
         {
           "is_police_certificate": <boolean>,
           "confidence": <0-100>,
@@ -66,9 +76,10 @@ export async function analyzePoliceDoc(content: string) {
           "fraud_indicators": [],
           "issues": []
         }`
-      },
-      { role: 'user', content: `Analyze:\n\n${content.substring(0, 6000)}` }
-    ],
+        
+  const result = await groq.chat.completions.create({
+    model: isImage ? 'llama-3.2-90b-vision-preview' : 'llama-3.3-70b-versatile',
+    messages: buildMessages(systemPrompt, content, isImage),
     response_format: { type: 'json_object' },
     temperature: 0.1,
     max_tokens: 1000,
@@ -76,13 +87,8 @@ export async function analyzePoliceDoc(content: string) {
   return parseGroqJSON(result.choices[0].message.content || '')
 }
 
-export async function analyzeAadhaar(content: string) {
-  const result = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
-    messages: [
-      {
-        role: 'system',
-        content: `You are a secure Aadhaar extractor. NEVER return full 12-digit number. Return ONLY JSON:
+export async function analyzeAadhaar(content: string, isImage: boolean = false) {
+  const systemPrompt = `You are a secure Aadhaar extractor. NEVER return full 12-digit number. Return ONLY JSON:
         {
           "verified": <boolean>,
           "name": "<string or null>",
@@ -93,22 +99,18 @@ export async function analyzeAadhaar(content: string) {
           "confidence": <0-100>,
           "issues": []
         }`
-      },
-      { role: 'user', content: `Extract from:\n\n${content}` }
-    ],
+
+  const result = await groq.chat.completions.create({
+    model: isImage ? 'llama-3.2-90b-vision-preview' : 'llama-3.3-70b-versatile',
+    messages: buildMessages(systemPrompt, content, isImage),
     response_format: { type: 'json_object' },
     temperature: 0.1,
   })
   return parseGroqJSON(result.choices[0].message.content || '')
 }
 
-export async function analyzeDegree(content: string) {
-  const result = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
-    messages: [
-      {
-        role: 'system',
-        content: `You are a degree certificate verifier. Return ONLY JSON:
+export async function analyzeDegree(content: string, isImage: boolean = false) {
+  const systemPrompt = `You are a degree certificate verifier. Return ONLY JSON:
         {
           "verified": <boolean>,
           "confidence": <0-100>,
@@ -120,9 +122,10 @@ export async function analyzeDegree(content: string) {
           "roll_number": "<string or null>",
           "issues": []
         }`
-      },
-      { role: 'user', content: content }
-    ],
+
+  const result = await groq.chat.completions.create({
+    model: isImage ? 'llama-3.2-90b-vision-preview' : 'llama-3.3-70b-versatile',
+    messages: buildMessages(systemPrompt, content, isImage),
     response_format: { type: 'json_object' },
     temperature: 0.1,
   })
