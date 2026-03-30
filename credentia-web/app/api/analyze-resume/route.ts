@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { analyzeResume } from '@/lib/groq'
 import { supabaseAdmin } from '@/lib/supabase'
 
@@ -106,6 +107,10 @@ export async function POST(request: Request) {
         document_url: fileUrl,
       })
     }
+
+    revalidatePath('/dashboard/student/overview')
+    revalidatePath('/dashboard/student/resume')
+    revalidatePath('/dashboard/admin')
 
     return NextResponse.json({ success: true, analysis })
   } catch (error: any) {

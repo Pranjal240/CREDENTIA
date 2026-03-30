@@ -2,11 +2,13 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
 import { useDropzone } from 'react-dropzone'
 import { motion } from 'framer-motion'
 import { Upload, Shield, Loader2, CheckCircle2, AlertCircle, Sparkles, RotateCcw, Link2, FileText } from 'lucide-react'
 
 export default function PolicePage() {
+  const router = useRouter()
   const [userId, setUserId] = useState('')
   const [tab, setTab] = useState<'upload' | 'link'>('upload')
   const [file, setFile] = useState<File | null>(null)
@@ -50,6 +52,7 @@ export default function PolicePage() {
       }
       const resData = await analyzeRes.json()
       setResult(resData.analysis || resData); setAnalyzing(false)
+      router.refresh()
     } catch (err: any) { setError(err.message); setUploading(false); setAnalyzing(false) }
   }
 
@@ -68,6 +71,7 @@ export default function PolicePage() {
       }
       const resData = await res.json()
       setResult(resData.analysis || resData); setAnalyzing(false)
+      router.refresh()
     } catch (err: any) { setError(err.message); setAnalyzing(false) }
   }
 

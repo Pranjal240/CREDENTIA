@@ -2,11 +2,13 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
 import { useDropzone } from 'react-dropzone'
 import { motion } from 'framer-motion'
 import { Upload, CreditCard, Loader2, CheckCircle2, AlertCircle, Sparkles, RotateCcw, ShieldAlert, FileText } from 'lucide-react'
 
 export default function AadhaarPage() {
+  const router = useRouter()
   const [userId, setUserId] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -48,6 +50,7 @@ export default function AadhaarPage() {
       }
       const resData = await res.json()
       setResult(resData.analysis || resData); setAnalyzing(false)
+      router.refresh()
     } catch (err: any) { setError(err.message); setUploading(false); setAnalyzing(false) }
   }
 

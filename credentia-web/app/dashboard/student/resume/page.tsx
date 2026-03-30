@@ -2,11 +2,13 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
 import { useDropzone } from 'react-dropzone'
 import { motion } from 'framer-motion'
 import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, Sparkles, RotateCcw } from 'lucide-react'
 
 export default function ResumePage() {
+  const router = useRouter()
   const [userId, setUserId] = useState<string>('')
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -55,6 +57,7 @@ export default function ResumePage() {
       const analysisData = await analyzeRes.json()
       setResult(analysisData.analysis || analysisData)
       setAnalyzing(false)
+      router.refresh()
     } catch (err: any) {
       setError(err.message || 'Something went wrong')
       setUploading(false); setAnalyzing(false)
