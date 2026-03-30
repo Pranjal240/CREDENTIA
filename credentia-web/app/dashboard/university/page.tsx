@@ -206,8 +206,8 @@ export default function UniversityDashboard() {
         {paginated.length === 0 ? (
           <div className="p-16 text-center">
             <Users size={32} className="mx-auto text-indigo-400/30 mb-3" />
-            <p className="font-heading font-bold text-lg text-white mb-1">{students.length === 0 ? 'No Students Yet' : 'No Results'}</p>
-            <p className="text-sm text-white/40">{students.length === 0 ? 'Alumni who link their profiles to your institution ID will appear here.' : 'Try adjusting your filters.'}</p>
+            <p className="font-heading font-bold text-lg text-white mb-1">{students.length === 0 ? 'No Students Linked Yet' : 'No Results'}</p>
+            <p className="text-sm text-white/40 max-w-md mx-auto">{students.length === 0 ? 'Students can link their profiles to your university from their Dashboard → Settings → "Link to University". Once linked, they will appear here for verification.' : 'Try adjusting your filters.'}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">

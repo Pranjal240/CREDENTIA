@@ -216,9 +216,9 @@ input:focus, textarea:focus, select:focus {
 
 /* ===== SMOOTH TRANSITIONS ===== */
 .page-enter {
-  animation: pageEnter 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: pageEnter 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 @keyframes pageEnter {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

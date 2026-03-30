@@ -36,7 +36,7 @@ export default function AdminClient({ profiles, students, verifications, recentA
     return localStudents.map(s => {
       const prof = profiles.find(p => p.id === s.id)
       const vList = localVerifications.filter(v => v.student_id === s.id)
-      return { ...s, email: prof?.email || s.email, fullName: prof?.full_name || s.name, verifications: vList }
+      return { ...s, email: prof?.email || s.email, fullName: prof?.full_name || s.name || prof?.email?.split('@')[0] || 'Unknown', verifications: vList }
     })
   }, [localStudents, profiles, localVerifications])
 

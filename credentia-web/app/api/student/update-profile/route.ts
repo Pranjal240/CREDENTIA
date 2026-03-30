@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 export async function POST(req: Request) {
   try {
-    const { studentId, name, course, branch, graduation_year, cgpa, city, state, profile_is_public } = await req.json()
+    const { studentId, name, course, branch, graduation_year, cgpa, city, state, profile_is_public, university_id } = await req.json()
     if (!studentId) return NextResponse.json({ error: 'Missing student ID' }, { status: 400 })
 
     // Update students table
@@ -17,6 +17,7 @@ export async function POST(req: Request) {
       city: city || null,
       state: state || null,
       profile_is_public: profile_is_public ?? true,
+      university_id: university_id || null,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'id' })
 

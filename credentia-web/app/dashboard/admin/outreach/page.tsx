@@ -13,12 +13,10 @@ export default function UniversityOutreach() {
 
   useEffect(() => {
     const load = async () => {
-      const [{ data: u }, { data: c }] = await Promise.all([
-        supabase.from('universities').select('*, profiles!universities_id_fkey(full_name, email)'),
-        supabase.from('companies').select('*, profiles!companies_id_fkey(full_name, email)'),
-      ])
-      setUniversities(u || [])
-      setCompanies(c || [])
+      const { data: profiles } = await supabase.from('profiles').select('id, full_name, email, role, created_at').in('role', ['university', 'company']).order('created_at', { ascending: false })
+      const all = profiles || []
+      setUniversities(all.filter(p => p.role === 'university').map(p => ({ id: p.id, university_name: p.full_name, profiles: p, is_verified: true, created_at: p.created_at })))
+      setCompanies(all.filter(p => p.role === 'company').map(p => ({ id: p.id, company_name: p.full_name, profiles: p, is_verified: true, created_at: p.created_at })))
       setLoading(false)
     }
     load()

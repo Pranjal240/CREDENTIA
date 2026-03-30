@@ -56,12 +56,23 @@ export async function POST(request: Request) {
 
     // 2. Type-specific `students` table mapping
     if (type === 'resume') {
-      await supabaseAdmin.from('students').upsert({
+      const upsertData: any = {
         id: studentId,
         resume_url: fileUrl,
         ats_score: analysis.ats_score || 0,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'id' })
+      }
+      // Auto-populate profile fields from AI extraction (only if not already set)
+      if (analysis.student_name) upsertData.name = analysis.student_name
+      if (analysis.city) upsertData.city = analysis.city
+      if (analysis.state) upsertData.state = analysis.state
+      if (analysis.course) upsertData.course = analysis.course
+      if (analysis.branch) upsertData.branch = analysis.branch
+      if (analysis.graduation_year) upsertData.graduation_year = typeof analysis.graduation_year === 'number' ? analysis.graduation_year : parseInt(analysis.graduation_year) || null
+      if (analysis.experience_years !== undefined && analysis.experience_years !== null) upsertData.experience_years = analysis.experience_years
+      if (analysis.top_skills && Array.isArray(analysis.top_skills)) upsertData.skills = analysis.top_skills
+
+      await supabaseAdmin.from('students').upsert(upsertData, { onConflict: 'id' })
     } 
     else if (type === 'aadhaar' && analysis.verified) {
       await supabaseAdmin.from('students').upsert({

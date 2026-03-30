@@ -27,7 +27,6 @@ const sidebarLinks: Record<string, { label: string; icon: any; href: string }[]>
     { label: 'Home', icon: Home, href: '/' },
   ],
   company: [
-    { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/company' },
     { label: 'Talent Search', icon: Search, href: '/dashboard/company' },
     { label: 'Saved Candidates', icon: BookmarkCheck, href: '/dashboard/company/saved' },
     { label: 'Analytics', icon: BarChart3, href: '/dashboard/company/analytics' },
@@ -35,7 +34,6 @@ const sidebarLinks: Record<string, { label: string; icon: any; href: string }[]>
     { label: 'Home', icon: Home, href: '/' },
   ],
   university: [
-    { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/university' },
     { label: 'Student Registry', icon: Users, href: '/dashboard/university' },
     { label: 'Analytics', icon: BarChart3, href: '/dashboard/university/analytics' },
     { label: 'Settings', icon: Settings, href: '/dashboard/university/settings' },
@@ -275,7 +273,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </AnimatePresence>
 
       {/* ── Main Content ── */}
-      <main className={`flex-1 transition-all duration-300 ${collapsed ? 'md:ml-[72px]' : 'md:ml-[260px]'} mt-14 md:mt-0`}>
+      <main className={`flex-1 transition-all duration-300 overflow-x-hidden ${collapsed ? 'md:ml-[72px]' : 'md:ml-[260px]'} mt-14 md:mt-0`}>
         {/* Top bar */}
         <div
           className="hidden md:flex items-center justify-between h-14 px-6"

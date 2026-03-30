@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { motion } from 'framer-motion'
-import { User, Save, Loader2, CheckCircle2, AlertCircle, Eye, EyeOff, GraduationCap } from 'lucide-react'
+import { User, Save, Loader2, CheckCircle2, AlertCircle, Eye, EyeOff, GraduationCap, Building } from 'lucide-react'
 
 export default function StudentSettingsPage() {
   const [userId, setUserId] = useState('')
@@ -13,7 +13,8 @@ export default function StudentSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({ name: '', course: '', branch: '', graduation_year: '', cgpa: '', city: '', state: '', profile_is_public: true })
+  const [universities, setUniversities] = useState<any[]>([])
+  const [form, setForm] = useState({ name: '', course: '', branch: '', graduation_year: '', cgpa: '', city: '', state: '', profile_is_public: true, university_id: '' })
 
   useEffect(() => {
     const load = async () => {
@@ -22,8 +23,10 @@ export default function StudentSettingsPage() {
       setUserId(session.user.id)
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', session.user.id).single()
       const { data: stu } = await supabase.from('students').select('*').eq('id', session.user.id).single()
+      const { data: unis } = await supabase.from('profiles').select('id, full_name, email').eq('role', 'university')
       setProfile(prof)
       setStudent(stu)
+      setUniversities(unis || [])
       setForm({
         name: stu?.name || prof?.full_name || '',
         course: stu?.course || '',
@@ -33,6 +36,7 @@ export default function StudentSettingsPage() {
         city: stu?.city || '',
         state: stu?.state || '',
         profile_is_public: stu?.profile_is_public ?? true,
+        university_id: stu?.university_id || '',
       })
       setLoading(false)
     }
@@ -106,6 +110,27 @@ export default function StudentSettingsPage() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* University Link */}
+      <div className="rounded-2xl p-6 border border-white/10 bg-white/[0.02] space-y-4">
+        <h2 className="font-heading font-bold text-sm text-white flex items-center gap-2"><Building size={16} className="text-indigo-400" /> Link to University</h2>
+        <p className="text-xs text-white/40">Select your university so they can view and verify your credentials.</p>
+        <select
+          value={form.university_id}
+          onChange={e => setForm(f => ({ ...f, university_id: e.target.value }))}
+          className="w-full h-11 px-4 rounded-xl text-sm bg-white/5 border border-white/10 text-white focus:outline-none focus:border-indigo-500/50 transition-colors"
+        >
+          <option value="">— No university linked —</option>
+          {universities.map(u => (
+            <option key={u.id} value={u.id}>{u.full_name || u.email}</option>
+          ))}
+        </select>
+        {form.university_id && (
+          <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm bg-indigo-500/5 text-indigo-400 border border-indigo-500/10">
+            <Building size={16} /> Linked to: {universities.find(u => u.id === form.university_id)?.full_name || 'University'}
+          </div>
+        )}
       </div>
 
       {/* Visibility */}

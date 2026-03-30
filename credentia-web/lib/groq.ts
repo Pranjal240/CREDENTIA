@@ -66,10 +66,17 @@ async function callGroq(systemPrompt: string, content: string, isImage: boolean,
 }
 
 export async function analyzeResume(content: string, isImage: boolean = false) {
-  const systemPrompt = `You are an expert ATS resume analyzer for Indian job market. You MUST return ONLY a valid JSON object with NO additional text, NO markdown, NO code fences. The JSON schema:
+  const systemPrompt = `You are an expert ATS resume analyzer for Indian job market. You MUST return ONLY a valid JSON object with NO additional text, NO markdown, NO code fences. Extract as much personal information as possible from the resume. The JSON schema:
 {
   "ats_score": <0-100>,
   "authenticity_score": <0-100>,
+  "student_name": "<full name from resume or null>",
+  "phone_number": "<phone number or null>",
+  "city": "<city from resume or null>",
+  "state": "<state from resume or null>",
+  "course": "<degree program e.g. B.Tech, MBA, BCA or null>",
+  "branch": "<specialization e.g. Computer Science, Mechanical or null>",
+  "graduation_year": <graduation year as number or null>,
   "keywords_found": ["skill1","skill2"],
   "keywords_missing": ["missing1","missing2"],
   "strengths": ["strength1","strength2","strength3"],
