@@ -13,8 +13,8 @@ const team = [
     bio: 'Visionary entrepreneur dedicated to building India\'s trust infrastructure for the next generation. Leading the charge to eliminate hiring fraud and empower students with verifiable credentials.',
     linkedin: '#',
     // Full-body standing photo — zoom into upper body/face
-    cropStyle: { backgroundSize: '250%', backgroundPosition: '50% 12%' },
-    modalCropStyle: { backgroundSize: '150%', backgroundPosition: '50% 10%' },
+    cropStyle: { backgroundSize: '250%', backgroundPosition: '60% 12%' },
+    modalCropStyle: { backgroundSize: '150%', backgroundPosition: '60% 10%' },
   },
   {
     name: 'Kriti Ahlawat',
@@ -22,8 +22,8 @@ const team = [
     img: '/team/kriti.png',
     bio: 'Driving strategic operations and forging partnerships across India\'s education and corporate landscape. Passionate about creating seamless verification experiences at scale.',
     linkedin: '#',
-    cropStyle: { backgroundSize: '200%', backgroundPosition: '50% 35%' },
-    modalCropStyle: { backgroundSize: '140%', backgroundPosition: '50% 35%' },
+    cropStyle: { backgroundSize: '200%', backgroundPosition: '40% 35%' },
+    modalCropStyle: { backgroundSize: '140%', backgroundPosition: '40% 35%' },
   },
   {
     name: 'Nihal Kumar',
@@ -40,8 +40,8 @@ const team = [
     img: '/team/pragya.png',
     bio: 'Ensuring seamless verification workflows and exceptional user experiences. Managing end-to-end operations from university onboarding to enterprise client success.',
     linkedin: '#',
-    cropStyle: { backgroundSize: '250%', backgroundPosition: '50% 5%' },
-    modalCropStyle: { backgroundSize: '150%', backgroundPosition: '50% 5%' },
+    cropStyle: { backgroundSize: '250%', backgroundPosition: '60% 5%' },
+    modalCropStyle: { backgroundSize: '150%', backgroundPosition: '60% 5%' },
   },
 ]
 
