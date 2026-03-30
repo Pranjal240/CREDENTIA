@@ -96,11 +96,13 @@ function LoginContent() {
   const handleGoogle = async () => {
     setGoogleLoading(true)
     setError('')
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
+    // ALWAYS use window.location.origin — NOT the env variable.
+    // This ensures the redirect returns to the EXACT same domain (www vs non-www)
+    // so the PKCE code_verifier cookie is accessible during the callback.
     const { error: oauthErr } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${appUrl}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback`,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',

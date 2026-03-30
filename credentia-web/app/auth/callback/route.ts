@@ -112,6 +112,16 @@ export async function GET(request: NextRequest) {
   }
 
   // Step 4: Redirect to role-specific dashboard
-  console.log(`[auth/callback] Redirecting ${user.email} to /dashboard/${role}`)
-  return NextResponse.redirect(new URL(`/dashboard/${role}`, request.url))
+  // On Vercel, use x-forwarded-host to get the real public domain
+  const dashboardPath = `/dashboard/${role}`
+  const forwardedHost = request.headers.get('x-forwarded-host')
+  const isLocal = process.env.NODE_ENV === 'development'
+
+  if (isLocal) {
+    return NextResponse.redirect(new URL(dashboardPath, request.url))
+  } else if (forwardedHost) {
+    return NextResponse.redirect(new URL(`https://${forwardedHost}${dashboardPath}`))
+  } else {
+    return NextResponse.redirect(new URL(dashboardPath, request.url))
+  }
 }
