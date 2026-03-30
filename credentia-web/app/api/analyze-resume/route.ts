@@ -21,33 +21,33 @@ export async function POST(request: Request) {
 
     const analysis = await analyzeResume(content)
 
-    // Update student record
+    // Update student record — only columns that actually exist
     await supabaseAdmin.from('students').update({
       resume_url: fileUrl,
       ats_score: analysis.ats_score || 0,
-      resume_analysis: analysis,
       updated_at: new Date().toISOString(),
     }).eq('id', studentId)
 
-    // Upsert verification record
+    // Upsert verification record — use correct column names
     const { data: existing } = await supabaseAdmin.from('verifications')
       .select('id').eq('student_id', studentId).eq('type', 'resume').maybeSingle()
 
     if (existing) {
       await supabaseAdmin.from('verifications').update({
-        status: 'verified',
-        ai_analysis: analysis,
-        file_url: fileUrl,
-        verified_at: new Date().toISOString(),
+        status: 'ai_approved',
+        ai_result: analysis,
+        ai_confidence: analysis.ats_score || 0,
+        document_url: fileUrl,
+        updated_at: new Date().toISOString(),
       }).eq('id', existing.id)
     } else {
       await supabaseAdmin.from('verifications').insert({
         student_id: studentId,
         type: 'resume',
-        status: 'verified',
-        ai_analysis: analysis,
-        file_url: fileUrl,
-        verified_at: new Date().toISOString(),
+        status: 'ai_approved',
+        ai_result: analysis,
+        ai_confidence: analysis.ats_score || 0,
+        document_url: fileUrl,
       })
     }
 

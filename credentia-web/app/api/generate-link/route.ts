@@ -1,14 +1,19 @@
 import { NextResponse } from 'next/server'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { randomBytes } from 'crypto'
 
-export async function POST(request: Request) {
+export async function POST() {
   try {
-    const { studentId } = await request.json()
+    // Get the authenticated user from the session cookies
+    const supabase = createSupabaseServerClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-    if (!studentId) {
-      return NextResponse.json({ success: false, error: 'Missing studentId' }, { status: 400 })
+    if (authError || !user) {
+      return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     }
+
+    const studentId = user.id
 
     // Check if token already exists
     const { data: existing } = await supabaseAdmin

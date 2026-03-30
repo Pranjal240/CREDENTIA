@@ -32,25 +32,28 @@ export async function POST(request: Request) {
       }).eq('id', studentId)
     }
 
-    // Upsert verification
+    // Upsert verification — correct column names
     const { data: existing } = await supabaseAdmin.from('verifications')
       .select('id').eq('student_id', studentId).eq('type', 'aadhaar').maybeSingle()
 
+    const newStatus = analysis.verified ? 'ai_approved' : 'rejected'
+
     if (existing) {
       await supabaseAdmin.from('verifications').update({
-        status: analysis.verified ? 'verified' : 'rejected',
-        ai_analysis: analysis,
-        file_url: fileUrl,
-        verified_at: new Date().toISOString(),
+        status: newStatus,
+        ai_result: analysis,
+        ai_confidence: analysis.confidence || 0,
+        document_url: fileUrl,
+        updated_at: new Date().toISOString(),
       }).eq('id', existing.id)
     } else {
       await supabaseAdmin.from('verifications').insert({
         student_id: studentId,
         type: 'aadhaar',
-        status: analysis.verified ? 'verified' : 'rejected',
-        ai_analysis: analysis,
-        file_url: fileUrl,
-        verified_at: new Date().toISOString(),
+        status: newStatus,
+        ai_result: analysis,
+        ai_confidence: analysis.confidence || 0,
+        document_url: fileUrl,
       })
     }
 

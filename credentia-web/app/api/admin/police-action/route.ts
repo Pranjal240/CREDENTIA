@@ -1,8 +1,21 @@
 import { NextResponse } from 'next/server'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: Request) {
   try {
+    // Verify the caller is admin
+    const supabase = createSupabaseServerClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
+    }
+
+    if (user.email !== 'pranjalmishra2409@gmail.com') {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 })
+    }
+
     const { verificationId, action } = await request.json()
 
     if (!verificationId || !['approve', 'reject'].includes(action)) {
@@ -16,6 +29,7 @@ export async function POST(request: Request) {
       .from('verifications')
       .update({
         status: newStatus,
+        admin_reviewed_by: user.id,
         admin_reviewed_at: new Date().toISOString(),
       })
       .eq('id', verificationId)

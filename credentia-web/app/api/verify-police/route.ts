@@ -51,25 +51,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Provide file or manual data' }, { status: 400 })
     }
 
-    // Upsert verification
+    // Upsert verification — correct column names
     const { data: existing } = await supabaseAdmin.from('verifications')
       .select('id').eq('student_id', studentId).eq('type', 'police').maybeSingle()
 
     if (existing) {
       await supabaseAdmin.from('verifications').update({
         status,
-        ai_analysis: analysis,
-        file_url: fileUrl || null,
-        verified_at: new Date().toISOString(),
+        ai_result: analysis,
+        ai_confidence: analysis.confidence || 0,
+        document_url: fileUrl || null,
+        updated_at: new Date().toISOString(),
       }).eq('id', existing.id)
     } else {
       await supabaseAdmin.from('verifications').insert({
         student_id: studentId,
         type: 'police',
         status,
-        ai_analysis: analysis,
-        file_url: fileUrl || null,
-        verified_at: new Date().toISOString(),
+        ai_result: analysis,
+        ai_confidence: analysis.confidence || 0,
+        document_url: fileUrl || null,
       })
     }
 
