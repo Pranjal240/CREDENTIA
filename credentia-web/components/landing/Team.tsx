@@ -13,7 +13,7 @@ const team = [
     bio: 'Visionary entrepreneur dedicated to building India\'s trust infrastructure for the next generation. Leading the charge to eliminate hiring fraud and empower students with verifiable credentials.',
     linkedin: '#',
     // Full-body standing photo — zoom into upper body/face
-    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 15%', transform: 'scale(2.2)' },
+    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 0%', transform: 'scale(2.5)', transformOrigin: 'top center' },
   },
   {
     name: 'Kriti Ahlawat',
@@ -22,7 +22,7 @@ const team = [
     bio: 'Driving strategic operations and forging partnerships across India\'s education and corporate landscape. Passionate about creating seamless verification experiences at scale.',
     linkedin: '#',
     // Already a good bust shot — minimal adjustments
-    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 15%', transform: 'scale(1.5)' },
+    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 0%', transform: 'scale(1.6)', transformOrigin: 'top center' },
   },
   {
     name: 'Nihal Kumar',
@@ -31,7 +31,7 @@ const team = [
     bio: 'Architecting scalable AI-powered verification systems using cutting-edge technologies. Expert in building secure, high-throughput platforms that handle millions of document verifications.',
     linkedin: '#',
     // Full-body standing photo — zoom into upper body/face
-    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 12%', transform: 'scale(2.2)' },
+    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 0%', transform: 'scale(2.5)', transformOrigin: 'top center' },
   },
   {
     name: 'Pragya Mishra',
@@ -40,7 +40,7 @@ const team = [
     bio: 'Ensuring seamless verification workflows and exceptional user experiences. Managing end-to-end operations from university onboarding to enterprise client success.',
     linkedin: '#',
     // Full-body standing photo — zoom into upper body/face
-    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 10%', transform: 'scale(2.5)' },
+    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 0%', transform: 'scale(2.8)', transformOrigin: 'top center' },
   },
 ]
 
