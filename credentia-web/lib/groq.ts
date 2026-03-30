@@ -2,6 +2,21 @@ import Groq from 'groq-sdk'
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
 
+function parseGroqJSON(content: string) {
+  try {
+    return JSON.parse(content || '{}')
+  } catch (err) {
+    // Attempt to strip markdown formatting if the model incorrectly added it
+    const cleaned = (content || '{}').replace(/```json/g, '').replace(/```/g, '').trim()
+    try {
+      return JSON.parse(cleaned)
+    } catch (innerErr) {
+      console.error('Groq JSON Parse Error. Raw content:', content)
+      throw new Error('Failed to parse Groq response as JSON.')
+    }
+  }
+}
+
 export async function analyzeResume(content: string) {
   const result = await groq.chat.completions.create({
     model: 'llama-3.3-70b-versatile',
@@ -28,7 +43,7 @@ export async function analyzeResume(content: string) {
     temperature: 0.1,
     max_tokens: 4000,
   })
-  return JSON.parse(result.choices[0].message.content || '{}')
+  return parseGroqJSON(result.choices[0].message.content || '')
 }
 
 export async function analyzePoliceDoc(content: string) {
@@ -58,7 +73,7 @@ export async function analyzePoliceDoc(content: string) {
     temperature: 0.1,
     max_tokens: 1000,
   })
-  return JSON.parse(result.choices[0].message.content || '{}')
+  return parseGroqJSON(result.choices[0].message.content || '')
 }
 
 export async function analyzeAadhaar(content: string) {
@@ -84,7 +99,7 @@ export async function analyzeAadhaar(content: string) {
     response_format: { type: 'json_object' },
     temperature: 0.1,
   })
-  return JSON.parse(result.choices[0].message.content || '{}')
+  return parseGroqJSON(result.choices[0].message.content || '')
 }
 
 export async function analyzeDegree(content: string) {
@@ -111,5 +126,5 @@ export async function analyzeDegree(content: string) {
     response_format: { type: 'json_object' },
     temperature: 0.1,
   })
-  return JSON.parse(result.choices[0].message.content || '{}')
+  return parseGroqJSON(result.choices[0].message.content || '')
 }

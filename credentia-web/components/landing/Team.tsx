@@ -71,12 +71,12 @@ export default function Team() {
                 <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-blue-500 via-teal-400 to-indigo-500 opacity-60 group-hover:opacity-100 blur-sm transition-opacity duration-500" />
                 {/* Border ring */}
                 <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500 via-teal-400 to-indigo-500 p-[2px]">
-                  <div className="w-full h-full rounded-full overflow-hidden bg-[#0A0A0F]">
+                  <div className="w-full h-full rounded-full overflow-hidden bg-[#0A0A0F] relative">
                     <Image
                       src={member.img}
                       alt={member.name}
                       fill
-                      className="object-contain object-bottom pt-2 group-hover:scale-110 transition-transform duration-700"
+                      className="object-cover group-hover:scale-110 transition-transform duration-700"
                       sizes="144px"
                     />
                   </div>

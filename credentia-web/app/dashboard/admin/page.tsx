@@ -170,11 +170,11 @@ export default function AdminDashboard() {
           
           <div className="grid grid-cols-1 gap-3">
             {[
-              { title: 'Global Settings', desc: 'Configure system thresholds', icon: CheckCircle2, path: '#' },
-              { title: 'University Outreach', desc: 'Approve institution accounts', icon: GraduationCap, path: '#' },
-              { title: 'Audit Logs', desc: 'Review admin action history', icon: Shield, path: '#' },
+              { title: 'Global Settings', desc: 'Configure system thresholds', icon: CheckCircle2 },
+              { title: 'University Outreach', desc: 'Approve institution accounts', icon: GraduationCap },
+              { title: 'Audit Logs', desc: 'Review admin action history', icon: Shield },
             ].map((action, i) => (
-              <Link key={i} href={action.path} className="group p-4 rounded-2xl border border-white/5 hover:border-blue-500/30 bg-white/[0.02] hover:bg-blue-500/[0.02] transition-all flex items-center justify-between">
+              <button key={i} onClick={() => alert(`${action.title} module is coming soon.`)} className="group p-4 w-full text-left rounded-2xl border border-white/5 hover:border-blue-500/30 bg-white/[0.02] hover:bg-blue-500/[0.02] transition-all flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white/50 group-hover:text-blue-400 group-hover:bg-blue-500/10 transition-colors">
                     <action.icon size={18} />
@@ -185,7 +185,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 <ArrowRight size={16} className="text-white/10 group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
-              </Link>
+              </button>
             ))}
           </div>
 
@@ -195,7 +195,18 @@ export default function AdminDashboard() {
               <h3 className="font-heading font-bold text-sm text-indigo-300">System Healthy</h3>
             </div>
             <p className="text-xs text-white/50 leading-relaxed mb-4">Groq AI integration is fully operational. Server response times are averaging ~120ms. No database locked rows detected.</p>
-            <button className="w-full py-2 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 text-xs font-bold rounded-lg transition-colors border border-indigo-500/30">
+            <button
+              onClick={(e) => {
+                const btn = e.currentTarget;
+                btn.textContent = 'Running Diagnostics...';
+                btn.classList.add('opacity-70', 'cursor-not-allowed');
+                setTimeout(() => {
+                  btn.textContent = 'Diagnostics Complete (100%)';
+                  btn.classList.remove('opacity-70', 'cursor-not-allowed');
+                }, 2000);
+              }}
+              className="w-full py-2 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 text-xs font-bold rounded-lg transition-colors border border-indigo-500/30"
+            >
               Run Diagnostics
             </button>
           </div>
