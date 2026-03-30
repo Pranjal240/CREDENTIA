@@ -13,7 +13,7 @@ const team = [
     bio: 'Visionary entrepreneur dedicated to building India\'s trust infrastructure for the next generation. Leading the charge to eliminate hiring fraud and empower students with verifiable credentials.',
     linkedin: '#',
     // Full-body standing photo — zoom into upper body/face
-    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 0%', transform: 'scale(2.5)', transformOrigin: 'top center' },
+    cropStyle: { backgroundSize: '250%', backgroundPosition: '50% 8%' },
   },
   {
     name: 'Kriti Ahlawat',
@@ -21,8 +21,7 @@ const team = [
     img: '/team/kriti.png',
     bio: 'Driving strategic operations and forging partnerships across India\'s education and corporate landscape. Passionate about creating seamless verification experiences at scale.',
     linkedin: '#',
-    // Already a good bust shot — minimal adjustments
-    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 0%', transform: 'scale(1.6)', transformOrigin: 'top center' },
+    cropStyle: { backgroundSize: '160%', backgroundPosition: '50% 10%' },
   },
   {
     name: 'Nihal Kumar',
@@ -30,8 +29,7 @@ const team = [
     img: '/team/nihal.png',
     bio: 'Architecting scalable AI-powered verification systems using cutting-edge technologies. Expert in building secure, high-throughput platforms that handle millions of document verifications.',
     linkedin: '#',
-    // Full-body standing photo — zoom into upper body/face
-    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 0%', transform: 'scale(2.5)', transformOrigin: 'top center' },
+    cropStyle: { backgroundSize: '250%', backgroundPosition: '50% 5%' },
   },
   {
     name: 'Pragya Mishra',
@@ -39,8 +37,7 @@ const team = [
     img: '/team/pragya.png',
     bio: 'Ensuring seamless verification workflows and exceptional user experiences. Managing end-to-end operations from university onboarding to enterprise client success.',
     linkedin: '#',
-    // Full-body standing photo — zoom into upper body/face
-    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 0%', transform: 'scale(2.8)', transformOrigin: 'top center' },
+    cropStyle: { backgroundSize: '280%', backgroundPosition: '50% 5%' },
   },
 ]
 
@@ -79,14 +76,14 @@ export default function Team() {
                 <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-blue-500 via-teal-400 to-indigo-500 opacity-60 group-hover:opacity-100 blur-sm transition-opacity duration-500" />
                 {/* Border ring */}
                 <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500 via-teal-400 to-indigo-500 p-[2px]">
-                  <div className="w-full h-full rounded-full overflow-hidden bg-[#0A0A0F] relative">
-                    <Image
-                      src={member.img}
-                      alt={member.name}
-                      fill
-                      className="transition-transform duration-700 group-hover:brightness-110"
-                      style={member.cropStyle}
-                      sizes="144px"
+                  <div className="w-full h-full rounded-full overflow-hidden bg-[#0A0A0F]">
+                    <div
+                      className="w-full h-full rounded-full transition-all duration-700 group-hover:brightness-110 group-hover:scale-105"
+                      style={{
+                        backgroundImage: `url(${member.img})`,
+                        backgroundRepeat: 'no-repeat',
+                        ...member.cropStyle,
+                      }}
                     />
                   </div>
                 </div>
