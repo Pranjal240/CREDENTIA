@@ -13,7 +13,8 @@ const team = [
     bio: 'Visionary entrepreneur dedicated to building India\'s trust infrastructure for the next generation. Leading the charge to eliminate hiring fraud and empower students with verifiable credentials.',
     linkedin: '#',
     // Full-body standing photo — zoom into upper body/face
-    cropStyle: { backgroundSize: '250%', backgroundPosition: '50% 8%' },
+    cropStyle: { backgroundSize: '250%', backgroundPosition: '50% 12%' },
+    modalCropStyle: { backgroundSize: '150%', backgroundPosition: '50% 10%' },
   },
   {
     name: 'Kriti Ahlawat',
@@ -21,7 +22,8 @@ const team = [
     img: '/team/kriti.png',
     bio: 'Driving strategic operations and forging partnerships across India\'s education and corporate landscape. Passionate about creating seamless verification experiences at scale.',
     linkedin: '#',
-    cropStyle: { backgroundSize: '160%', backgroundPosition: '50% 10%' },
+    cropStyle: { backgroundSize: '200%', backgroundPosition: '50% 35%' },
+    modalCropStyle: { backgroundSize: '140%', backgroundPosition: '50% 35%' },
   },
   {
     name: 'Nihal Kumar',
@@ -30,6 +32,7 @@ const team = [
     bio: 'Architecting scalable AI-powered verification systems using cutting-edge technologies. Expert in building secure, high-throughput platforms that handle millions of document verifications.',
     linkedin: '#',
     cropStyle: { backgroundSize: '250%', backgroundPosition: '50% 5%' },
+    modalCropStyle: { backgroundSize: '150%', backgroundPosition: '50% 5%' },
   },
   {
     name: 'Pragya Mishra',
@@ -37,7 +40,8 @@ const team = [
     img: '/team/pragya.png',
     bio: 'Ensuring seamless verification workflows and exceptional user experiences. Managing end-to-end operations from university onboarding to enterprise client success.',
     linkedin: '#',
-    cropStyle: { backgroundSize: '280%', backgroundPosition: '50% 5%' },
+    cropStyle: { backgroundSize: '250%', backgroundPosition: '50% 5%' },
+    modalCropStyle: { backgroundSize: '150%', backgroundPosition: '50% 5%' },
   },
 ]
 
@@ -132,13 +136,13 @@ export default function Team() {
 
               {/* Image area */}
               <div className="relative w-full aspect-[4/5] bg-gradient-to-br from-blue-600/20 via-transparent to-teal-600/20">
-                <Image
-                  src={team[selected].img}
-                  alt={team[selected].name}
-                  fill
-                  className="object-cover object-top"
-                  sizes="(max-width: 768px) 100vw, 448px"
-                  priority
+                <div
+                  className="w-full h-full"
+                  style={{
+                    backgroundImage: `url(${team[selected].img})`,
+                    backgroundRepeat: 'no-repeat',
+                    ...team[selected].modalCropStyle
+                  }}
                 />
                 {/* Bottom gradient fade into bio */}
                 <div className="absolute bottom-0 left-0 right-0 h-32" style={{ background: 'linear-gradient(to top, rgba(10,10,15,0.95), transparent)' }} />
