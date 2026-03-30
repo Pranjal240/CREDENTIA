@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+const ADMIN_EMAIL = 'pranjalmishra2409@gmail.com'
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url)
@@ -68,8 +69,14 @@ export async function GET(request: NextRequest) {
     .select('role')
     .eq('id', user.id)
     .single()
+  // Get the role they selected before clicking "Continue with Google"
+  const pendingRoleCookie = request.cookies.get('pending_oauth_role')?.value
+  let role = pendingRoleCookie || 'student'
 
-  let role = 'student'
+  // Always force the admin email to be 'admin'
+  if (user.email === ADMIN_EMAIL) {
+    role = 'admin'
+  }
 
   if (profileError || !existingProfile) {
     // Create profile
@@ -99,6 +106,10 @@ export async function GET(request: NextRequest) {
   } else {
     // Existing user
     role = existingProfile.role || 'student'
+    if (user.email === ADMIN_EMAIL && role !== 'admin') {
+      await supabaseAdmin.from('profiles').update({ role: 'admin', updated_at: new Date().toISOString() }).eq('id', user.id)
+      role = 'admin'
+    }
   }
 
   // Step 4: Redirect to role-specific dashboard

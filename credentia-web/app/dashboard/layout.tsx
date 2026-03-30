@@ -43,6 +43,7 @@ const sidebarLinks: Record<string, { label: string; icon: any; href: string }[]>
   ],
   admin: [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard/admin' },
+    { label: 'Analytics', icon: BarChart3, href: '/dashboard/admin/analytics' },
     { label: 'All Users', icon: Users, href: '/dashboard/admin/users' },
     { label: 'Verifications', icon: Shield, href: '/dashboard/admin/verifications' },
     { label: 'Audit Logs', icon: ScrollText, href: '/dashboard/admin/audit' },

@@ -30,8 +30,14 @@ export default function UniversityDashboard() {
     const load = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-      const { data } = await supabase.from('students').select('*, verifications(*)').eq('university_id', session.user.id).order('created_at', { ascending: false })
-      setStudents(data || [])
+      const { data } = await supabase.from('students').select('*, profiles(email), verifications(*)').eq('university_id', session.user.id).order('created_at', { ascending: false })
+      
+      const mappedStudents = (data || []).map((s: any) => ({
+        ...s,
+        email: s.profiles?.email || '',
+      }))
+      
+      setStudents(mappedStudents)
       setLoading(false)
     }
     load()

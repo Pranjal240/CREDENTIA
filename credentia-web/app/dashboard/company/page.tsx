@@ -35,8 +35,14 @@ export default function CompanyDashboard() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
       setUserId(session.user.id)
-      const { data } = await supabase.from('students').select('*').eq('profile_is_public', true).order('ats_score', { ascending: false })
-      setStudents(data || [])
+      const { data } = await supabase.from('students').select('*, profiles(email)').eq('profile_is_public', true).order('ats_score', { ascending: false })
+      
+      const mappedStudents = (data || []).map((s: any) => ({
+        ...s,
+        email: s.profiles?.email || '',
+      }))
+      
+      setStudents(mappedStudents)
       const { data: saved } = await supabase.from('saved_candidates').select('student_id').eq('company_id', session.user.id)
       if (saved) setSavedIds(new Set(saved.map((s: any) => s.student_id)))
       setLoading(false)

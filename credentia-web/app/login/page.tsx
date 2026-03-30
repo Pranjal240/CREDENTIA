@@ -97,6 +97,12 @@ function LoginContent() {
   const handleGoogle = async () => {
     setGoogleLoading(true)
     setError('')
+    
+    // Store the selected role in a cookie before redirecting
+    if (selectedRole) {
+      document.cookie = `pending_oauth_role=${selectedRole}; path=/; max-age=600; Secure; SameSite=Lax`
+    }
+
     // ALWAYS use window.location.origin — NOT the env variable.
     // This ensures the redirect returns to the EXACT same domain (www vs non-www)
     // so the PKCE code_verifier cookie is accessible during the callback.
@@ -234,14 +240,13 @@ function LoginContent() {
                 </button>
               </form>
 
-              {(selectedRole === 'student' || selectedRole === 'company') && (
-                <>
                   <div className="flex items-center gap-3 my-5">
                     <div className="flex-1 h-px" style={{ background: 'rgba(var(--border-default), 0.5)' }} />
                     <span className="text-xs" style={{ color: 'rgb(var(--text-muted))' }}>or</span>
                     <div className="flex-1 h-px" style={{ background: 'rgba(var(--border-default), 0.5)' }} />
                   </div>
                   <button
+                    type="button"
                     onClick={handleGoogle}
                     disabled={googleLoading}
                     className="w-full h-12 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2.5 disabled:opacity-50"
@@ -254,8 +259,6 @@ function LoginContent() {
                       </>
                     )}
                   </button>
-                </>
-              )}
 
               <p className="text-center mt-5 text-sm" style={{ color: 'rgb(var(--text-secondary))' }}>
                 Don&apos;t have an account?{' '}

@@ -19,8 +19,12 @@ export default function SavedCandidatesPage() {
       const { data: saved } = await supabase.from('saved_candidates').select('student_id, created_at').eq('company_id', session.user.id).order('created_at', { ascending: false })
       if (saved && saved.length > 0) {
         const ids = saved.map((s: any) => s.student_id)
-        const { data: students } = await supabase.from('students').select('*').in('id', ids)
-        const merged = saved.map((s: any) => ({ ...s, student: students?.find((st: any) => st.id === s.student_id) })).filter((s: any) => s.student)
+        const { data: students } = await supabase.from('students').select('*, profiles(email)').in('id', ids)
+        const mappedStudents = (students || []).map((st: any) => ({
+          ...st,
+          email: st.profiles?.email || '',
+        }))
+        const merged = saved.map((s: any) => ({ ...s, student: mappedStudents.find((st: any) => st.id === s.student_id) })).filter((s: any) => s.student)
         setCandidates(merged)
       }
       setLoading(false)

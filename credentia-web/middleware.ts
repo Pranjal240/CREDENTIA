@@ -56,9 +56,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // If user is authenticated and hits bare /dashboard, redirect to role-specific dashboard
-  if (user && pathname === '/dashboard') {
-    // Fetch role from profiles table
+  // If user is authenticated and hits any /dashboard route, check role authorization
+  if (user && pathname.startsWith('/dashboard')) {
+    // Fetch role from profiles table securely
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
@@ -66,7 +66,12 @@ export async function middleware(request: NextRequest) {
       .single()
 
     const role = profile?.role || 'student'
-    return NextResponse.redirect(new URL(`/dashboard/${role}`, request.url))
+    const allowedPrefix = `/dashboard/${role}`
+
+    // Redirect if they hit bare /dashboard or try to access another role's dashboard
+    if (pathname === '/dashboard' || !pathname.startsWith(allowedPrefix)) {
+      return NextResponse.redirect(new URL(allowedPrefix, request.url))
+    }
   }
 
   return response
