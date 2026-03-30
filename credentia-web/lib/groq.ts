@@ -46,9 +46,9 @@ function buildMessages(systemPrompt: string, content: string, isImage: boolean =
 }
 
 async function callGroq(systemPrompt: string, content: string, isImage: boolean, maxTokens: number = 2000) {
-  const model = isImage ? 'llama-3.2-90b-vision-preview' : 'llama-3.3-70b-versatile'
+  const model = isImage ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'llama-3.3-70b-versatile'
 
-  // CRITICAL: llama-3.2-90b-vision-preview does NOT support response_format json_object
+  // CRITICAL: meta-llama/llama-4-scout-17b-16e-instruct does NOT support response_format json_object
   // Only apply it for the text model
   const requestParams: any = {
     model,
