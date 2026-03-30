@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Filter, ChevronDown, ChevronUp, Users, Shield, GraduationCap, CreditCard, FileText, TrendingUp, Eye, X, Bookmark, BookmarkCheck, Mail, ExternalLink, CheckCircle2, LayoutGrid, List, ChevronLeft, ChevronRight, Briefcase, Building } from 'lucide-react'
+import { Search, Filter, ChevronDown, ChevronUp, Users, Shield, GraduationCap, CreditCard, FileText, TrendingUp, Eye, X, Bookmark, BookmarkCheck, Mail, ExternalLink, CheckCircle2, LayoutGrid, List, ChevronLeft, ChevronRight, Briefcase, Building, Download } from 'lucide-react'
 
 export default function CompanyDashboard() {
   const [students, setStudents] = useState<any[]>([])
@@ -29,6 +29,13 @@ export default function CompanyDashboard() {
   const [perPage] = useState(12)
   const [selectedStudent, setSelectedStudent] = useState<any>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
+
+  // AI & Compare Features
+  const [aiJobDesc, setAiJobDesc] = useState('')
+  const [loadingAi, setLoadingAi] = useState(false)
+  const [aiMatches, setAiMatches] = useState<any[]>([])
+  const [compareIds, setCompareIds] = useState<Set<string>>(new Set())
+  const [showCompareModal, setShowCompareModal] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -70,16 +77,27 @@ export default function CompanyDashboard() {
       return true
     })
 
-    result.sort((a: any, b: any) => {
-      let aVal = a[sortBy], bVal = b[sortBy]
-      if (sortBy === 'name') { aVal = aVal?.toLowerCase() || ''; bVal = bVal?.toLowerCase() || '' }
-      if (['ats_score', 'cgpa', 'verification_score', 'graduation_year'].includes(sortBy)) { aVal = parseFloat(aVal) || 0; bVal = parseFloat(bVal) || 0 }
-      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
-      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
-      return 0
-    })
+    if (aiMatches.length > 0) {
+      result.sort((a: any, b: any) => {
+        const matchA = aiMatches.find(m => m.id === a.id)
+        const matchB = aiMatches.find(m => m.id === b.id)
+        if (matchA && !matchB) return -1
+        if (!matchA && matchB) return 1
+        if (matchA && matchB) return matchB.match_score - matchA.match_score
+        return 0
+      })
+    } else {
+      result.sort((a: any, b: any) => {
+        let aVal = a[sortBy], bVal = b[sortBy]
+        if (sortBy === 'name') { aVal = aVal?.toLowerCase() || ''; bVal = bVal?.toLowerCase() || '' }
+        if (['ats_score', 'cgpa', 'verification_score', 'graduation_year'].includes(sortBy)) { aVal = parseFloat(aVal) || 0; bVal = parseFloat(bVal) || 0 }
+        if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
+        if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
+        return 0
+      })
+    }
     return result
-  }, [students, searchQuery, atsMin, atsMax, filterPolice, filterAadhaar, filterDegree, cgpaMin, filterCourse, filterYear, sortBy, sortDir])
+  }, [students, searchQuery, atsMin, atsMax, filterPolice, filterAadhaar, filterDegree, cgpaMin, filterCourse, filterYear, sortBy, sortDir, aiMatches])
 
   const totalPages = Math.ceil(filtered.length / perPage)
   const paginated = filtered.slice((page - 1) * perPage, page * perPage)
@@ -101,6 +119,55 @@ export default function CompanyDashboard() {
       }
     } catch {}
     setSavingId(null)
+  }
+
+  const handleAiMatch = async () => {
+    if (!aiJobDesc.trim()) return
+    setLoadingAi(true)
+    setAiMatches([])
+    try {
+      const res = await fetch('/api/company/ai-match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobDescription: aiJobDesc, students: filtered })
+      })
+      const data = await res.json()
+      if (data.matches) setAiMatches(data.matches)
+    } catch (e) { console.error(e) }
+    setLoadingAi(false)
+  }
+
+  const toggleCompare = (id: string) => {
+    setCompareIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else if (next.size < 3) next.add(id)
+      return next
+    })
+  }
+
+  const handleExportProfile = (student: any) => {
+    const dataStr = JSON.stringify({
+      id: student.id,
+      name: student.name,
+      email: student.email,
+      course: student.course,
+      branch: student.branch,
+      graduation_year: student.graduation_year,
+      cgpa: student.cgpa,
+      ats_score: student.ats_score,
+      verifications: {
+        degree: student.degree_verified,
+        police: student.police_verified,
+        aadhaar: student.aadhaar_verified
+      },
+      skills: student.skills || [],
+      city: student.city,
+      state: student.state
+    }, null, 2)
+    const blob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a"); link.setAttribute("href", encodeURI(url)); link.setAttribute("download", `${student.name ? student.name.replace(/\s+/g, '_') : 'candidate'}_profile.json`); document.body.appendChild(link); link.click(); document.body.removeChild(link)
   }
 
   const policeVerCount = students.filter(s => s.police_verified).length
@@ -135,6 +202,42 @@ export default function CompanyDashboard() {
             <p className="text-[10px] font-semibold tracking-wider uppercase text-white/30 mt-1">{stat.label}</p>
           </motion.div>
         ))}
+      </div>
+
+      {/* AI Matchmaker */}
+      <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-transparent overflow-hidden shadow-lg shadow-emerald-500/5 p-1 relative">
+        <div className="bg-[#0e0e14] rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row gap-4 sm:gap-6 items-start sm:items-center relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[80px] pointer-events-none rounded-full" />
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0 text-xl shadow-inner">
+            ✨
+          </div>
+          <div className="flex-1 w-full">
+            <h3 className="font-heading font-bold text-white text-sm mb-2 flex items-center gap-2">
+              AI Job Matcher <span className="px-2 py-0.5 rounded text-[9px] uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 font-bold">Beta</span>
+            </h3>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input 
+                value={aiJobDesc}
+                onChange={e => setAiJobDesc(e.target.value)}
+                placeholder="Describe ideal hire (e.g. 'Frontend Dev with high ATS and React skills')..." 
+                className="flex-1 h-11 px-4 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-emerald-500/50 transition-all font-medium"
+                onKeyDown={e => e.key === 'Enter' && handleAiMatch()}
+              />
+              <div className="flex gap-2 w-full sm:w-auto">
+                <button 
+                  onClick={handleAiMatch} 
+                  disabled={loadingAi || !aiJobDesc}
+                  className="flex-1 sm:flex-none px-6 h-11 rounded-xl bg-emerald-500 text-black font-bold text-sm hover:bg-emerald-400 transition-colors disabled:opacity-50 whitespace-nowrap shadow-lg shadow-emerald-500/20"
+                >
+                  {loadingAi ? 'Matching...' : 'Find Matches'}
+                </button>
+                {aiMatches.length > 0 && (
+                  <button onClick={() => {setAiMatches([]); setAiJobDesc('')}} className="px-4 h-11 rounded-xl bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 hover:text-white transition-colors">Clear</button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Search & Filters */}
@@ -229,9 +332,11 @@ export default function CompanyDashboard() {
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {paginated.map((s, i) => (
+          {paginated.map((s, i) => {
+            const aiMatch = aiMatches.find(m => m.id === s.id)
+            return (
             <motion.div key={s.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
-              className="group rounded-2xl border border-white/10 bg-white/[0.02] p-5 hover:bg-white/[0.04] hover:border-white/15 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/5"
+              className={`group rounded-2xl border bg-white/[0.02] p-5 hover:bg-white/[0.04] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${aiMatch ? 'border-emerald-500/40 shadow-emerald-500/10' : 'border-white/10 hover:border-white/15'}`}
             >
               {/* Top row */}
               <div className="flex items-start justify-between mb-4">
@@ -246,6 +351,13 @@ export default function CompanyDashboard() {
                   {savedIds.has(s.id) ? <BookmarkCheck size={18} className="text-emerald-400" /> : <Bookmark size={18} className="text-white/20 hover:text-white/50" />}
                 </button>
               </div>
+
+              {aiMatch && (
+                <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-emerald-500/10 to-transparent border border-emerald-500/20">
+                  <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1 mb-1">✨ AI Match ({aiMatch.match_score}%)</p>
+                  <p className="text-xs text-white/70 leading-relaxed font-medium">{aiMatch.reason}</p>
+                </div>
+              )}
 
               {/* ATS gauge */}
               <div className="flex items-center gap-3 mb-4">
@@ -277,8 +389,17 @@ export default function CompanyDashboard() {
                 <button onClick={() => setSelectedStudent(s)} className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors">View Profile</button>
                 {s.email && <a href={`mailto:${s.email}`} className="py-2.5 px-3 rounded-xl bg-white/5 border border-white/10 text-white/40 hover:text-white/70 hover:bg-white/10 transition-colors"><Mail size={14} /></a>}
               </div>
+
+              <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer group/cb">
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${compareIds.has(s.id) ? 'bg-emerald-500 border-emerald-500' : 'bg-white/5 border-white/20 group-hover/cb:border-emerald-500/50'}`}>
+                    {compareIds.has(s.id) && <CheckCircle2 size={12} className="text-black" />}
+                  </div>
+                  <span className={`text-[11px] font-semibold transition-colors ${compareIds.has(s.id) ? 'text-emerald-400' : 'text-white/40 group-hover/cb:text-white/60'}`}>Compare</span>
+                </label>
+              </div>
             </motion.div>
-          ))}
+          )})}
         </div>
       ) : (
         <div className="rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden">
@@ -292,8 +413,10 @@ export default function CompanyDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {paginated.map((s) => (
-                  <tr key={s.id} className="hover:bg-white/[0.02] transition-colors group">
+                {paginated.map((s) => {
+                  const aiMatch = aiMatches.find(m => m.id === s.id)
+                  return (
+                  <tr key={s.id} className={`transition-colors group ${aiMatch ? 'bg-emerald-500/[0.03] hover:bg-emerald-500/[0.05]' : 'hover:bg-white/[0.02]'}`}>
                     <td className="px-5 py-3 flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/20 flex items-center justify-center text-emerald-300 text-xs font-bold">{(s.name || 'C')[0].toUpperCase()}</div>
                       <div><p className="font-medium text-white/80">{s.name || 'Candidate'}</p><p className="text-[10px] text-white/30">{s.email || '—'}</p></div>
@@ -308,14 +431,17 @@ export default function CompanyDashboard() {
                         ))}
                       </div>
                     </td>
-                    <td className="px-5 py-3 flex gap-2">
+                    <td className="px-5 py-3 flex items-center gap-2">
                       <button onClick={() => setSelectedStudent(s)} className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg hover:bg-emerald-500/20 transition-colors">View</button>
-                      <button onClick={() => toggleSave(s.id)} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
-                        {savedIds.has(s.id) ? <BookmarkCheck size={14} className="text-emerald-400" /> : <Bookmark size={14} className="text-white/20" />}
+                      <button onClick={() => toggleSave(s.id)} className="p-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-white/30">
+                        {savedIds.has(s.id) ? <BookmarkCheck size={16} className="text-emerald-400" /> : <Bookmark size={16} />}
                       </button>
+                      <label className="cursor-pointer p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                        <input type="checkbox" checked={compareIds.has(s.id)} onChange={() => toggleCompare(s.id)} className="accent-emerald-500 rounded" />
+                      </label>
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           </div>
@@ -396,19 +522,112 @@ export default function CompanyDashboard() {
             </div>
 
             {/* Actions */}
-            <div className="flex gap-3">
-              <button onClick={() => toggleSave(selectedStudent.id)} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all" style={{ background: savedIds.has(selectedStudent.id) ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.05)', color: savedIds.has(selectedStudent.id) ? '#34d399' : 'rgba(255,255,255,0.6)', border: `1px solid ${savedIds.has(selectedStudent.id) ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.1)'}` }}>
+            <div className="flex flex-wrap gap-3">
+              <button onClick={() => toggleSave(selectedStudent.id)} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all shadow-lg" style={{ background: savedIds.has(selectedStudent.id) ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.05)', color: savedIds.has(selectedStudent.id) ? '#34d399' : 'rgba(255,255,255,0.6)', border: `1px solid ${savedIds.has(selectedStudent.id) ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.1)'}` }}>
                 {savedIds.has(selectedStudent.id) ? <><BookmarkCheck size={16} /> Saved</> : <><Bookmark size={16} /> Save Candidate</>}
               </button>
               {selectedStudent.email && (
-                <a href={`mailto:${selectedStudent.email}`} className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors">
+                <a href={`mailto:${selectedStudent.email}`} className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors shadow-lg">
                   <Mail size={16} /> Contact
                 </a>
               )}
+              <button onClick={() => handleExportProfile(selectedStudent)} className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm bg-teal-500/10 border border-teal-500/20 text-teal-400 hover:bg-teal-500/20 transition-colors shadow-lg">
+                <Download size={16} /> Export JSON
+              </button>
             </div>
           </motion.div>
         </div>
       )}
+
+      {/* Compare Floating Action Button */}
+      <AnimatePresence>
+        {compareIds.size > 0 && (
+          <motion.div initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40">
+            <div className="flex items-center gap-4 bg-emerald-950/90 border border-emerald-500/30 backdrop-blur-md pl-6 pr-2 py-2 rounded-full shadow-2xl shadow-emerald-500/20">
+              <p className="text-sm font-bold text-white whitespace-nowrap"><span className="text-emerald-400">{compareIds.size}</span> / 3 Selected</p>
+              <button 
+                onClick={() => setShowCompareModal(true)} 
+                disabled={compareIds.size < 2} 
+                className="px-5 py-2.5 bg-emerald-500 text-black font-bold text-sm rounded-full disabled:opacity-50 transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
+              >
+                Compare Candidates
+              </button>
+              <button onClick={() => setCompareIds(new Set())} className="p-2.5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"><X size={16} /></button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Compare Modal */}
+      <AnimatePresence>
+        {showCompareModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setShowCompareModal(false)}>
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-2xl border border-emerald-500/30 bg-[#0e0e14] shadow-2xl shadow-emerald-500/10" onClick={e => e.stopPropagation()}>
+              <div className="sticky top-0 z-10 p-6 border-b border-white/10 bg-[#0e0e14]/90 backdrop-blur-md flex items-center justify-between">
+                <div>
+                  <h2 className="font-heading font-bold text-2xl text-white">Compare Candidates</h2>
+                  <p className="text-xs text-white/50 mt-1">Side-by-side analysis of key metrics</p>
+                </div>
+                <button onClick={() => setShowCompareModal(false)} className="p-2 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors"><X size={24} /></button>
+              </div>
+
+              <div className="p-6">
+                <div className="grid gap-6 grid-flow-col auto-cols-fr">
+                  {students.filter(s => compareIds.has(s.id)).map(student => (
+                    <div key={student.id} className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 p-4">
+                        <button onClick={() => toggleCompare(student.id)} className="text-white/20 hover:text-red-400 transition-colors"><X size={16} /></button>
+                      </div>
+                      
+                      {/* Compare Identity */}
+                      <div className="flex flex-col items-center text-center mb-6">
+                         <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border-2 border-emerald-500/30 flex items-center justify-center text-emerald-300 font-bold text-3xl mb-4 shadow-lg shadow-emerald-500/20">{(student.name || 'C')[0].toUpperCase()}</div>
+                         <h3 className="font-heading font-bold text-lg text-white mb-1">{student.name || 'Candidate'}</h3>
+                         <p className="text-xs font-semibold text-emerald-400">{student.course || '—'} <span className="text-white/30">•</span> {student.graduation_year || '—'}</p>
+                      </div>
+
+                      {/* Compare Metrics Blocks */}
+                      <div className="space-y-4">
+                        <div className="p-4 rounded-xl bg-white/[0.03] border border-white/5 text-center flex items-center justify-between">
+                          <span className="text-xs text-white/40 font-bold uppercase tracking-wider">ATS Score</span>
+                          <span className="text-xl font-heading font-bold" style={{ color: `hsl(${(student.ats_score || 0) * 1.2}, 70%, 50%)` }}>{student.ats_score || 0}</span>
+                        </div>
+                        <div className="p-4 rounded-xl bg-white/[0.03] border border-white/5 text-center flex items-center justify-between">
+                          <span className="text-xs text-white/40 font-bold uppercase tracking-wider">CGPA</span>
+                          <span className="text-xl font-heading font-bold text-teal-400">{student.cgpa || '0.0'}</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-6">
+                        <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-3 border-b border-white/5 pb-2">Verifications</h4>
+                        <div className="space-y-3">
+                          {[
+                            { label: 'Police Verified', ok: student.police_verified, icon: Shield },
+                            { label: 'Degree Verified', ok: student.degree_verified, icon: GraduationCap },
+                            { label: 'Aadhaar Verified', ok: student.aadhaar_verified, icon: CreditCard },
+                          ].map((v, i) => (
+                            <div key={i} className="flex items-center justify-between">
+                              <span className="text-xs text-white/60 flex items-center gap-2"><v.icon size={12} className={v.ok ? 'text-emerald-400' : 'text-white/20'} /> {v.label}</span>
+                              {v.ok ? <span className="text-emerald-400"><CheckCircle2 size={16} /></span> : <span className="text-white/20"><X size={16} /></span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="mt-8 pt-6 border-t border-white/5 flex gap-2">
+                        <button onClick={() => { setShowCompareModal(false); setSelectedStudent(student) }} className="flex-1 py-2 rounded-xl text-xs font-bold text-white bg-white/5 hover:bg-white/10 transition-colors">View Full</button>
+                        <button onClick={() => toggleSave(student.id)} className="flex-1 py-2 rounded-xl text-xs font-bold transition-colors border" style={{ background: savedIds.has(student.id) ? 'transparent' : 'rgba(16,185,129,0.1)', color: savedIds.has(student.id) ? '#34d399' : '#10b981', borderColor: savedIds.has(student.id) ? 'transparent' : 'rgba(16,185,129,0.2)' }}>
+                           {savedIds.has(student.id) ? 'Saved' : 'Save'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

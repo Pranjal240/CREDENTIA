@@ -10,6 +10,9 @@ export default function UniversityDashboard() {
   const [students, setStudents] = useState<any[]>([])
   const [verifications, setVerifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingInsights, setLoadingInsights] = useState(false)
+  const [aiInsights, setAiInsights] = useState<string | null>(null)
+  const [showInsightsModal, setShowInsightsModal] = useState(false)
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
@@ -102,6 +105,27 @@ export default function UniversityDashboard() {
     else { setSortBy(field); setSortDir('desc') }
   }
 
+  const generateInsights = async () => {
+    if (filtered.length === 0) return
+    setShowInsightsModal(true)
+    setLoadingInsights(true)
+    setAiInsights(null)
+    try {
+      const res = await fetch('/api/university/ai-insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ students: filtered })
+      })
+      const data = await res.json()
+      if (data.insights) setAiInsights(data.insights)
+      else setAiInsights("Could not generate insights at this time.")
+    } catch (e) {
+      console.error(e)
+      setAiInsights("An error occurred while generating insights.")
+    }
+    setLoadingInsights(false)
+  }
+
   if (loading) return <div className="flex items-center justify-center h-64"><div className="flex flex-col items-center gap-3"><div className="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" /><span className="text-xs text-white/30 tracking-wider font-semibold">LOADING REGISTRY...</span></div></div>
 
   return (
@@ -115,9 +139,12 @@ export default function UniversityDashboard() {
             <p className="text-sm text-white/40">Manage your institution&apos;s alumni and verify academic credentials.</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button onClick={generateInsights} disabled={filtered.length === 0} className="flex items-center gap-2 px-4 py-2 text-sm bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 text-white font-semibold rounded-lg shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50">
+            ✨ AI Cohort Analysis
+          </button>
           <button onClick={handleExportCSV} className="flex items-center gap-2 px-4 py-2 text-sm bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-semibold rounded-lg hover:bg-indigo-500/20 transition-colors"><Download size={16} /> Export CSV</button>
-          <Link href="/" className="flex items-center gap-2 px-4 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white hover:bg-white/10 transition-colors"><Home size={16} /> Landing</Link>
+          <Link href="/" className="flex flex-1 sm:flex-none justify-center items-center gap-2 px-4 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white hover:bg-white/10 transition-colors"><Home size={16} /> Landing</Link>
         </div>
       </div>
 
@@ -289,16 +316,46 @@ export default function UniversityDashboard() {
               </div>
               <button onClick={() => setSelectedStudent(null)} className="p-2 rounded-lg hover:bg-white/5 text-white/30"><X size={20} /></button>
             </div>
+            
+            {/* ATS and CGPA Gauges */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-500/10 to-transparent border border-indigo-500/20 flex items-center gap-4">
+                <div className="relative w-14 h-14">
+                  <svg className="w-14 h-14 -rotate-90">
+                    <circle cx="28" cy="28" r="24" stroke="rgba(255,255,255,0.05)" strokeWidth="4" fill="none" />
+                    <circle cx="28" cy="28" r="24" stroke={`hsl(${(selectedStudent.ats_score || 0) * 1.2}, 70%, 50%)`} strokeWidth="4" fill="none" strokeDasharray={`${2 * Math.PI * 24}`} strokeDashoffset={`${2 * Math.PI * 24 * (1 - (selectedStudent.ats_score || 0) / 100)}`} strokeLinecap="round" />
+                  </svg>
+                  <span className="absolute inset-0 flex items-center justify-center font-bold text-sm text-white">{selectedStudent.ats_score || 0}</span>
+                </div>
+                <div>
+                  <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold mb-1">ATS Score</p>
+                  <p className="text-xs text-white/60">Resume Match</p>
+                </div>
+              </div>
+              <div className="p-4 rounded-xl bg-gradient-to-br from-teal-500/10 to-transparent border border-teal-500/20 flex items-center gap-4">
+                 <div className="relative w-14 h-14">
+                  <svg className="w-14 h-14 -rotate-90">
+                    <circle cx="28" cy="28" r="24" stroke="rgba(255,255,255,0.05)" strokeWidth="4" fill="none" />
+                    <circle cx="28" cy="28" r="24" stroke="#14b8a6" strokeWidth="4" fill="none" strokeDasharray={`${2 * Math.PI * 24}`} strokeDashoffset={`${2 * Math.PI * 24 * (1 - (parseFloat(selectedStudent.cgpa) || 0) / 10)}`} strokeLinecap="round" />
+                  </svg>
+                  <span className="absolute inset-0 flex items-center justify-center font-bold text-sm text-white">{selectedStudent.cgpa || '0.0'}</span>
+                </div>
+                <div>
+                  <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold mb-1">CGPA</p>
+                  <p className="text-xs text-white/60">Academic</p>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-3 mb-6">
               {[
                 { l: 'Course', v: selectedStudent.course }, { l: 'Branch', v: selectedStudent.branch },
-                { l: 'Year', v: selectedStudent.graduation_year }, { l: 'CGPA', v: selectedStudent.cgpa },
-                { l: 'Roll No.', v: selectedStudent.roll_number }, { l: 'ATS Score', v: selectedStudent.ats_score },
+                { l: 'Year', v: selectedStudent.graduation_year }, { l: 'Roll No.', v: selectedStudent.roll_number },
                 { l: 'City', v: selectedStudent.city }, { l: 'State', v: selectedStudent.state },
               ].map((item, i) => (
-                <div key={i} className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                  <p className="text-[9px] text-white/25 uppercase tracking-wider mb-0.5">{item.l}</p>
-                  <p className="text-sm text-white/80 font-medium">{item.v || '—'}</p>
+                <div key={i} className="p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:bg-white/[0.05] transition-colors">
+                  <p className="text-[9px] text-white/30 uppercase tracking-wider mb-0.5">{item.l}</p>
+                  <p className="text-sm text-white/90 font-medium">{item.v || '—'}</p>
                 </div>
               ))}
             </div>
@@ -321,6 +378,61 @@ export default function UniversityDashboard() {
           </motion.div>
         </div>
       )}
+
+      {/* AI Insights Modal */}
+      <AnimatePresence>
+        {showInsightsModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setShowInsightsModal(false)}>
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="w-full max-w-2xl rounded-2xl border border-indigo-500/30 bg-[#0e0e14] shadow-2xl shadow-indigo-500/10 overflow-hidden" onClick={e => e.stopPropagation()}>
+              
+              {/* Header with animated border */}
+              <div className="relative p-6 border-b border-white/10 bg-white/[0.02]">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400">
+                      ✨
+                    </div>
+                    <div>
+                      <h2 className="font-heading font-bold text-xl text-white">AI Cohort Insights</h2>
+                      <p className="text-xs text-white/50 mt-0.5">Analyzing {filtered.length} visible student records</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowInsightsModal(false)} className="p-2 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors"><X size={20} /></button>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="p-8">
+                {loadingInsights ? (
+                  <div className="py-12 flex flex-col items-center justify-center space-y-4">
+                    <div className="relative w-16 h-16">
+                      <div className="absolute inset-0 border-4 border-indigo-500/20 rounded-full" />
+                      <div className="absolute inset-0 border-4 border-indigo-500 rounded-full border-t-transparent animate-spin" />
+                      <div className="absolute inset-0 border-4 border-purple-500 rounded-full border-b-transparent animate-spin animation-delay-500" />
+                    </div>
+                    <p className="text-sm font-medium text-indigo-300 animate-pulse tracking-wide">Synthesizing intelligence...</p>
+                  </div>
+                ) : (
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 prose prose-invert prose-p:text-white/70 prose-p:leading-relaxed prose-strong:text-indigo-300 prose-ul:text-white/70 max-w-none">
+                    {aiInsights?.split('\n').map((paragraph, i) => (
+                      <p key={i} className={paragraph.startsWith('-') ? 'ml-4 flex items-start gap-2 text-sm' : 'text-sm sm:text-base'}>
+                        {paragraph.startsWith('-') && <span className="text-indigo-400 mt-1">•</span>}
+                        <span dangerouslySetInnerHTML={{ __html: paragraph.replace(/^- /, '').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>') }} />
+                      </p>
+                    ))}
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-white/5 bg-white/[0.01] flex justify-end">
+                <button onClick={() => setShowInsightsModal(false)} className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-white/5 hover:bg-white/10 text-white/80 transition-colors">Close</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
