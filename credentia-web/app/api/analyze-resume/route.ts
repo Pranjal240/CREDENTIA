@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { analyzeResume } from '@/lib/groq'
 import { supabaseAdmin } from '@/lib/supabase'
 
+// @ts-ignore
+import pdfParse from 'pdf-parse'
+
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
@@ -28,9 +31,7 @@ export async function POST(request: Request) {
           if (!(global as any).DOMPoint) (global as any).DOMPoint = class DOMPoint {}
         }
         
-        const pdfParseModule = await import('pdf-parse')
-        const parsePdf = (pdfParseModule as any).default || pdfParseModule
-        const pdfData = await (parsePdf as any)(buffer)
+        const pdfData = await pdfParse(buffer)
         content = pdfData.text
       } else {
         content = buffer.toString('utf-8')
