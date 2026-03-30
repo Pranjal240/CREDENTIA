@@ -12,8 +12,11 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['pdf-parse'],
   },
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.fallback = { fs: false, net: false, tls: false }
+    if (isServer) {
+      config.externals = [...(config.externals || []), 'pdf-parse']
+    }
     return config
   },
 }
