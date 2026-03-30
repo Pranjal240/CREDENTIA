@@ -22,6 +22,12 @@ export async function POST(request: Request) {
       const buffer = Buffer.from(arrayBuffer)
       
       if (fileUrl.toLowerCase().includes('.pdf')) {
+        // Polyfill DOMMatrix for pdf.js running in Node.js
+        if (typeof global !== 'undefined') {
+          if (!(global as any).DOMMatrix) (global as any).DOMMatrix = class DOMMatrix {}
+          if (!(global as any).DOMPoint) (global as any).DOMPoint = class DOMPoint {}
+        }
+        
         const pdfParseModule = await import('pdf-parse')
         const parsePdf = (pdfParseModule as any).default || pdfParseModule
         const pdfData = await (parsePdf as any)(buffer)
