@@ -12,7 +12,8 @@ const team = [
     img: '/team/pranjal.png',
     bio: 'Visionary entrepreneur dedicated to building India\'s trust infrastructure for the next generation. Leading the charge to eliminate hiring fraud and empower students with verifiable credentials.',
     linkedin: '#',
-    imageStyle: 'object-cover object-top scale-[1.7] translate-y-3',
+    // Full-body standing photo — zoom into upper body/face
+    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 15%', transform: 'scale(2.2)' },
   },
   {
     name: 'Kriti Ahlawat',
@@ -20,7 +21,8 @@ const team = [
     img: '/team/kriti.png',
     bio: 'Driving strategic operations and forging partnerships across India\'s education and corporate landscape. Passionate about creating seamless verification experiences at scale.',
     linkedin: '#',
-    imageStyle: 'object-cover object-top scale-[1.1]',
+    // Already a good bust shot — minimal adjustments
+    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 15%', transform: 'scale(1.5)' },
   },
   {
     name: 'Nihal Kumar',
@@ -28,7 +30,8 @@ const team = [
     img: '/team/nihal.png',
     bio: 'Architecting scalable AI-powered verification systems using cutting-edge technologies. Expert in building secure, high-throughput platforms that handle millions of document verifications.',
     linkedin: '#',
-    imageStyle: 'object-cover object-top scale-[1.7] translate-y-3',
+    // Full-body standing photo — zoom into upper body/face
+    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 12%', transform: 'scale(2.2)' },
   },
   {
     name: 'Pragya Mishra',
@@ -36,7 +39,8 @@ const team = [
     img: '/team/pragya.png',
     bio: 'Ensuring seamless verification workflows and exceptional user experiences. Managing end-to-end operations from university onboarding to enterprise client success.',
     linkedin: '#',
-    imageStyle: 'object-cover object-top scale-[2.0] translate-y-4',
+    // Full-body standing photo — zoom into upper body/face
+    cropStyle: { objectFit: 'cover' as const, objectPosition: '50% 10%', transform: 'scale(2.5)' },
   },
 ]
 
@@ -80,7 +84,8 @@ export default function Team() {
                       src={member.img}
                       alt={member.name}
                       fill
-                      className={`group-hover:scale-[1.2] transition-transform duration-700 ${member.imageStyle || 'object-cover'}`}
+                      className="transition-transform duration-700 group-hover:brightness-110"
+                      style={member.cropStyle}
                       sizes="144px"
                     />
                   </div>

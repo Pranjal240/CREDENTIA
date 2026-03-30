@@ -26,7 +26,7 @@ export default function ResumePage() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'application/pdf': ['.pdf'], 'application/msword': ['.doc'], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'] },
+    accept: { 'application/pdf': ['.pdf'], 'application/msword': ['.doc'], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'], 'image/*': ['.png', '.jpg', '.jpeg', '.webp'] },
     maxFiles: 1, maxSize: 10 * 1024 * 1024,
   })
 
@@ -108,7 +108,7 @@ export default function ResumePage() {
                   <p className="font-semibold text-sm text-white/80">
                     {isDragActive ? 'Drop your resume here' : 'Drag & drop your resume, or click to browse'}
                   </p>
-                  <p className="text-xs text-white/25 mt-1">PDF, DOC, DOCX — Max 10MB</p>
+                  <p className="text-xs text-white/25 mt-1">PDF, DOC, DOCX, PNG, JPG — Max 10MB</p>
                 </div>
               </div>
             )}
