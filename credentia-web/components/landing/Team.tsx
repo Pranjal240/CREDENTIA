@@ -12,7 +12,7 @@ const team = [
     img: '/team/Pranjal Mishra.png',
     bio: 'Visionary entrepreneur dedicated to building India\'s trust infrastructure for the next generation. Leading the charge to eliminate hiring fraud and empower students with verifiable credentials.',
     linkedin: '#',
-    objectPosition: 'object-center',
+    objectPosition: 'object-top',
   },
   {
     name: 'KRITI AHLAWAT',
