@@ -13,7 +13,13 @@ export async function POST(request: Request) {
       )
     }
 
-    // 1. Unified UPSERT into `verifications` table
+    // 1. Ensure `students` row exists to satisfy Foreign Key constraints for older accounts
+    await supabaseAdmin.from('students').upsert(
+      { id: studentId },
+      { onConflict: 'id', ignoreDuplicates: true }
+    )
+
+    // 2. Unified UPSERT into `verifications` table
     const { data: existing } = await supabaseAdmin
       .from('verifications')
       .select('id')
@@ -50,37 +56,40 @@ export async function POST(request: Request) {
 
     // 2. Type-specific `students` table mapping
     if (type === 'resume') {
-      await supabaseAdmin.from('students').update({
+      await supabaseAdmin.from('students').upsert({
+        id: studentId,
         resume_url: fileUrl,
         ats_score: analysis.ats_score || 0,
         updated_at: new Date().toISOString(),
-      }).eq('id', studentId)
+      }, { onConflict: 'id' })
     } 
     else if (type === 'aadhaar' && analysis.verified) {
-      await supabaseAdmin.from('students').update({
+      await supabaseAdmin.from('students').upsert({
+        id: studentId,
         aadhaar_verified: true,
         aadhaar_last4: analysis.aadhaar_last4 || null,
         aadhaar_name: analysis.name || null,
         aadhaar_dob: analysis.dob || null,
         aadhaar_state: analysis.state || null,
         updated_at: new Date().toISOString(),
-      }).eq('id', studentId)
+      }, { onConflict: 'id' })
     }
     else if (type === 'degree' && analysis.verified) {
-      await supabaseAdmin.from('students').update({
+      await supabaseAdmin.from('students').upsert({
+        id: studentId,
         degree_verified: true,
         course: analysis.course || analysis.degree || null,
         cgpa: analysis.grade_cgpa || null,
         graduation_year: analysis.year_of_passing ? parseInt(analysis.year_of_passing) || null : null,
         updated_at: new Date().toISOString(),
-      }).eq('id', studentId)
+      }, { onConflict: 'id' })
     }
 
     // 3. Bruteforce Cache Invalidation
-    revalidatePath('/dashboard/student/overview')
-    revalidatePath(`/dashboard/student/${type}`)
-    revalidatePath('/dashboard/admin')
-    revalidatePath('/dashboard/university')
+    revalidatePath('/dashboard/student', 'layout')
+    revalidatePath(`/dashboard/student/${type}`, 'page')
+    revalidatePath('/dashboard/admin', 'page')
+    revalidatePath('/dashboard/university', 'page')
 
     return NextResponse.json({ success: true })
 

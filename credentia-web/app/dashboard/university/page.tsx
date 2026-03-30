@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { motion } from 'framer-motion'
-import { GraduationCap, Users, CheckCircle2, Shield, Info, Home, Building } from 'lucide-react'
+import { GraduationCap, Users, CheckCircle2, Shield, Info, Home, Building, Download } from 'lucide-react'
 import Link from 'next/link'
 
 export default function UniversityDashboard() {
@@ -34,6 +34,29 @@ export default function UniversityDashboard() {
     </div>
   )
 
+  const handleExportCSV = () => {
+    if (students.length === 0) return
+    const headers = ['Name', 'Email', 'Program', 'Branch', 'Graduation Year', 'CGPA', 'Degree Confirmed', 'Joined Date']
+    const rows = students.map(s => [
+      `"${s.name || ''}"`,
+      `"${s.email || ''}"`,
+      `"${s.course || ''}"`,
+      `"${s.branch || ''}"`,
+      s.graduation_year || '',
+      s.cgpa || '',
+      s.degree_verified ? 'Yes' : 'No',
+      new Date(s.created_at).toLocaleDateString()
+    ])
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(e => e.join(','))].join('\n')
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement("a")
+    link.setAttribute("href", encodedUri)
+    link.setAttribute("download", `university_registry_${new Date().toISOString().split('T')[0]}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       {/* Header */}
@@ -47,9 +70,14 @@ export default function UniversityDashboard() {
             <p className="text-sm text-white/40">Manage your institution&apos;s alumni and verify academic credentials.</p>
           </div>
         </div>
-        <Link href="/" className="hidden sm:flex items-center gap-2 btn-secondary px-4 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white hover:bg-white/10 transition-colors">
-          <Home size={16} /> Landing
-        </Link>
+        <div className="flex items-center gap-3">
+          <button onClick={handleExportCSV} className="hidden sm:flex items-center gap-2 px-4 py-2 text-sm bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-semibold rounded-lg hover:bg-indigo-500/20 transition-colors">
+            <Download size={16} /> Export CSV
+          </button>
+          <Link href="/" className="hidden sm:flex items-center gap-2 btn-secondary px-4 py-2 text-sm bg-white/5 border border-white/10 rounded-lg text-white hover:bg-white/10 transition-colors">
+            <Home size={16} /> Landing
+          </Link>
+        </div>
       </div>
 
       {/* Stats Grid */}
