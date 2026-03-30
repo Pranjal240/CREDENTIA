@@ -92,40 +92,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const { data: existing } = await supabaseAdmin
-      .from('verifications')
-      .select('id')
-      .eq('student_id', studentId)
-      .eq('type', 'police')
-      .maybeSingle()
-
-    if (existing) {
-      await supabaseAdmin
-        .from('verifications')
-        .update({
-          status,
-          ai_result: analysis,
-          ai_confidence: analysis.confidence || 0,
-          document_url: fileUrl || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existing.id)
-    } else {
-      await supabaseAdmin.from('verifications').insert({
-        student_id: studentId,
-        type: 'police',
-        status,
-        ai_result: analysis,
-        ai_confidence: analysis.confidence || 0,
-        document_url: fileUrl || null,
-      })
-    }
-
-    revalidatePath('/dashboard/student/overview')
-    revalidatePath('/dashboard/student/police')
-    revalidatePath('/dashboard/admin')
-
-    return NextResponse.json({ success: true, analysis, status })
+    return NextResponse.json({ success: true, analysis, status, fileUrl })
   } catch (error: any) {
     console.error('Police verification error:', error)
     return NextResponse.json(

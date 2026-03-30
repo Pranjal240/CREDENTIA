@@ -14,6 +14,10 @@ export default function ResumePage() {
   const [uploading, setUploading] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [result, setResult] = useState<any>(null)
+  const [fileUrl, setFileUrl] = useState('')
+  const [saveStatus, setSaveStatus] = useState<string>('')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -56,15 +60,43 @@ export default function ResumePage() {
       }
       const analysisData = await analyzeRes.json()
       setResult(analysisData.analysis || analysisData)
+      setFileUrl(analysisData.fileUrl || uploadData.url)
+      setSaveStatus(analysisData.status || (analysisData.analysis?.ats_score ? 'ai_approved' : 'rejected'))
       setAnalyzing(false)
-      router.refresh()
     } catch (err: any) {
       setError(err.message || 'Something went wrong')
       setUploading(false); setAnalyzing(false)
     }
   }
 
-  const reset = () => { setFile(null); setResult(null); setError('') }
+  const reset = () => { setFile(null); setResult(null); setError(''); setSaved(false); setFileUrl(''); setSaveStatus('') }
+
+  const handleSave = async () => {
+    if (!result || !fileUrl || !userId) return
+    setSaving(true)
+    setError('')
+    try {
+      const saveRes = await fetch('/api/save-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: userId,
+          type: 'resume',
+          analysis: result,
+          fileUrl: fileUrl,
+          status: saveStatus || 'ai_approved'
+        })
+      })
+      const saveData = await saveRes.json()
+      if (!saveRes.ok || !saveData.success) throw new Error(saveData.error || 'Failed to save record')
+      setSaved(true)
+      router.refresh()
+    } catch (err: any) {
+      setError(err.message || 'Something went wrong saving')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const scoreColor = (score: number) => {
     if (score >= 80) return '#22c55e'
@@ -195,9 +227,28 @@ export default function ResumePage() {
             </div>
           </div>
 
-          <button onClick={reset} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all hover:bg-white/5" style={{ border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)' }}>
-            <RotateCcw size={16} /> Upload Another
-          </button>
+          <div className="flex flex-col sm:flex-row items-center gap-4 mt-8 pt-6 border-t border-white/5">
+            {!saved ? (
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl font-bold transition-all shadow-lg shadow-green-500/20"
+                style={{ background: 'linear-gradient(135deg, #22c55e, #10b981)', color: 'white' }}
+              >
+                {saving ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                {saving ? 'Saving...' : 'SAVE TO PROFILE'}
+              </button>
+            ) : (
+              <div className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl font-bold bg-green-500/10 text-green-400 border border-green-500/20">
+                <CheckCircle2 size={18} />
+                Saved to Profile!
+              </div>
+            )}
+            
+            <button onClick={reset} className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl text-sm font-medium transition-all hover:bg-white/5" style={{ border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.4)' }}>
+              <RotateCcw size={16} /> Upload Another
+            </button>
+          </div>
         </motion.div>
       )}
     </div>

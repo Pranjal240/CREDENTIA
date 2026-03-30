@@ -17,7 +17,7 @@ export default function CompanyDashboard() {
     const load = async () => {
       const { data } = await supabase
         .from('students')
-        .select('*, profiles!inner(full_name, email)')
+        .select('*, verifications(*)')
         .eq('profile_is_public', true)
         .order('ats_score', { ascending: false })
         .limit(50)
@@ -28,10 +28,12 @@ export default function CompanyDashboard() {
   }, [])
 
   const filtered = students.filter(s => {
-    const name = s.profiles?.full_name?.toLowerCase() || ''
+    const name = s.name?.toLowerCase() || ''
     if (search && !name.includes(search.toLowerCase())) return false
-    if (s.ats_score < minAts) return false
-    if (policeOnly && !s.police_verified) return false
+    if ((s.ats_score || 0) < minAts) return false
+    const policeV = s.verifications?.find((v: any) => v.type === 'police')
+    const hasPolice = policeV && (policeV.status === 'ai_approved' || policeV.status === 'admin_approved')
+    if (policeOnly && !hasPolice) return false
     return true
   })
 
@@ -61,7 +63,10 @@ export default function CompanyDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { label: 'Available Talent', value: students.length, icon: Users, accent: '#10b981', gradient: 'from-emerald-500/20 to-emerald-400/5' },
-          { label: 'Police Verified Profiles', value: students.filter(s => s.police_verified).length, icon: Shield, accent: '#3b82f6', gradient: 'from-blue-500/20 to-blue-400/5' },
+          { label: 'Police Verified Profiles', value: students.filter(s => {
+              const policeV = s.verifications?.find((v: any) => v.type === 'police')
+              return policeV && (policeV.status === 'ai_approved' || policeV.status === 'admin_approved')
+            }).length, icon: Shield, accent: '#3b82f6', gradient: 'from-blue-500/20 to-blue-400/5' },
           { label: 'Platform Avg ATS', value: students.length ? Math.round(students.reduce((a, s) => a + (s.ats_score || 0), 0) / students.length) : 0, icon: TrendingUp, accent: '#8b5cf6', gradient: 'from-purple-500/20 to-purple-400/5' },
         ].map((stat, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className={`rounded-2xl p-5 border border-white/5 bg-gradient-to-br ${stat.gradient}`}>
@@ -116,17 +121,21 @@ export default function CompanyDashboard() {
 
                 <div className="flex items-center gap-4 mb-5">
                   <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-inner border border-white/10" style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(6,182,212,0.2))' }}>
-                    {(s.profiles?.full_name || 'U')[0].toUpperCase()}
+                    {(s.name || 'U')[0].toUpperCase()}
                   </div>
                   <div>
-                    <p className="font-heading font-bold text-lg text-white group-hover:text-teal-400 transition-colors">{s.profiles?.full_name || 'Anonymous'}</p>
+                    <p className="font-heading font-bold text-lg text-white group-hover:text-teal-400 transition-colors">{s.name || 'Anonymous'}</p>
                     <p className="text-xs text-white/40">{s.course || 'B.Tech'} {s.branch || 'Computer Science'} • Class of {s.graduation_year || '2025'}</p>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between mt-auto pt-4 border-t border-white/5">
                   <div className="flex gap-2">
-                    {[{ ok: s.police_verified, label: 'Police', icon: Shield }, { ok: s.aadhaar_verified, label: 'ID', icon: CheckCircle2 }, { ok: s.degree_verified, label: 'Degree', icon: GraduationCap }].map((b, j) => (
+                    {[
+                      { ok: s.verifications?.some((v:any) => v.type === 'police' && (v.status === 'ai_approved' || v.status === 'admin_approved')), label: 'Police', icon: Shield }, 
+                      { ok: s.aadhaar_verified, label: 'ID', icon: CheckCircle2 }, 
+                      { ok: s.degree_verified, label: 'Degree', icon: GraduationCap }
+                    ].map((b, j) => (
                       <div key={j} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10px] uppercase font-bold tracking-wider border ${b.ok ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-white/20 border-white/5'}`}>
                         <b.icon size={12} /> {b.label}
                       </div>

@@ -70,49 +70,7 @@ export async function POST(request: Request) {
 
     const analysis = await analyzeResume(content, isImage)
 
-    await supabaseAdmin
-      .from('students')
-      .update({
-        resume_url: fileUrl,
-        ats_score: analysis.ats_score || 0,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', studentId)
-
-    const { data: existing } = await supabaseAdmin
-      .from('verifications')
-      .select('id')
-      .eq('student_id', studentId)
-      .eq('type', 'resume')
-      .maybeSingle()
-
-    if (existing) {
-      await supabaseAdmin
-        .from('verifications')
-        .update({
-          status: 'ai_approved',
-          ai_result: analysis,
-          ai_confidence: analysis.ats_score || 0,
-          document_url: fileUrl,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existing.id)
-    } else {
-      await supabaseAdmin.from('verifications').insert({
-        student_id: studentId,
-        type: 'resume',
-        status: 'ai_approved',
-        ai_result: analysis,
-        ai_confidence: analysis.ats_score || 0,
-        document_url: fileUrl,
-      })
-    }
-
-    revalidatePath('/dashboard/student/overview')
-    revalidatePath('/dashboard/student/resume')
-    revalidatePath('/dashboard/admin')
-
-    return NextResponse.json({ success: true, analysis })
+    return NextResponse.json({ success: true, analysis, fileUrl })
   } catch (error: any) {
     console.error('Resume analysis error:', error)
     return NextResponse.json(

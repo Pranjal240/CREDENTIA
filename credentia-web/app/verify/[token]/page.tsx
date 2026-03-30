@@ -5,7 +5,7 @@ import { CheckCircle2, XCircle, FileText, Shield, CreditCard, GraduationCap, Eye
 export default async function VerifyPage({ params }: { params: { token: string } }) {
   const { data: student } = await supabaseAdmin
     .from('students')
-    .select('*, profiles!inner(full_name, email, avatar_url)')
+    .select('*')
     .eq('share_token', params.token)
     .eq('profile_is_public', true)
     .single()
@@ -16,13 +16,15 @@ export default async function VerifyPage({ params }: { params: { token: string }
 
   const { data: verifications } = await supabaseAdmin.from('verifications').select('*').eq('student_id', student.id)
 
-  const profile = student.profiles as any
-  const name = profile?.full_name || 'Student'
+  const name = student.name || 'Verified Student'
   const initials = name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+
+  const policeV = verifications?.find(v => v.type === 'police')
+  const isPoliceVerified = policeV && (policeV.status === 'ai_approved' || policeV.status === 'admin_approved')
 
   const items = [
     { icon: FileText, label: 'Resume', verified: !!student.ats_score, detail: student.ats_score ? `ATS Score: ${student.ats_score}/100` : 'Not submitted' },
-    { icon: Shield, label: 'Police Certificate', verified: student.police_verified, detail: student.police_verified ? 'Verified by Admin' : 'Not verified' },
+    { icon: Shield, label: 'Police Certificate', verified: isPoliceVerified, detail: isPoliceVerified ? 'Clear Background Check' : (policeV?.status === 'needs_review' ? 'Pending Review' : 'Not verified') },
     { icon: CreditCard, label: 'Aadhaar', verified: student.aadhaar_verified, detail: student.aadhaar_verified ? `${student.aadhaar_name || ''} — ${student.aadhaar_state || ''}` : 'Not verified' },
     { icon: GraduationCap, label: 'Degree', verified: student.degree_verified, detail: student.degree_verified ? `${student.course || ''} — CGPA ${student.cgpa || 'N/A'}` : 'Not verified' },
   ]

@@ -11,13 +11,14 @@ export default function MyLinkPage() {
   const [generating, setGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
   const [views, setViews] = useState(0)
+  const [isPublic, setIsPublic] = useState(false)
 
   useEffect(() => {
     const load = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-      const { data } = await supabase.from('students').select('share_token, profile_views').eq('id', session.user.id).single()
-      if (data?.share_token) { setToken(data.share_token); setViews(data.profile_views || 0) }
+      const { data } = await supabase.from('students').select('share_token, profile_views, profile_is_public').eq('id', session.user.id).single()
+      if (data?.share_token) { setToken(data.share_token); setViews(data.profile_views || 0); setIsPublic(data.profile_is_public) }
       setLoading(false)
     }
     load()
@@ -78,6 +79,17 @@ export default function MyLinkPage() {
               <button onClick={copyLink} className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-all" style={{ background: copied ? 'rgb(var(--success))' : 'linear-gradient(135deg, rgb(var(--accent)), rgb(var(--accent-hover)))', color: 'white' }}>
                 {copied ? <Check size={18} /> : <Copy size={18} />}
               </button>
+            </div>
+
+            {/* Company Access Status Indicator */}
+            <div className={`mt-5 p-4 rounded-xl border flex items-center justify-between shadow-sm ${isPublic ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-500'}`}>
+               <div className="flex items-center gap-3">
+                 {isPublic ? <Check size={20} className="text-emerald-500" /> : <Eye size={20} className="text-amber-500" />}
+                 <div>
+                   <p className="font-heading font-bold text-sm">Company Portal Status</p>
+                   <p className="text-xs opacity-80">{isPublic ? 'Your profile has been approved by the Admin and is visible to partnered Companies.' : 'Your profile is currently under Admin review and is not yet visible to Companies.'}</p>
+                 </div>
+               </div>
             </div>
           </div>
 

@@ -16,7 +16,7 @@ export default function UniversityDashboard() {
       if (!session) return
       const { data } = await supabase
         .from('students')
-        .select('*, profiles!inner(full_name, email)')
+        .select('*')
         .eq('university_id', session.user.id)
         .order('created_at', { ascending: false })
       setStudents(data || [])
@@ -107,11 +107,11 @@ export default function UniversityDashboard() {
                     <td className="px-6 py-4 pl-8">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500/20 to-blue-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300 font-bold text-xs shadow-inner">
-                          {(s.profiles?.full_name || 'U')[0].toUpperCase()}
+                          {(s.name || 'U')[0].toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-medium text-white/90 group-hover:text-indigo-300 transition-colors">{s.profiles?.full_name}</p>
-                          <p className="text-[11px] text-white/30">{s.profiles?.email}</p>
+                          <p className="font-medium text-white/90 group-hover:text-indigo-300 transition-colors">{s.name}</p>
+                          <p className="text-[11px] text-white/30">{s.email}</p>
                         </div>
                       </div>
                     </td>

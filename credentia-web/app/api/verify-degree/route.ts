@@ -60,57 +60,8 @@ export async function POST(request: Request) {
 
     const analysis = await analyzeDegree(content, isImage)
 
-    if (analysis.verified) {
-      await supabaseAdmin
-        .from('students')
-        .update({
-          degree_verified: true,
-          course: analysis.course || analysis.degree || null,
-          cgpa: analysis.grade_cgpa || null,
-          graduation_year: analysis.year_of_passing
-            ? parseInt(analysis.year_of_passing) || null
-            : null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', studentId)
-    }
-
-    const { data: existing } = await supabaseAdmin
-      .from('verifications')
-      .select('id')
-      .eq('student_id', studentId)
-      .eq('type', 'degree')
-      .maybeSingle()
-
-    const newStatus = analysis.verified ? 'ai_approved' : 'rejected'
-
-    if (existing) {
-      await supabaseAdmin
-        .from('verifications')
-        .update({
-          status: newStatus,
-          ai_result: analysis,
-          ai_confidence: analysis.confidence || 0,
-          document_url: fileUrl,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existing.id)
-    } else {
-      await supabaseAdmin.from('verifications').insert({
-        student_id: studentId,
-        type: 'degree',
-        status: newStatus,
-        ai_result: analysis,
-        ai_confidence: analysis.confidence || 0,
-        document_url: fileUrl,
-      })
-    }
-
-    revalidatePath('/dashboard/student/overview')
-    revalidatePath('/dashboard/student/degree')
-    revalidatePath('/dashboard/admin')
-
-    return NextResponse.json({ success: true, analysis })
+    const status = analysis.verified ? 'ai_approved' : 'rejected'
+    return NextResponse.json({ success: true, analysis, fileUrl, status })
   } catch (error: any) {
     console.error('Degree verification error:', error)
     return NextResponse.json(
