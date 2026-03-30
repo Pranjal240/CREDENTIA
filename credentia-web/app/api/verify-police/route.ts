@@ -36,8 +36,11 @@ export async function POST(request: Request) {
 
       try {
         if (lowerUrl.includes('.png') || lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.webp')) {
-          // Pass the URL directly to the Multi-modal Vision API
-          content = fileUrl
+          const response = await fetch(fileUrl)
+          const arrayBuffer = await response.arrayBuffer()
+          const base64 = Buffer.from(arrayBuffer).toString('base64')
+          const mimeType = lowerUrl.endsWith('.png') ? 'image/png' : lowerUrl.endsWith('.webp') ? 'image/webp' : 'image/jpeg'
+          content = `data:${mimeType};base64,${base64}`
           isImage = true
         } else if (lowerUrl.includes('.pdf')) {
           // Parse PDF text securely

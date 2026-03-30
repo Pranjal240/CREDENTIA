@@ -22,7 +22,12 @@ export async function POST(request: Request) {
 
     try {
       if (lowerUrl.includes('.png') || lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.webp')) {
-        content = fileUrl
+        const response = await fetch(fileUrl)
+        if (!response.ok) throw new Error('Failed to fetch image from storage')
+        const arrayBuffer = await response.arrayBuffer()
+        const base64 = Buffer.from(arrayBuffer).toString('base64')
+        const mimeType = lowerUrl.endsWith('.png') ? 'image/png' : lowerUrl.endsWith('.webp') ? 'image/webp' : 'image/jpeg'
+        content = `data:${mimeType};base64,${base64}`
         isImage = true
       } else {
         const response = await fetch(fileUrl)

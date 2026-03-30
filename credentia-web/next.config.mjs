@@ -9,7 +9,9 @@ const nextConfig = {
       { protocol: 'https', hostname: 'avatars.githubusercontent.com' },
     ],
   },
-  serverExternalPackages: ['pdf-parse'],
+  experimental: {
+    serverComponentsExternalPackages: ['pdf-parse'],
+  },
   webpack: (config) => {
     config.resolve.fallback = { fs: false, net: false, tls: false }
     return config
