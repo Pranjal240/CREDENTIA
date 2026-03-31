@@ -3,23 +3,50 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+/**
+ * Auth Callback Route Handler — SERVER-SIDE PKCE code exchange.
+ *
+ * Flow:
+ *   1. User clicks "Sign in with Google" → Supabase redirects to Google
+ *   2. Google redirects back to Supabase → Supabase redirects here with ?code=xxx&portal=yyy
+ *   3. This route handler exchanges the code for a session (server-side)
+ *   4. Session cookies are set automatically via cookies() from next/headers
+ *   5. User is redirected to /dashboard/[role]
+ *
+ * Why server-side? Because PKCE stores a code_verifier in a cookie.
+ * The server can read this cookie and send it along with the code to Supabase.
+ * Client-side pages using createBrowserClient often fail to read this cookie in production.
+ */
 export async function GET(request: NextRequest) {
-  const url = new URL(request.url)
-  const code = url.searchParams.get('code')
-  const portal = url.searchParams.get('portal')
-    ?? 'student'
+  const { searchParams } = new URL(request.url)
+  const code = searchParams.get('code')
+  const portal = searchParams.get('portal') || 'student'
+  const error = searchParams.get('error')
+  const errorDescription = searchParams.get('error_description')
 
-  // NO www-redirect here — it was consuming the code
-  // The redirectTo is already hardcoded to www in login page
+  // Determine the correct origin, respecting Vercel's x-forwarded-host
+  const forwardedHost = request.headers.get('x-forwarded-host')
+  const host = request.headers.get('host')
+  const protocol = request.headers.get('x-forwarded-proto') || 'https'
+  const origin = forwardedHost
+    ? `${protocol}://${forwardedHost}`
+    : `${protocol}://${host}`
 
-  if (!code) {
-    return NextResponse.redirect(
-      new URL('/login?error=no_code', request.url)
-    )
+  // Handle OAuth errors from Supabase/Google
+  if (error) {
+    const msg = encodeURIComponent(errorDescription || error)
+    return NextResponse.redirect(`${origin}/login/${portal}?error=${msg}`)
   }
 
-  const cookiesToSetLater: { name: string; value: string; options: any }[] = []
+  // No code = nothing to exchange
+  if (!code) {
+    return NextResponse.redirect(`${origin}/login/${portal}?error=no_code`)
+  }
 
+  // Create a Supabase server client using cookies() from next/headers.
+  // This is the official Supabase pattern for Next.js App Router.
+  // cookies().set() in Route Handlers writes directly to the response,
+  // so session cookies survive the redirect.
   const cookieStore = cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,111 +58,92 @@ export async function GET(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              // Try to set native route cookies
+            cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
-              // Store them to explicitly append onto NextResponse
-              cookiesToSetLater.push({ name, value, options })
-            })
+            )
           } catch {
-            // ignore
+            // setAll can throw when called from a Server Component (read-only).
+            // In Route Handlers this won't happen, but we catch just in case.
           }
         },
       },
     }
   )
 
-  // Helper to append guaranteed cookies to redirect
-  const getGuaranteedRedirect = (urlPath: string) => {
-    const response = NextResponse.redirect(new URL(urlPath, request.url))
-    cookiesToSetLater.forEach(({ name, value, options }) => {
-      response.cookies.set({ name, value, ...options })
-    })
-    return response
-  }
-
-  const { error: exchangeError } =
-    await supabase.auth.exchangeCodeForSession(code)
+  // ── Exchange the auth code for a session ──────────────────────────────────
+  const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
   if (exchangeError) {
-    console.error('EXCHANGE ERROR:', exchangeError.message)
-    return getGuaranteedRedirect(`/login/${portal}?error=exchange_failed`)
+    console.error('[Auth Callback] Code exchange failed:', exchangeError.message)
+    return NextResponse.redirect(
+      `${origin}/login/${portal}?error=${encodeURIComponent(exchangeError.message)}`
+    )
   }
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return getGuaranteedRedirect('/login?error=no_user')
+  // ── Get the authenticated user ────────────────────────────────────────────
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    console.error('[Auth Callback] getUser failed:', userError?.message)
+    return NextResponse.redirect(`${origin}/login/${portal}?error=auth_failed`)
   }
 
+  // ── Admin portal lock ─────────────────────────────────────────────────────
+  if (portal === 'admin' && user.email !== 'pranjalmishra2409@gmail.com') {
+    await supabase.auth.signOut()
+    return NextResponse.redirect(`${origin}/login/admin?error=not_authorized`)
+  }
+
+  // ── Check for existing profile ────────────────────────────────────────────
   const { data: profile } = await supabase
     .from('profiles')
     .select('id, role, is_active')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
 
+  // Account deactivated
   if (profile?.is_active === false) {
     await supabase.auth.signOut()
-    return getGuaranteedRedirect('/login?error=account_banned')
+    return NextResponse.redirect(`${origin}/login/${portal}?error=account_banned`)
   }
 
-  if (profile) {
-    if (profile.role !== portal) {
-      await supabase.auth.signOut()
-      return getGuaranteedRedirect(`/login/${portal}?error=wrong_portal&correct=${profile.role}`)
+  // Existing profile with wrong portal
+  if (profile && profile.role !== portal) {
+    await supabase.auth.signOut()
+    return NextResponse.redirect(
+      `${origin}/login/${portal}?error=wrong_portal&correct=${profile.role}`
+    )
+  }
+
+  // ── Create profile if new user ────────────────────────────────────────────
+  if (!profile) {
+    await supabase.from('profiles').insert({
+      id: user.id,
+      email: user.email,
+      full_name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? '',
+      avatar_url: user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? '',
+      role: portal,
+      login_portal: portal,
+      last_login_at: new Date().toISOString(),
+      is_active: true,
+    })
+
+    // For students, also create the students row
+    if (portal === 'student') {
+      await supabase.from('students').upsert(
+        { id: user.id, profile_is_public: false, profile_views: 0 },
+        { onConflict: 'id' }
+      )
     }
-    await supabase.from('profiles')
+  } else {
+    // Update last login timestamp
+    await supabase
+      .from('profiles')
       .update({ last_login_at: new Date().toISOString() })
       .eq('id', user.id)
-    return getGuaranteedRedirect(`/dashboard/${profile.role}`)
   }
 
-  // New user
-  if (portal === 'admin') {
-    const adminEmails = [
-      'pranjalmsihra2409@gmail.com',
-      'praanjalmishra2409@gmail.com',
-      'pranjalmishra2409@gmail.com',
-      'pranjalwork2602@gmail.com'
-    ]
-    const isHardcodedAdmin = adminEmails.includes(user.email ?? '')
-
-    let wl = null
-    if (!isHardcodedAdmin) {
-      const { data } = await supabase
-        .from('admin_whitelist')
-        .select('email')
-        .eq('email', user.email)
-        .single()
-      wl = data
-    }
-
-    if (!wl && !isHardcodedAdmin) {
-      await supabase.auth.signOut()
-      return getGuaranteedRedirect('/login/admin?error=not_authorized')
-    }
-  }
-
-  await supabase.from('profiles').insert({
-    id: user.id,
-    email: user.email,
-    full_name: user.user_metadata?.full_name ?? '',
-    avatar_url: user.user_metadata?.avatar_url ?? '',
-    role: portal,
-    login_portal: portal,
-    last_login_at: new Date().toISOString(),
-    is_active: true,
-    created_at: new Date().toISOString()
-  })
-
-  if (portal === 'student') {
-    await supabase.from('students').upsert({
-      id: user.id,
-      profile_is_public: false,
-      profile_views: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' })
-  }
-
-  return getGuaranteedRedirect(`/dashboard/${portal}`)
+  // ── Redirect to the correct dashboard ─────────────────────────────────────
+  const role = profile?.role ?? portal
+  return NextResponse.redirect(`${origin}/dashboard/${role}`)
 }

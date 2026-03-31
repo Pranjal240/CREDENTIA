@@ -108,7 +108,7 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
         .from('profiles')
         .select('role')
         .eq('id', user.id)
-        .single()
+        .maybeSingle()
 
       if (profile?.role === portal) {
         // Same portal — just go to dashboard
@@ -149,6 +149,13 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email || !password) { setRuntimeError('Please fill in all fields.'); return }
+    
+    // Strict Admin Enforcement
+    if (portal === 'admin' && email.toLowerCase() !== 'pranjalmishra2409@gmail.com') {
+      setRuntimeError('Unauthorized. The administrative portal is restricted to the primary owner.')
+      return
+    }
+
     setEmailLoading(true)
     setRuntimeError(null)
 
@@ -161,12 +168,19 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
     }
 
     if (data.user) {
-      // Check profile role for this user
+      // Check profile role for this user — use maybeSingle to avoid errors
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, is_active')
         .eq('id', data.user.id)
-        .single()
+        .maybeSingle()
+
+      if (profile?.is_active === false) {
+        await supabase.auth.signOut()
+        setRuntimeError('Your account has been deactivated. Contact support@credentiaonline.in.')
+        setEmailLoading(false)
+        return
+      }
 
       if (profile?.role && profile.role !== portal) {
         // Wrong portal — sign out and redirect
@@ -175,8 +189,8 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
         return
       }
 
-      // Correct portal or first login — go to dashboard
-      router.push(`/dashboard/${profile?.role ?? portal}`)
+      // Correct portal — go to dashboard
+      router.replace(`/dashboard/${profile?.role ?? portal}`)
     }
 
     setEmailLoading(false)

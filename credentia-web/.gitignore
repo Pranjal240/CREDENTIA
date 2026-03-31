@@ -42,3 +42,7 @@ test-r2.js
 
 .vercel
 .env*.local
+
+# Secrets / production env --- NEVER COMMIT
+.env.production
+vercel_envs.txt
