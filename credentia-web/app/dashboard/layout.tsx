@@ -75,10 +75,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) { router.push('/login'); return }
-      setUser(session.user)
-      const { data: prof } = await supabase.from('profiles').select('*').eq('id', session.user.id).single()
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!authUser) { router.push('/login/student'); return }
+      setUser(authUser)
+      const { data: prof } = await supabase.from('profiles').select('*').eq('id', authUser.id).single()
       if (prof) { setProfile(prof); setRole(prof.role) }
       setLoading(false)
     }
@@ -89,8 +89,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
   const handleLogout = async () => {
+    // Sign out then redirect to the user's specific portal login page.
+    // This ensures they land back at the correct portal, not a generic page.
+    const portalRole = role || 'student'
     await supabase.auth.signOut()
-    router.push('/login')
+    router.push(`/login/${portalRole}`)
     router.refresh()
   }
 
