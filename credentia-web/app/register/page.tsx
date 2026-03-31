@@ -34,7 +34,7 @@ export default function RegisterPage() {
     const { error: oauthErr } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?portal=${portal}`,
+        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?portal=${portal}`,
       },
     })
     

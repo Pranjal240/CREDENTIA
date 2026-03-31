@@ -27,6 +27,15 @@ export async function middleware(request: NextRequest) {
   )
 
   const path = request.nextUrl.pathname
+  const host = request.headers.get('host') || ''
+
+  // Enforce Canonical Domain to prevent PKCE state cookie loss during OAuth
+  if (host === 'credentiaonline.in') {
+    const url = new URL(request.url)
+    url.host = 'www.credentiaonline.in'
+    url.protocol = 'https:'
+    return NextResponse.redirect(url)
+  }
 
   // Only protect /dashboard — let everything else pass
   if (!path.startsWith('/dashboard')) {
@@ -65,5 +74,14 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*']
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 }
