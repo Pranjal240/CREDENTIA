@@ -96,12 +96,21 @@ export async function GET(request: NextRequest) {
 
   // New user
   if (portal === 'admin') {
-    const { data: wl } = await supabase
-      .from('admin_whitelist')
-      .select('email')
-      .eq('email', user.email)
-      .single()
-    if (!wl) {
+    const isHardcodedAdmin = 
+      user.email === 'pranjalmsihra2409@gmail.com' ||
+      user.email === 'praanjalmishra2409@gmail.com'
+
+    let wl = null
+    if (!isHardcodedAdmin) {
+      const { data } = await supabase
+        .from('admin_whitelist')
+        .select('email')
+        .eq('email', user.email)
+        .single()
+      wl = data
+    }
+
+    if (!wl && !isHardcodedAdmin) {
       await supabase.auth.signOut()
       return NextResponse.redirect(
         new URL(
