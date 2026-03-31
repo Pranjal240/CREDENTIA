@@ -6,12 +6,8 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function check() {
-  const { data: users, error: err1 } = await supabase.auth.admin.listUsers();
-  console.log("Auth Users:", users?.users.map(u => ({ email: u.email, id: u.id })));
-
-  const { data: profiles, error: err2 } = await supabase.from('profiles').select('id, email, role');
+  const { data: profiles, error: err2 } = await supabase.from('profiles').select('id, email, role, is_active');
   console.log("Profiles DB:", profiles);
-  if (err2) console.error("Profile error:", err2);
 }
 
 check();

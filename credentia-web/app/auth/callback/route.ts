@@ -18,6 +18,8 @@ export async function GET(request: NextRequest) {
     )
   }
 
+  const cookiesToSetLater: { name: string; value: string; options: any }[] = []
+
   const cookieStore = cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,37 +31,40 @@ export async function GET(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(
-              ({ name, value, options }) =>
+            cookiesToSet.forEach(({ name, value, options }) => {
+              // Try to set native route cookies
               cookieStore.set(name, value, options)
-            )
+              // Store them to explicitly append onto NextResponse
+              cookiesToSetLater.push({ name, value, options })
+            })
           } catch {
-            // ignore in route handler
+            // ignore
           }
         },
       },
     }
   )
 
+  // Helper to append guaranteed cookies to redirect
+  const getGuaranteedRedirect = (urlPath: string) => {
+    const response = NextResponse.redirect(new URL(urlPath, request.url))
+    cookiesToSetLater.forEach(({ name, value, options }) => {
+      response.cookies.set({ name, value, ...options })
+    })
+    return response
+  }
+
   const { error: exchangeError } =
     await supabase.auth.exchangeCodeForSession(code)
 
   if (exchangeError) {
     console.error('EXCHANGE ERROR:', exchangeError.message)
-    return NextResponse.redirect(
-      new URL(
-        `/login/${portal}?error=exchange_failed`,
-        request.url
-      )
-    )
+    return getGuaranteedRedirect(`/login/${portal}?error=exchange_failed`)
   }
 
-  const { data: { user } } =
-    await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
-    return NextResponse.redirect(
-      new URL('/login?error=no_user', request.url)
-    )
+    return getGuaranteedRedirect('/login?error=no_user')
   }
 
   const { data: profile } = await supabase
@@ -70,37 +75,27 @@ export async function GET(request: NextRequest) {
 
   if (profile?.is_active === false) {
     await supabase.auth.signOut()
-    return NextResponse.redirect(
-      new URL('/login?error=account_banned', request.url)
-    )
+    return getGuaranteedRedirect('/login?error=account_banned')
   }
 
   if (profile) {
     if (profile.role !== portal) {
       await supabase.auth.signOut()
-      return NextResponse.redirect(
-        new URL(
-          `/login/${portal}?error=wrong_portal`
-          + `&correct=${profile.role}`,
-          request.url
-        )
-      )
+      return getGuaranteedRedirect(`/login/${portal}?error=wrong_portal&correct=${profile.role}`)
     }
     await supabase.from('profiles')
       .update({ last_login_at: new Date().toISOString() })
       .eq('id', user.id)
-    return NextResponse.redirect(
-      new URL(`/dashboard/${profile.role}`, request.url)
-    )
+    return getGuaranteedRedirect(`/dashboard/${profile.role}`)
   }
 
   // New user
   if (portal === 'admin') {
     const adminEmails = [
-      'pranjalmsihra2409@gmail.com',  // The typo'd one provided earlier
+      'pranjalmsihra2409@gmail.com',
       'praanjalmishra2409@gmail.com',
-      'pranjalmishra2409@gmail.com',  // The actual one they just logged in with
-      'pranjalwork2602@gmail.com'     // Another login detected
+      'pranjalmishra2409@gmail.com',
+      'pranjalwork2602@gmail.com'
     ]
     const isHardcodedAdmin = adminEmails.includes(user.email ?? '')
 
@@ -116,12 +111,7 @@ export async function GET(request: NextRequest) {
 
     if (!wl && !isHardcodedAdmin) {
       await supabase.auth.signOut()
-      return NextResponse.redirect(
-        new URL(
-          '/login/admin?error=not_authorized',
-          request.url
-        )
-      )
+      return getGuaranteedRedirect('/login/admin?error=not_authorized')
     }
   }
 
@@ -147,10 +137,5 @@ export async function GET(request: NextRequest) {
     }, { onConflict: 'id' })
   }
 
-  return NextResponse.redirect(
-    new URL(
-      `/dashboard/${portal}`,
-      request.url
-    )
-  )
+  return getGuaranteedRedirect(`/dashboard/${portal}`)
 }
