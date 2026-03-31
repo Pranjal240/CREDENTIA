@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable @next/next/no-img-element */
 
 import { useState, useRef } from 'react'
 import { motion, useInView, AnimatePresence } from 'framer-motion'
@@ -76,11 +77,10 @@ export default function Team() {
                 {/* Border ring */}
                 <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500 via-teal-400 to-indigo-500 p-[2px]">
                   <div className="w-full h-full rounded-full overflow-hidden bg-[#0A0A0F]">
-                    <Image
+                    <img
                       src={member.img}
                       alt={member.name}
-                      fill
-                      className={`object-cover transition-all duration-700 group-hover:brightness-110 group-hover:scale-105 ${member.objectPosition}`}
+                      className={`w-full h-full object-cover transition-all duration-700 group-hover:brightness-110 group-hover:scale-105 ${member.objectPosition}`}
                     />
                   </div>
                 </div>
@@ -129,11 +129,10 @@ export default function Team() {
 
               {/* Image area */}
               <div className="relative w-full aspect-[4/5] bg-gradient-to-br from-blue-600/20 via-transparent to-teal-600/20">
-                <Image
+                <img
                   src={team[selected].img}
                   alt={team[selected].name}
-                  fill
-                  className={`object-cover transition-transform duration-1000 ${team[selected].objectPosition}`}
+                  className={`w-full h-full object-cover transition-transform duration-1000 ${team[selected].objectPosition}`}
                 />
                 {/* Bottom gradient fade into bio */}
                 <div className="absolute bottom-0 left-0 right-0 h-32" style={{ background: 'linear-gradient(to top, rgba(10,10,15,0.95), transparent)' }} />

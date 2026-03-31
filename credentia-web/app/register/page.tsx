@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -28,14 +29,15 @@ export default function RegisterPage() {
     setGoogleLoading(true)
     setError('')
     
-    if (selectedRole) {
-      document.cookie = `pending_oauth_role=${selectedRole}; path=/; max-age=600; Secure; SameSite=Lax`
-    }
+    // Pass portal context via redirectTo URL param — Supabase reserves
+    // the OAuth state param for PKCE/CSRF, so we cannot use it.
+    const portal = selectedRole || 'student'
+    const callbackUrl = `${window.location.origin}/auth/callback?portal=${portal}`
 
     const { error: oauthErr } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl,
         queryParams: { access_type: 'offline', prompt: 'consent' },
       },
     })
@@ -57,7 +59,7 @@ export default function RegisterPage() {
         password,
         options: {
           data: { full_name: fullName, role: selectedRole },
-          emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/auth/callback`,
+          emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/auth/callback?portal=${selectedRole}`,
         },
       })
       if (err) { setError(err.message); setLoading(false); return }
@@ -107,7 +109,7 @@ export default function RegisterPage() {
               </div>
               <p className="text-center mt-6 text-sm" style={{ color: 'rgb(var(--text-secondary))' }}>
                 Already have an account?{' '}
-                <Link href="/login" className="font-medium hover:underline" style={{ color: 'rgb(var(--accent))' }}>Sign in</Link>
+                <Link href={`/login/${selectedRole || 'student'}`} className="font-medium hover:underline" style={{ color: 'rgb(var(--accent))' }}>Sign in</Link>
               </p>
             </motion.div>
           )}
@@ -167,7 +169,7 @@ export default function RegisterPage() {
               </button>
               <p className="text-center mt-5 text-sm" style={{ color: 'rgb(var(--text-secondary))' }}>
                 Already have an account?{' '}
-                <Link href="/login" className="font-medium hover:underline" style={{ color: 'rgb(var(--accent))' }}>Sign in</Link>
+                <Link href={`/login/${selectedRole || 'student'}`} className="font-medium hover:underline" style={{ color: 'rgb(var(--accent))' }}>Sign in</Link>
               </p>
             </motion.div>
           )}
@@ -179,7 +181,7 @@ export default function RegisterPage() {
               <p className="text-sm mb-6" style={{ color: 'rgb(var(--text-secondary))' }}>
                 We sent a confirmation link to <strong>{email}</strong>. Click it to activate your account.
               </p>
-              <Link href="/login" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-sm" style={{ background: 'linear-gradient(135deg, rgb(var(--accent)), rgb(var(--accent-hover)))', color: 'white' }}>
+              <Link href={`/login/${selectedRole || 'student'}`} className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-sm" style={{ background: 'linear-gradient(135deg, rgb(var(--accent)), rgb(var(--accent-hover)))', color: 'white' }}>
                 Go to Login
               </Link>
             </motion.div>

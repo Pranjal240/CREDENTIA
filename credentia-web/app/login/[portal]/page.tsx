@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
-import { Loader2, ArrowLeft, ShieldAlert, GraduationCap, Building2, Briefcase, AlertTriangle, XCircle } from 'lucide-react'
+import { Loader2, ArrowLeft, ShieldAlert, GraduationCap, Building2, Briefcase, AlertTriangle, XCircle, Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { PORTAL_META, isValidPortal } from '@/lib/auth/portalMeta'
 import type { Portal } from '@/lib/auth/portalMeta'
@@ -64,7 +64,7 @@ function getErrorContent(error: string | null, correct: string | null) {
   if (error === 'auth_failed' || error === 'no_portal_context') {
     return {
       icon: <XCircle size={16} className="flex-shrink-0" />,
-      message: "We're having trouble connecting. Please try again.",
+      message: "We&apos;re having trouble connecting. Please try again.",
       action: null,
     }
   }
@@ -82,24 +82,29 @@ function getErrorContent(error: string | null, correct: string | null) {
 function PortalLoginContent({ portal }: { portal: Portal }) {
   const meta         = PORTAL_META[portal]
   const searchParams = useSearchParams()
+  const router       = useRouter()
   const errorParam   = searchParams.get('error')
   const correctParam = searchParams.get('correct')
-  const [loading, setLoading] = useState(false)
+
+  const [googleLoading, setGoogleLoading] = useState(false)
+  const [emailLoading, setEmailLoading] = useState(false)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
+
+  // Email/password form state
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   const errorContent = getErrorContent(errorParam, correctParam) ??
                        (runtimeError ? { icon: <XCircle size={16} />, message: runtimeError, action: null } : null)
 
   const IconComponent = PortalIcon[meta.icon]
 
+  // ── Google OAuth ──────────────────────────────────────────────────────────
   const handleGoogleLogin = async () => {
-    setLoading(true)
+    setGoogleLoading(true)
     setRuntimeError(null)
 
-    // IMPORTANT: Supabase reserves the OAuth `state` parameter internally for
-    // PKCE/CSRF protection — it cannot be used for custom data.
-    // The correct approach is to embed the portal type in the redirectTo URL
-    // as a query param. The callback reads it from there.
     const callbackUrl = `${window.location.origin}/auth/callback?portal=${portal}`
 
     const { error } = await supabase.auth.signInWithOAuth({
@@ -115,10 +120,48 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
 
     if (error) {
       setRuntimeError(error.message)
-      setLoading(false)
+      setGoogleLoading(false)
     }
-    // If no error: browser redirects to Google — loading spinner stays on
   }
+
+  // ── Email/Password Login ─────────────────────────────────────────────────
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!email || !password) { setRuntimeError('Please fill in all fields.'); return }
+    setEmailLoading(true)
+    setRuntimeError(null)
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+
+    if (error) {
+      setRuntimeError(error.message)
+      setEmailLoading(false)
+      return
+    }
+
+    if (data.user) {
+      // Check profile role for this user
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .single()
+
+      if (profile?.role && profile.role !== portal) {
+        // Wrong portal — sign out and redirect
+        await supabase.auth.signOut()
+        router.push(`/login/${portal}?error=wrong_portal&correct=${profile.role}`)
+        return
+      }
+
+      // Correct portal or first login — go to dashboard
+      router.push(`/dashboard/${profile?.role ?? portal}`)
+    }
+
+    setEmailLoading(false)
+  }
+
+  const isLoading = googleLoading || emailLoading
 
   return (
     <div
@@ -162,7 +205,7 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
           }}
         >
           {/* Portal icon + heading */}
-          <div className="mb-8">
+          <div className="mb-6">
             <div
               className="w-14 h-14 rounded-2xl flex items-center justify-center mb-5"
               style={{ background: `rgba(${meta.accentRgb}, 0.12)`, border: `1px solid rgba(${meta.accentRgb}, 0.2)` }}
@@ -211,22 +254,22 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
             </motion.div>
           )}
 
-          {/* Google login button */}
+          {/* ── Google OAuth Button ── */}
           <button
             onClick={handleGoogleLogin}
-            disabled={loading}
-            className="w-full h-13 rounded-xl text-sm font-semibold flex items-center justify-center gap-3 transition-all disabled:opacity-60 hover:translate-y-[-1px] active:scale-[0.98]"
+            disabled={isLoading}
+            className="w-full rounded-xl text-sm font-semibold flex items-center justify-center gap-3 transition-all disabled:opacity-60 hover:translate-y-[-1px] active:scale-[0.98]"
             style={{
-              height: '52px',
-              background: loading
+              height: '48px',
+              background: googleLoading
                 ? `rgba(${meta.accentRgb}, 0.2)`
                 : `rgba(${meta.accentRgb}, 0.15)`,
               border: `1px solid rgba(${meta.accentRgb}, 0.35)`,
               color: '#fff',
-              boxShadow: loading ? 'none' : `0 4px 24px rgba(${meta.accentRgb}, 0.15)`,
+              boxShadow: googleLoading ? 'none' : `0 4px 24px rgba(${meta.accentRgb}, 0.15)`,
             }}
           >
-            {loading ? (
+            {googleLoading ? (
               <>
                 <Loader2 size={18} className="animate-spin" />
                 <span>Connecting to Google…</span>
@@ -239,13 +282,110 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
             )}
           </button>
 
-          {/* Or divider + use different account hint if wrong portal */}
+          {/* ── Divider ── */}
+          <div className="flex items-center gap-3 my-5">
+            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
+            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>or continue with email</span>
+            <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
+          </div>
+
+          {/* ── Email/Password Login Form ── */}
+          <form onSubmit={handleEmailLogin} className="space-y-3">
+            {/* Email */}
+            <div className="relative">
+              <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'rgba(255,255,255,0.25)' }} />
+              <input
+                type="email"
+                placeholder="Email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
+                className="w-full h-[46px] pl-10 pr-4 rounded-xl text-sm text-white placeholder:text-white/25 outline-none transition-all focus:ring-1 disabled:opacity-50"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                }}
+                onFocus={(e) => { e.target.style.borderColor = `rgba(${meta.accentRgb}, 0.5)`; e.target.style.boxShadow = `0 0 0 3px rgba(${meta.accentRgb}, 0.08)` }}
+                onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none' }}
+              />
+            </div>
+
+            {/* Password */}
+            <div className="relative">
+              <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'rgba(255,255,255,0.25)' }} />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isLoading}
+                className="w-full h-[46px] pl-10 pr-11 rounded-xl text-sm text-white placeholder:text-white/25 outline-none transition-all focus:ring-1 disabled:opacity-50"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                }}
+                onFocus={(e) => { e.target.style.borderColor = `rgba(${meta.accentRgb}, 0.5)`; e.target.style.boxShadow = `0 0 0 3px rgba(${meta.accentRgb}, 0.08)` }}
+                onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2"
+                style={{ color: 'rgba(255,255,255,0.3)' }}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+
+            {/* Login button */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full rounded-xl text-sm font-semibold flex items-center justify-center gap-2.5 transition-all disabled:opacity-60 hover:translate-y-[-1px] active:scale-[0.98]"
+              style={{
+                height: '46px',
+                background: emailLoading ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: '#fff',
+              }}
+            >
+              {emailLoading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Signing in…</span>
+                </>
+              ) : (
+                <span>Sign In</span>
+              )}
+            </button>
+          </form>
+
+          {/* ── Sign up + Forgot password links ── */}
+          <div className="flex items-center justify-between mt-4">
+            <Link
+              href={`/register?portal=${portal}`}
+              className="text-xs font-medium transition-colors hover:underline"
+              style={{ color: `rgba(${meta.accentRgb}, 0.8)` }}
+            >
+              Don&apos;t have an account? Sign up
+            </Link>
+            <Link
+              href="/forgot-password"
+              className="text-xs transition-colors hover:underline"
+              style={{ color: 'rgba(255,255,255,0.3)' }}
+            >
+              Forgot password?
+            </Link>
+          </div>
+
+          {/* Use different account hint if wrong portal */}
           {errorParam === 'wrong_portal' && (
             <p className="text-center text-xs mt-4" style={{ color: 'rgba(255,255,255,0.3)' }}>
               or{' '}
               <button
                 onClick={handleGoogleLogin}
-                disabled={loading}
+                disabled={isLoading}
                 className="underline"
                 style={{ color: 'rgba(255,255,255,0.5)' }}
               >
@@ -284,11 +424,9 @@ export default function PortalLoginPage({
 }: {
   params: { portal: string }
 }) {
-  // Validate the portal slug. If invalid, show student portal as fallback.
   const portal: Portal = isValidPortal(params.portal) ? params.portal : 'student'
 
   return (
-    // useSearchParams requires Suspense boundary in Next.js App Router
     <Suspense
       fallback={
         <div className="min-h-screen bg-[#080a19] flex items-center justify-center">
