@@ -2,21 +2,17 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { createBrowserClient } from '@supabase/ssr'
+import { supabase } from '@/lib/supabase'
 
 /**
- * Auth Callback Page (CLIENT COMPONENT)
+ * Auth Callback Page — Implicit Flow
  *
- * WHY CLIENT-SIDE instead of a server Route Handler?
- * ─────────────────────────────────────────────────
- * The PKCE flow stores a `code_verifier` in the BROWSER's cookies when
- * signInWithOAuth() is called. A server Route Handler uses request.cookies
- * which should have the same cookies, but in practice, Vercel Edge/Node
- * environments sometimes fail to forward them correctly, causing:
- *    "PKCE code verifier not found in storage"
+ * With implicit flow, the access_token comes in the URL hash fragment
+ * (e.g., #access_token=...&refresh_token=...).
  *
- * By using a client component, the SAME browser client that stored the
- * code_verifier also reads it — eliminating the cross-boundary issue entirely.
+ * The Supabase browser client automatically detects the hash and sets
+ * the session. We just need to wait for onAuthStateChange to fire
+ * and then handle profile creation + redirect.
  */
 
 function AuthCallbackInner() {
@@ -25,162 +21,199 @@ function AuthCallbackInner() {
   const [status, setStatus] = useState('Completing sign in…')
 
   useEffect(() => {
-    const handleCallback = async () => {
-      const code = searchParams.get('code')
-      const portal = searchParams.get('portal') || 'student'
+    // Get portal from the query param (appended by our signInWithOAuth redirectTo)
+    const portal = searchParams.get('portal') || 'student'
+    const validPortals = ['student', 'university', 'company', 'admin']
+    const safePortal = validPortals.includes(portal) ? portal : 'student'
 
-      // Validate portal
-      const validPortals = ['student', 'university', 'company', 'admin']
-      const safePortal = validPortals.includes(portal) ? portal : 'student'
+    // Listen for the session to be set from the URL hash
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          const user = session.user
 
-      if (!code) {
-        router.replace(`/login/${safePortal}?error=no_code`)
-        return
-      }
+          try {
+            // ── Admin gate ────────────────────────────────────────────
+            if (safePortal === 'admin') {
+              setStatus('Checking admin access…')
+              const { data: wl } = await supabase
+                .from('admin_whitelist')
+                .select('email')
+                .eq('email', user.email)
+                .maybeSingle()
 
-      setStatus('Verifying your identity…')
+              if (!wl) {
+                setStatus('Not authorized — signing out…')
+                await supabase.auth.signOut()
+                router.replace('/login/admin?error=not_authorized')
+                return
+              }
+            }
 
-      // ── Create browser client (same context as signInWithOAuth) ──────────
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      )
+            // ── Check for existing profile ────────────────────────────
+            setStatus('Setting up your account…')
+            const { data: existingProfile } = await supabase
+              .from('profiles')
+              .select('id, role')
+              .eq('id', user.id)
+              .maybeSingle()
 
-      // ── Exchange PKCE code for session ──────────────────────────────────
-      // This reads the code_verifier from the BROWSER's cookies — guaranteed
-      // to find it because the same client stored it.
-      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+            if (existingProfile) {
+              // RETURNING USER → update last login metadata
+              await supabase
+                .from('profiles')
+                .update({
+                  last_login_at: new Date().toISOString(),
+                  last_login_portal: safePortal,
+                })
+                .eq('id', user.id)
 
-      if (exchangeError) {
-        console.error('[Auth Callback] Code exchange failed:', exchangeError.message)
-        router.replace(`/login/${safePortal}?error=${encodeURIComponent(exchangeError.message)}`)
-        return
-      }
+              setStatus(`Redirecting to ${existingProfile.role} dashboard…`)
+              router.replace(`/dashboard/${existingProfile.role}`)
+              return
+            }
 
-      setStatus('Setting up your account…')
+            // ── NEW USER → create profile ─────────────────────────────
+            const { error: insertError } = await supabase
+              .from('profiles')
+              .insert({
+                id: user.id,
+                email: user.email,
+                full_name:
+                  user.user_metadata?.full_name ??
+                  user.user_metadata?.name ??
+                  '',
+                avatar_url:
+                  user.user_metadata?.avatar_url ??
+                  user.user_metadata?.picture ??
+                  '',
+                role: safePortal,
+                login_portal: safePortal,
+                last_login_at: new Date().toISOString(),
+                last_login_portal: safePortal,
+                is_active: true,
+              })
 
-      // ── Get the authenticated user ──────────────────────────────────────
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
+            if (insertError) {
+              console.error(
+                '[Auth Callback] Profile insert failed:',
+                insertError.message
+              )
+              // Race condition: trigger might have created it
+              const { data: retryProfile } = await supabase
+                .from('profiles')
+                .select('id, role')
+                .eq('id', user.id)
+                .maybeSingle()
 
-      if (userError || !user) {
-        console.error('[Auth Callback] getUser failed:', userError?.message)
-        router.replace(`/login/${safePortal}?error=auth_failed`)
-        return
-      }
+              if (retryProfile) {
+                router.replace(`/dashboard/${retryProfile.role}`)
+                return
+              }
+            }
 
-      // ── Admin gate ──────────────────────────────────────────────────────
-      if (safePortal === 'admin') {
-        const { data: wl } = await supabase
-          .from('admin_whitelist')
-          .select('email')
-          .eq('email', user.email)
-          .maybeSingle()
+            // Create student record if needed
+            if (safePortal === 'student') {
+              await supabase
+                .from('students')
+                .upsert(
+                  {
+                    id: user.id,
+                    profile_is_public: false,
+                    profile_views: 0,
+                  },
+                  { onConflict: 'id' }
+                )
+                .then(() => {
+                  /* ignore errors */
+                })
+            }
 
-        if (!wl) {
-          setStatus('Not authorized — signing out…')
-          await supabase.auth.signOut()
-          router.replace('/login/admin?error=not_authorized')
-          return
+            setStatus(`Welcome! Redirecting…`)
+            router.replace(`/dashboard/${safePortal}`)
+          } catch (err) {
+            console.error('[Auth Callback] Unexpected error:', err)
+            router.replace(`/login/${safePortal}?error=unexpected_error`)
+          }
         }
       }
+    )
 
-      // ── Check for existing profile ──────────────────────────────────────
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id, role')
-        .eq('id', user.id)
-        .maybeSingle()
+    // Also handle the case where the session was already set (e.g., page was
+    // refreshed or event already fired before the listener was registered)
+    const checkExistingSession = async () => {
+      // Small delay to let onAuthStateChange fire first from hash
+      await new Promise(r => setTimeout(r, 1000))
 
-      if (existingProfile) {
-        // RETURNING USER → update last login metadata
-        await supabase
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        // Session exists — check if we already have a profile
+        const { data: profile } = await supabase
           .from('profiles')
-          .update({
-            last_login_at: new Date().toISOString(),
-            last_login_portal: safePortal,
-          })
-          .eq('id', user.id)
-
-        setStatus(`Redirecting to ${existingProfile.role} dashboard…`)
-        router.replace(`/dashboard/${existingProfile.role}`)
-        return
-      }
-
-      // ── NEW USER → create profile with portal role ──────────────────────
-      const { error: insertError } = await supabase.from('profiles').insert({
-        id: user.id,
-        email: user.email,
-        full_name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? '',
-        avatar_url: user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? '',
-        role: safePortal,
-        login_portal: safePortal,
-        last_login_at: new Date().toISOString(),
-        last_login_portal: safePortal,
-        is_active: true,
-      })
-
-      if (insertError) {
-        console.error('[Auth Callback] Profile insert failed:', insertError.message)
-        // Don't fail — the trigger might have created it. Try reading again.
-        const { data: retryProfile } = await supabase
-          .from('profiles')
-          .select('id, role')
+          .select('role')
           .eq('id', user.id)
           .maybeSingle()
 
-        if (retryProfile) {
-          router.replace(`/dashboard/${retryProfile.role}`)
-          return
+        if (profile) {
+          router.replace(`/dashboard/${profile.role}`)
+        } else {
+          // New user without profile — the onAuthStateChange handler
+          // should have handled this, but just in case
+          router.replace(`/dashboard/${safePortal}`)
         }
-
-        // Last resort: redirect to portal dashboard anyway
-        router.replace(`/dashboard/${safePortal}`)
-        return
+      } else {
+        // No session at all — something went wrong
+        // Wait a bit more for the hash to be processed
+        await new Promise(r => setTimeout(r, 2000))
+        const { data: { user: retryUser } } = await supabase.auth.getUser()
+        if (!retryUser) {
+          router.replace(`/login/${safePortal}?error=no_session`)
+        }
       }
-
-      // Create student record if needed
-      if (safePortal === 'student') {
-        await supabase.from('students').upsert(
-          { id: user.id, profile_is_public: false, profile_views: 0 },
-          { onConflict: 'id' }
-        ).then(() => {/* ignore errors */})
-      }
-
-      setStatus(`Welcome! Redirecting to ${safePortal} dashboard…`)
-      router.replace(`/dashboard/${safePortal}`)
     }
 
-    handleCallback()
+    checkExistingSession()
+
+    return () => {
+      subscription.unsubscribe()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'linear-gradient(135deg, #0f0c29 0%, #1a1145 50%, #0f0c29 100%)',
-      color: '#ffffff',
-      fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
-    }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background:
+          'linear-gradient(135deg, #0f0c29 0%, #1a1145 50%, #0f0c29 100%)',
+        color: '#ffffff',
+        fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+      }}
+    >
       {/* Spinner */}
-      <div style={{
-        width: 48,
-        height: 48,
-        border: '3px solid rgba(139, 92, 246, 0.3)',
-        borderTopColor: '#8b5cf6',
-        borderRadius: '50%',
-        animation: 'spin 0.8s linear infinite',
-        marginBottom: 24,
-      }} />
-      <p style={{
-        fontSize: 18,
-        fontWeight: 500,
-        opacity: 0.9,
-        margin: 0,
-      }}>
+      <div
+        style={{
+          width: 48,
+          height: 48,
+          border: '3px solid rgba(139, 92, 246, 0.3)',
+          borderTopColor: '#8b5cf6',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+          marginBottom: 24,
+        }}
+      />
+      <p
+        style={{
+          fontSize: 18,
+          fontWeight: 500,
+          opacity: 0.9,
+          margin: 0,
+        }}
+      >
         {status}
       </p>
       <style>{`
@@ -192,21 +225,25 @@ function AuthCallbackInner() {
   )
 }
 
-// Wrap in Suspense because useSearchParams() requires it in Next.js 14+
 export default function AuthCallbackPage() {
   return (
-    <Suspense fallback={
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'linear-gradient(135deg, #0f0c29 0%, #1a1145 50%, #0f0c29 100%)',
-        color: '#ffffff',
-      }}>
-        <p>Loading…</p>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div
+          style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background:
+              'linear-gradient(135deg, #0f0c29 0%, #1a1145 50%, #0f0c29 100%)',
+            color: '#ffffff',
+          }}
+        >
+          <p>Loading…</p>
+        </div>
+      }
+    >
       <AuthCallbackInner />
     </Suspense>
   )
