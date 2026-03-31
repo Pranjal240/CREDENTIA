@@ -132,7 +132,13 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
     setGoogleLoading(true)
     setRuntimeError(null)
 
-    const callbackUrl = `${window.location.origin}/auth/callback?portal=${portal}`
+    // Store portal type in a cookie BEFORE starting OAuth.
+    // The callback route will read this cookie to know which portal
+    // the user logged in from. This is bulletproof — even if Supabase
+    // strips query params from the redirect URL.
+    document.cookie = `login_portal=${portal}; path=/; max-age=600; SameSite=Lax`
+
+    const callbackUrl = `${window.location.origin}/auth/callback`
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',

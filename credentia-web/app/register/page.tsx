@@ -29,10 +29,10 @@ export default function RegisterPage() {
     setGoogleLoading(true)
     setError('')
     
-    // Pass portal context via redirectTo URL param — Supabase reserves
-    // the OAuth state param for PKCE/CSRF, so we cannot use it.
     const portal = selectedRole || 'student'
-    const callbackUrl = `${window.location.origin}/auth/callback?portal=${portal}`
+    // Store portal in cookie for the callback to read
+    document.cookie = `login_portal=${portal}; path=/; max-age=600; SameSite=Lax`
+    const callbackUrl = `${window.location.origin}/auth/callback`
 
     const { error: oauthErr } = await supabase.auth.signInWithOAuth({
       provider: 'google',

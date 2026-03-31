@@ -9,14 +9,21 @@ export async function GET(request: NextRequest) {
   const url    = new URL(request.url)
   const code   = url.searchParams.get('code')
   const error_ = url.searchParams.get('error')
-  const portal = url.searchParams.get('portal')  // e.g. "student", "company"
 
-  // ── OAuth error or no code ──────────────────────────────────────────────
+  // ── Read portal from COOKIE first (bulletproof), then query param fallback
+  const portalFromCookie = request.cookies.get('login_portal')?.value
+  const portalFromQuery  = url.searchParams.get('portal')
+  const portal = portalFromCookie || portalFromQuery || null
+
+  console.log('[callback] code:', !!code, 'portal:', portal, 'cookie:', portalFromCookie, 'query:', portalFromQuery)
+
+  // ── OAuth error or no code ─────────────────────────────────────────────
   if (error_ || !code) {
+    console.error('[callback] no code or oauth error:', error_)
     return NextResponse.redirect(new URL('/login', url.origin))
   }
 
-  // ── Cookie jar: collect cookies set during exchangeCodeForSession ───────
+  // ── Cookie jar: collect cookies for the redirect response ──────────────
   const cookieJar: { name: string; value: string; options: any }[] = []
 
   const supabase = createServerClient(
@@ -37,12 +44,15 @@ export async function GET(request: NextRequest) {
     }
   )
 
-  // ── safeRedirect: attach all cookies to the redirect response ──────────
+  // ── safeRedirect: attach cookies + clear login_portal cookie ───────────
   const safeRedirect = (path: string): NextResponse => {
     const res = NextResponse.redirect(new URL(path, url.origin))
+    // Attach all session cookies from exchangeCodeForSession
     for (const c of cookieJar) {
       res.cookies.set({ name: c.name, value: c.value, ...c.options })
     }
+    // Clear the login_portal cookie (no longer needed)
+    res.cookies.set({ name: 'login_portal', value: '', path: '/', maxAge: 0 })
     return res
   }
 
@@ -61,11 +71,12 @@ export async function GET(request: NextRequest) {
   // ── Get authenticated user ─────────────────────────────────────────────
   const { data: { user } } = await supabase.auth.getUser()
   if (!user || !user.email) {
+    console.error('[callback] no user after exchange')
     return safeRedirect('/login?error=no_user')
   }
 
   const email = user.email.toLowerCase()
-  console.log('[callback] user:', email, 'portal:', portal)
+  console.log('[callback] authenticated:', email)
 
   // ── Service-role client (bypasses RLS) ─────────────────────────────────
   const adminClient = createClient(
@@ -83,7 +94,6 @@ export async function GET(request: NextRequest) {
 
   // ── RETURNING USER ─────────────────────────────────────────────────────
   if (existingProfile) {
-    // Banned check
     if (existingProfile.is_active === false) {
       await supabase.auth.signOut()
       return safeRedirect('/?error=account_banned')
@@ -91,10 +101,7 @@ export async function GET(request: NextRequest) {
 
     const dbRole = existingProfile.role
 
-    // If their DB role is valid, ALWAYS send them to THEIR dashboard.
-    // DO NOT override based on portal. The DB role is the source of truth.
     if (dbRole && VALID_ROLES.includes(dbRole)) {
-      // Update last login timestamp
       await adminClient
         .from('profiles')
         .update({
@@ -104,32 +111,31 @@ export async function GET(request: NextRequest) {
         })
         .eq('id', user.id)
 
-      console.log('[callback] returning user:', email, '→ /dashboard/' + dbRole)
+      console.log('[callback] returning →', `/dashboard/${dbRole}`)
       return safeRedirect(`/dashboard/${dbRole}`)
     }
 
-    // DB role is invalid (e.g. "new") — fix it using the portal param
+    // Invalid role — fix using portal
     const fixedRole = (portal && VALID_ROLES.includes(portal)) ? portal : 'student'
     await adminClient
       .from('profiles')
       .update({
-        role:              fixedRole,
-        login_portal:      fixedRole,
-        last_login_at:     new Date().toISOString(),
+        role: fixedRole,
+        login_portal: fixedRole,
+        last_login_at: new Date().toISOString(),
         last_login_portal: fixedRole,
-        updated_at:        new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
       .eq('id', user.id)
 
-    console.log('[callback] fixed invalid role:', email, '→ /dashboard/' + fixedRole)
+    console.log('[callback] fixed role →', `/dashboard/${fixedRole}`)
     return safeRedirect(`/dashboard/${fixedRole}`)
   }
 
   // ── NEW USER ───────────────────────────────────────────────────────────
-  // Use the portal they signed up from. Default to student if missing.
   const newRole = (portal && VALID_ROLES.includes(portal)) ? portal : 'student'
 
-  // Admin whitelist check — only whitelisted emails can get admin role
+  // Admin whitelist check
   if (newRole === 'admin') {
     const { data: wl } = await adminClient
       .from('admin_whitelist')
@@ -143,10 +149,9 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Create profile
   await adminClient.from('profiles').insert({
     id:                user.id,
-    email:             email,
+    email,
     full_name:         user.user_metadata?.full_name ?? user.user_metadata?.name ?? '',
     avatar_url:        user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? null,
     role:              newRole,
@@ -158,17 +163,16 @@ export async function GET(request: NextRequest) {
     updated_at:        new Date().toISOString(),
   })
 
-  // Create student record if needed
   if (newRole === 'student') {
     await adminClient.from('students').upsert({
-      id:                user.id,
+      id: user.id,
       profile_is_public: false,
-      profile_views:     0,
-      created_at:        new Date().toISOString(),
-      updated_at:        new Date().toISOString(),
+      profile_views: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     }, { onConflict: 'id' })
   }
 
-  console.log('[callback] new user:', email, '→ /dashboard/' + newRole)
+  console.log('[callback] new user →', `/dashboard/${newRole}`)
   return safeRedirect(`/dashboard/${newRole}`)
 }
