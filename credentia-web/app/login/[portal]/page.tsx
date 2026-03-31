@@ -97,9 +97,9 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
   const [showPassword, setShowPassword] = useState(false)
 
   // ── Handle existing sessions ────────────────────────────────────────────
-  // If the user is already logged in on the SAME portal → redirect to dashboard.
-  // If logged in on a DIFFERENT portal → sign them out silently so they can
-  // re-authenticate on this portal with a fresh session.
+  // If the user is already logged in → redirect to their dashboard.
+  // IMPORTANT: Never sign out here! The auth callback just set session cookies.
+  // Signing out would destroy the session and cause a redirect loop.
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { setSessionReady(true); return }
@@ -110,14 +110,14 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
         .eq('id', user.id)
         .maybeSingle()
 
-      if (profile?.role === portal) {
-        // Same portal — just go to dashboard
-        router.replace(`/dashboard/${portal}`)
+      if (profile?.role) {
+        // User has a profile — send them to their dashboard
+        // (even if they're on the "wrong" login portal, just redirect)
+        router.replace(`/dashboard/${profile.role}`)
         return
       }
 
-      // Different portal or no profile — sign out so they can login fresh
-      await supabase.auth.signOut()
+      // No profile yet — let them stay on login page
       setSessionReady(true)
     })
   }, [portal, router])

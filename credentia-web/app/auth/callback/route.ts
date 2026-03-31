@@ -1,36 +1,49 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 /**
  * Auth Callback Route Handler — SERVER-SIDE PKCE code exchange.
  *
- * Flow:
- *   1. User clicks "Sign in with Google" → Supabase redirects to Google
- *   2. Google redirects back to Supabase → Supabase redirects here with ?code=xxx&portal=yyy
- *   3. This route handler exchanges the code for a session (server-side)
- *   4. Session cookies are set automatically via cookies() from next/headers
- *   5. User is redirected to /dashboard/[role]
- *
- * Why server-side? Because PKCE stores a code_verifier in a cookie.
- * The server can read this cookie and send it along with the code to Supabase.
- * Client-side pages using createBrowserClient often fail to read this cookie in production.
+ * CRITICAL FIX: We must collect cookies set by `exchangeCodeForSession` and
+ * explicitly forward them onto every `NextResponse.redirect()` we return.
+ * If we don't, the session cookies are lost during the redirect and the
+ * middleware / dashboard thinks the user is unauthenticated → redirect loop.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
-  const code = searchParams.get('code')
+  const code  = searchParams.get('code')
   const portal = searchParams.get('portal') || 'student'
   const error = searchParams.get('error')
   const errorDescription = searchParams.get('error_description')
 
-  // Determine the correct origin, respecting Vercel's x-forwarded-host
+  // Determine origin (Vercel might use x-forwarded-host)
   const forwardedHost = request.headers.get('x-forwarded-host')
   const host = request.headers.get('host')
   const protocol = request.headers.get('x-forwarded-proto') || 'https'
   const origin = forwardedHost
     ? `${protocol}://${forwardedHost}`
     : `${protocol}://${host}`
+
+  // ── Collect cookies that Supabase sets during code exchange ────────────
+  // We store them in an array and stamp them onto every redirect response.
+  const cookiesToForward: { name: string; value: string; options: CookieOptions }[] = []
+
+  /**
+   * Helper: create a redirect response that carries all session cookies.
+   */
+  function redirectWithCookies(url: string): NextResponse {
+    const response = NextResponse.redirect(url)
+    cookiesToForward.forEach(({ name, value, options }) => {
+      response.cookies.set(name, value, {
+        ...options,
+        // Ensure cookies work on the production domain
+        sameSite: 'lax',
+        secure: true,
+      })
+    })
+    return response
+  }
 
   // Handle OAuth errors from Supabase/Google
   if (error) {
@@ -43,34 +56,27 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login/${portal}?error=no_code`)
   }
 
-  // Create a Supabase server client using cookies() from next/headers.
-  // This is the official Supabase pattern for Next.js App Router.
-  // cookies().set() in Route Handlers writes directly to the response,
-  // so session cookies survive the redirect.
-  const cookieStore = cookies()
+  // Create Supabase server client. The key difference from the previous
+  // implementation: we read cookies from the REQUEST, and collect any
+  // cookies that Supabase wants to SET into `cookiesToForward`.
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll()
+          return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch {
-            // setAll can throw when called from a Server Component (read-only).
-            // In Route Handlers this won't happen, but we catch just in case.
-          }
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookiesToForward.push({ name, value, options: options ?? {} })
+          })
         },
       },
     }
   )
 
-  // ── Exchange the auth code for a session ──────────────────────────────────
+  // ── Exchange the auth code for a session ──────────────────────────────
   const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
   if (exchangeError) {
@@ -80,7 +86,7 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // ── Get the authenticated user ────────────────────────────────────────────
+  // ── Get the authenticated user ────────────────────────────────────────
   const { data: { user }, error: userError } = await supabase.auth.getUser()
 
   if (userError || !user) {
@@ -88,13 +94,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login/${portal}?error=auth_failed`)
   }
 
-  // ── Admin portal lock ─────────────────────────────────────────────────────
+  // ── Admin portal lock ─────────────────────────────────────────────────
   if (portal === 'admin' && user.email !== 'pranjalmishra2409@gmail.com') {
     await supabase.auth.signOut()
     return NextResponse.redirect(`${origin}/login/admin?error=not_authorized`)
   }
 
-  // ── Check for existing profile ────────────────────────────────────────────
+  // ── Check for existing profile ────────────────────────────────────────
   const { data: profile } = await supabase
     .from('profiles')
     .select('id, role, is_active')
@@ -107,17 +113,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login/${portal}?error=account_banned`)
   }
 
-  // Existing profile with wrong portal
+  // Existing profile with wrong portal — redirect to correct dashboard
   if (profile && profile.role !== portal) {
-    await supabase.auth.signOut()
-    return NextResponse.redirect(
-      `${origin}/login/${portal}?error=wrong_portal&correct=${profile.role}`
-    )
+    // Don't sign out — just send them to their actual dashboard
+    return redirectWithCookies(`${origin}/dashboard/${profile.role}`)
   }
 
-  // ── Create profile if new user ────────────────────────────────────────────
+  // ── Create profile if new user ────────────────────────────────────────
   if (!profile) {
-    await supabase.from('profiles').insert({
+    const { error: insertError } = await supabase.from('profiles').insert({
       id: user.id,
       email: user.email,
       full_name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? '',
@@ -127,6 +131,10 @@ export async function GET(request: NextRequest) {
       last_login_at: new Date().toISOString(),
       is_active: true,
     })
+
+    if (insertError) {
+      console.error('[Auth Callback] Profile insert failed:', insertError.message)
+    }
 
     // For students, also create the students row
     if (portal === 'student') {
@@ -143,7 +151,7 @@ export async function GET(request: NextRequest) {
       .eq('id', user.id)
   }
 
-  // ── Redirect to the correct dashboard ─────────────────────────────────────
+  // ── Redirect to the correct dashboard WITH cookies ────────────────────
   const role = profile?.role ?? portal
-  return NextResponse.redirect(`${origin}/dashboard/${role}`)
+  return redirectWithCookies(`${origin}/dashboard/${role}`)
 }
