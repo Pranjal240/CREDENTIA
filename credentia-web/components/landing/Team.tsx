@@ -9,7 +9,7 @@ const team = [
   {
     name: 'Pranjal Mishra',
     role: 'Founder & Developer',
-    img: '/team/Pranjal Mishra.png',
+    img: '/team/pranjal.png',
     bio: 'Visionary entrepreneur dedicated to building India\'s trust infrastructure for the next generation. Leading the charge to eliminate hiring fraud and empower students with verifiable credentials.',
     linkedin: '#',
     objectPosition: 'object-top',
