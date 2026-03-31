@@ -135,7 +135,9 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?portal=${portal}`,
+        redirectTo: process.env.NODE_ENV === 'development'
+          ? `http://localhost:3000/auth/callback?portal=${portal}`
+          : `https://www.credentiaonline.in/auth/callback?portal=${portal}`,
       },
     })
 
