@@ -149,7 +149,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.redirect(
     new URL(
-      `/dashboard/${portal}/onboarding`,
+      `/dashboard/${portal}`,
       request.url
     )
   )
