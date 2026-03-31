@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -89,11 +89,38 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [emailLoading, setEmailLoading] = useState(false)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
+  const [sessionReady, setSessionReady] = useState(false)
 
   // Email/password form state
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+
+  // ── Handle existing sessions ────────────────────────────────────────────
+  // If the user is already logged in on the SAME portal → redirect to dashboard.
+  // If logged in on a DIFFERENT portal → sign them out silently so they can
+  // re-authenticate on this portal with a fresh session.
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) { setSessionReady(true); return }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      if (profile?.role === portal) {
+        // Same portal — just go to dashboard
+        router.replace(`/dashboard/${portal}`)
+        return
+      }
+
+      // Different portal or no profile — sign out so they can login fresh
+      await supabase.auth.signOut()
+      setSessionReady(true)
+    })
+  }, [portal, router])
 
   const errorContent = getErrorContent(errorParam, correctParam) ??
                        (runtimeError ? { icon: <XCircle size={16} />, message: runtimeError, action: null } : null)

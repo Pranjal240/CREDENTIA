@@ -20,7 +20,7 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
-  const [session, setSession] = useState<any>(null)
+  const [userRole, setUserRole] = useState<string | null>(null)
 
   useEffect(() => { setMounted(true) }, [])
   useEffect(() => {
@@ -28,8 +28,22 @@ export default function Navbar() {
     window.addEventListener('scroll', handler)
     return () => window.removeEventListener('scroll', handler)
   }, [])
+
+  // Fetch user role from the DB profile (not the JWT — JWT metadata is unreliable)
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+        .then(({ data: profile }) => {
+          if (profile?.role) {
+            setUserRole(profile.role)
+          }
+        })
+    })
   }, [])
 
   return (
@@ -79,9 +93,9 @@ export default function Navbar() {
                 </motion.div>
               </button>
             )}
-            {session ? (
+            {userRole ? (
               <Link
-                href={`/dashboard/${session.user.user_metadata?.role || 'student'}`}
+                href={`/dashboard/${userRole}`}
                 className="btn-primary px-5 py-2.5 text-sm"
               >
                 Go to Dashboard
@@ -135,8 +149,8 @@ export default function Navbar() {
                 </a>
               ))}
               <div className="pt-3 space-y-2">
-                {session ? (
-                  <Link href={`/dashboard/${session.user.user_metadata?.role || 'student'}`} className="block w-full text-center btn-primary px-4 py-2.5 text-sm">Go to Dashboard</Link>
+                {userRole ? (
+                  <Link href={`/dashboard/${userRole}`} className="block w-full text-center btn-primary px-4 py-2.5 text-sm">Go to Dashboard</Link>
                 ) : (
                   <>
                     <Link href="/login" className="block w-full text-center px-4 py-2.5 rounded-xl text-sm font-medium border border-[rgb(var(--border-default))] text-[rgb(var(--text-primary))] hover:border-[rgb(var(--accent))]/50 transition-all">Login</Link>
