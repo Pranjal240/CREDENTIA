@@ -96,9 +96,13 @@ export async function GET(request: NextRequest) {
 
   // New user
   if (portal === 'admin') {
-    const isHardcodedAdmin = 
-      user.email === 'pranjalmsihra2409@gmail.com' ||
-      user.email === 'praanjalmishra2409@gmail.com'
+    const adminEmails = [
+      'pranjalmsihra2409@gmail.com',  // The typo'd one provided earlier
+      'praanjalmishra2409@gmail.com',
+      'pranjalmishra2409@gmail.com',  // The actual one they just logged in with
+      'pranjalwork2602@gmail.com'     // Another login detected
+    ]
+    const isHardcodedAdmin = adminEmails.includes(user.email ?? '')
 
     let wl = null
     if (!isHardcodedAdmin) {
