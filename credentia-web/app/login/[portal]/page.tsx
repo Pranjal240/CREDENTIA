@@ -398,7 +398,7 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
         {/* Back link (not shown on admin) */}
         {portal !== 'admin' && (
           <Link
-            href="/"
+            href="/login"
             className="flex items-center gap-2 mt-6 text-sm transition-colors"
             style={{ color: 'rgba(255,255,255,0.3)' }}
           >

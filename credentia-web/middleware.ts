@@ -94,12 +94,15 @@ export async function middleware(request: NextRequest) {
   }
 
   // ────────────────────────────────────────────────────────────────────────
-  // REDIRECT LOGGED-IN USERS AWAY FROM LOGIN PAGES & LANDING
+  // REDIRECT LOGGED-IN USERS AWAY FROM PORTAL LOGIN PAGES & LANDING
   // ────────────────────────────────────────────────────────────────────────
-  const isLoginPath  = pathname.startsWith('/login')
-  const isRootPath   = pathname === '/'
+  // /login (portal selection) is intentionally NOT redirected — users may
+  // want to "Back to portal selection" or choose a different portal.
+  // Only redirect from specific portal pages like /login/student etc.
+  const isPortalLoginPath = pathname.startsWith('/login/') // /login/student, /login/admin, etc.
+  const isRootPath        = pathname === '/'
 
-  if ((isLoginPath || isRootPath) && user) {
+  if ((isPortalLoginPath || isRootPath) && user) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
@@ -112,6 +115,7 @@ export async function middleware(request: NextRequest) {
       )
     }
   }
+
 
   return response
 }
