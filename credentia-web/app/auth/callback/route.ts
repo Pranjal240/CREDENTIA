@@ -29,15 +29,14 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url)
   const code             = url.searchParams.get('code')
   const oauthError       = url.searchParams.get('error')
-  const oauthErrorDesc   = url.searchParams.get('error_description')
-  const rawState         = url.searchParams.get('state') ?? ''
 
-  // ── Parse portal from state param ─────────────────────────────────────────
-  // Format: "portal:student" | "portal:university" | "portal:company" | "portal:admin"
-  const portalCandidate  = rawState.startsWith('portal:')
-    ? rawState.replace('portal:', '')
-    : null
+  // ── Parse portal from the ?portal= query param embedded in redirectTo ──────
+  // We embed the portal type in the redirectTo URL (e.g. /auth/callback?portal=student)
+  // because Supabase reserves the OAuth `state` parameter internally for
+  // PKCE/CSRF protection — passing state in queryParams breaks the auth flow.
+  const portalCandidate  = url.searchParams.get('portal')
   const portalType: Portal | null = isValidPortal(portalCandidate) ? portalCandidate : null
+
 
   // ── OAuth provider returned an error ──────────────────────────────────────
   if (oauthError) {

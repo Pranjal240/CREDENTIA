@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { Loader2, ArrowLeft, ShieldAlert, GraduationCap, Building2, Briefcase, AlertTriangle, XCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { PORTAL_META, isValidPortal, PORTAL_PATHS } from '@/lib/auth/portalMeta'
+import { PORTAL_META, isValidPortal } from '@/lib/auth/portalMeta'
 import type { Portal } from '@/lib/auth/portalMeta'
 
 // ── Portal icon map ───────────────────────────────────────────────────────────
@@ -96,17 +96,19 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
     setLoading(true)
     setRuntimeError(null)
 
-    // Pass the portal type as the OAuth state parameter.
-    // This is round-tripped through Google's servers and returned to our
-    // /auth/callback handler, so the callback knows which portal was used.
+    // IMPORTANT: Supabase reserves the OAuth `state` parameter internally for
+    // PKCE/CSRF protection — it cannot be used for custom data.
+    // The correct approach is to embed the portal type in the redirectTo URL
+    // as a query param. The callback reads it from there.
+    const callbackUrl = `${window.location.origin}/auth/callback?portal=${portal}`
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl,
         queryParams: {
           access_type: 'offline',
           prompt:      'consent',
-          state:       `portal:${portal}`,   // ← THE KEY FIX
         },
       },
     })
@@ -115,7 +117,7 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
       setRuntimeError(error.message)
       setLoading(false)
     }
-    // If no error: browser redirects to Google — loading stays true
+    // If no error: browser redirects to Google — loading spinner stays on
   }
 
   return (
