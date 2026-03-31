@@ -102,9 +102,42 @@ export async function GET(request: NextRequest) {
   if (profile) {
     const existingRole = profile.role as Portal
 
-    // Wrong portal detection — user is trying to log in via a portal that
-    // does not match their registered role. Sign them out to clear the session
-    // and redirect them to their correct portal with a descriptive error.
+    // ── ADMIN OVERRIDE ────────────────────────────────────────────────────
+    // Special case: if user is logging in via admin portal AND their email
+    // is in the admin_whitelist, upgrade their role to admin — even if they
+    // were previously registered as student/company/university.
+    // This handles the common case where the platform owner first used the
+    // app as a student for testing, then needs admin access.
+    if (portalType === 'admin' && existingRole !== 'admin') {
+      const { data: whitelistEntry } = await adminClient
+        .from('admin_whitelist')
+        .select('email')
+        .eq('email', user.email)
+        .single()
+
+      if (whitelistEntry) {
+        // Email IS whitelisted → upgrade role to admin
+        await adminClient
+          .from('profiles')
+          .update({
+            role:              'admin',
+            last_login_at:     new Date().toISOString(),
+            last_login_portal: 'admin',
+            updated_at:        new Date().toISOString(),
+          })
+          .eq('id', user.id)
+
+        return buildRedirect(request, '/dashboard/admin')
+      } else {
+        // Email is NOT whitelisted → reject
+        await supabase.auth.signOut()
+        return buildRedirect(request, '/login/admin?error=not_authorized')
+      }
+    }
+
+    // ── WRONG PORTAL DETECTION (non-admin portals) ────────────────────────
+    // User is trying to log in via a portal that doesn't match their
+    // registered role. Sign them out and redirect to the correct portal.
     if (portalType && existingRole !== portalType) {
       await supabase.auth.signOut()
       return buildRedirect(
@@ -114,7 +147,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Correct portal (or no portal context) — update last login timestamp only.
-    // Role is NEVER touched here — it is immutably set on first login.
     await adminClient
       .from('profiles')
       .update({
@@ -126,6 +158,7 @@ export async function GET(request: NextRequest) {
 
     return buildRedirect(request, `/dashboard/${existingRole}`)
   }
+
 
   // ── NEW USER (first login ever) ───────────────────────────────────────────
   // We must have a portal context to create a profile. Without it, we cannot
