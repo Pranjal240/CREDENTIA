@@ -268,7 +268,7 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
         )}
 
         <p className="text-center text-xs mt-6" style={{ color: 'rgba(255,255,255,0.18)' }}>
-          By continuing, you agree to Credentia's{' '}
+          By continuing, you agree to Credentia&apos;s{' '}
           <a href="/terms" className="underline" style={{ color: 'rgba(255,255,255,0.35)' }}>Terms</a>
           {' '}and{' '}
           <a href="/privacy" className="underline" style={{ color: 'rgba(255,255,255,0.35)' }}>Privacy Policy</a>.
