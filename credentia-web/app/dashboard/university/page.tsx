@@ -30,20 +30,42 @@ export default function UniversityDashboard() {
   const [selectedStudent, setSelectedStudent] = useState<any>(null)
 
   useEffect(() => {
-    const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      const { data } = await supabase.from('students').select('*, profiles(email), verifications(*)').eq('university_id', session.user.id).order('created_at', { ascending: false })
-      
+    let universityId = ''
+    const load = async (uid: string) => {
+      const { data } = await supabase
+        .from('students')
+        .select('*, profiles(email), verifications(*)')
+        .eq('university_id', uid)
+        .order('created_at', { ascending: false })
+
       const mappedStudents = (data || []).map((s: any) => ({
         ...s,
         email: s.profiles?.email || '',
       }))
-      
       setStudents(mappedStudents)
+    }
+
+    const init = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      universityId = session.user.id
+      await load(universityId)
       setLoading(false)
     }
-    load()
+    init()
+
+    // Realtime: update when any student links to this university
+    const channel = supabase
+      .channel('university-students-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => {
+        if (universityId) load(universityId)
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verifications' }, () => {
+        if (universityId) load(universityId)
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   // Derived data

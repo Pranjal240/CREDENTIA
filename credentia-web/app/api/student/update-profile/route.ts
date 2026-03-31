@@ -23,9 +23,10 @@ export async function POST(req: Request) {
 
     if (studentErr) throw studentErr
 
-    // Update profiles table name
+    // Update profiles table — name + linked_university_id
     const { error: profileErr } = await supabaseAdmin.from('profiles').update({
       full_name: name,
+      linked_university_id: university_id || null,
       updated_at: new Date().toISOString(),
     }).eq('id', studentId)
 

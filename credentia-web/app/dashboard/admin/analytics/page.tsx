@@ -1,36 +1,37 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { supabase } from '@/lib/supabase'
 import { motion } from 'framer-motion'
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
-import { TrendingUp, Users, Shield, FileText, CheckCircle2, AlertCircle, Clock, Building, GraduationCap } from 'lucide-react'
+import { TrendingUp, Users, Shield, FileText, CheckCircle2, AlertCircle, Clock, Building, GraduationCap, RefreshCw } from 'lucide-react'
 
 export default function AdminAnalytics() {
   const [profiles, setProfiles] = useState<any[]>([])
   const [verifications, setVerifications] = useState<any[]>([])
   const [students, setStudents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  useEffect(() => {
-    const load = async () => {
-      const [
-        { data: profs },
-        { data: verifs },
-        { data: studs }
-      ] = await Promise.all([
-        supabase.from('profiles').select('*').order('created_at', { ascending: true }),
-        supabase.from('verifications').select('*').order('created_at', { ascending: true }),
-        supabase.from('students').select('ats_score')
-      ])
-      
-      setProfiles(profs || [])
-      setVerifications(verifs || [])
-      setStudents((studs || []).filter(s => s.ats_score > 0))
+  const load = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      // Use service-role API to bypass RLS (admin-only endpoint)
+      const res = await fetch('/api/admin/analytics')
+      if (!res.ok) throw new Error(`API error: ${res.status}`)
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setProfiles(data.profiles || [])
+      setVerifications(data.verifications || [])
+      setStudents((data.students || []).filter((s: any) => s.ats_score > 0))
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
       setLoading(false)
     }
-    load()
-  }, [])
+  }
+
+  useEffect(() => { load() }, [])
 
   // Process data for charts
   const userGrowthData = useMemo(() => {
@@ -97,11 +98,26 @@ export default function AdminAnalytics() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-white">Platform Analytics</h1>
-        <p className="text-sm mt-1 text-white/40">Real-time metrics and growth overview of the Credentia platform.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-heading text-2xl font-bold text-white">Platform Analytics</h1>
+          <p className="text-sm mt-1 text-white/40">Real-time metrics and growth overview of the Credentia platform.</p>
+        </div>
+        <button
+          onClick={load}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-colors hover:bg-white/5"
+          style={{ color: 'rgba(255,255,255,0.35)', border: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <RefreshCw size={14} /> Refresh
+        </button>
       </div>
 
+      {error && (
+        <div className="rounded-xl px-4 py-3 text-sm"
+          style={{ background: 'rgba(239,68,68,0.08)', color: '#f87171', border: '1px solid rgba(239,68,68,0.15)' }}>
+          ⚠ {error}
+        </div>
+      )}
       {/* Top Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((s, i) => (

@@ -4,26 +4,54 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FileText, Shield, CreditCard, GraduationCap, Link2, TrendingUp, Eye, CheckCircle2, Clock, AlertCircle, ArrowRight, Sparkles, ExternalLink, X, Download, ChevronDown, ChevronUp } from 'lucide-react'
+import { FileText, Shield, CreditCard, GraduationCap, Link2, TrendingUp, Eye, CheckCircle2, Clock, AlertCircle, ArrowRight, Sparkles, ExternalLink, X, Download, ChevronDown, ChevronUp, Building, FolderOpen, Settings } from 'lucide-react'
 
 export default function StudentDashboard() {
   const [student, setStudent] = useState<any>(null)
   const [verifications, setVerifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedCard, setExpandedCard] = useState<string | null>(null)
+  const [universityName, setUniversityName] = useState<string | null>(null)
+  const [docCount, setDocCount] = useState(0)
+  const [userId, setUserId] = useState('')
 
   useEffect(() => {
     const load = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
       const uid = session.user.id
-      const { data: s } = await supabase.from('students').select('*').eq('id', uid).single()
-      const { data: v } = await supabase.from('verifications').select('*').eq('student_id', uid).order('updated_at', { ascending: false })
+      setUserId(uid)
+      const [{ data: s }, { data: v }, { data: docs }] = await Promise.all([
+        supabase.from('students').select('*, profiles(email, linked_university_id)').eq('id', uid).single(),
+        supabase.from('verifications').select('*').eq('student_id', uid).order('updated_at', { ascending: false }),
+        supabase.from('documents').select('id', { count: 'exact', head: true }).eq('user_id', uid),
+      ])
       setStudent(s)
       setVerifications(v || [])
+      // Fetch university name if linked
+      const uniId = s?.university_id || s?.profiles?.linked_university_id
+      if (uniId) {
+        const { data: uni } = await supabase.from('profiles').select('full_name').eq('id', uniId).single()
+        setUniversityName(uni?.full_name || null)
+      }
+      setDocCount((docs as any)?.count || 0)
       setLoading(false)
     }
     load()
+
+    // Realtime: re-fetch when verifications change
+    const channel = supabase
+      .channel('student-dashboard-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verifications' }, () => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (!session) return
+          supabase.from('verifications').select('*').eq('student_id', session.user.id).order('updated_at', { ascending: false })
+            .then(({ data: v }) => { if (v) setVerifications(v) })
+        })
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   const getStatus = (type: string) => {
@@ -164,6 +192,51 @@ export default function StudentDashboard() {
             <p className="text-[11px] mt-1 text-white/30 uppercase tracking-wider font-medium">{stat.label}</p>
           </motion.div>
         ))}
+      </div>
+
+      {/* ── My University + My Documents quick cards ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* My University */}
+        <Link href="/dashboard/student/settings"
+          className="group flex items-center gap-4 p-4 rounded-2xl transition-all hover:translate-y-[-2px]"
+          style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.08), rgba(139,92,246,0.04))', border: '1px solid rgba(99,102,241,0.15)' }}
+        >
+          <div className="w-11 h-11 rounded-xl bg-indigo-500/10 flex items-center justify-center flex-shrink-0">
+            <Building size={20} className="text-indigo-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-white/30 uppercase tracking-wider font-medium">My University</p>
+            <p className="text-sm font-semibold text-white/90 truncate mt-0.5">
+              {universityName || (
+                <span className="text-amber-400/70">Not linked — click to set up</span>
+              )}
+            </p>
+          </div>
+          {universityName ? (
+            <span className="flex items-center gap-1.5 text-[10px] text-emerald-400 flex-shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 realtime-dot" /> Active
+            </span>
+          ) : (
+            <Settings size={14} className="text-white/15 flex-shrink-0" />
+          )}
+        </Link>
+
+        {/* My Documents */}
+        <Link href="/dashboard/student/degree"
+          className="group flex items-center gap-4 p-4 rounded-2xl transition-all hover:translate-y-[-2px]"
+          style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.08), rgba(251,191,36,0.04))', border: '1px solid rgba(245,158,11,0.15)' }}
+        >
+          <div className="w-11 h-11 rounded-xl bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+            <FolderOpen size={20} className="text-amber-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-white/30 uppercase tracking-wider font-medium">My Documents</p>
+            <p className="text-sm font-semibold text-white/90 mt-0.5">
+              {docCount > 0 ? `${docCount} document${docCount !== 1 ? 's' : ''} uploaded` : 'No documents yet'}
+            </p>
+          </div>
+          <ArrowRight size={14} className="text-white/15 group-hover:text-amber-400 transition-colors flex-shrink-0" />
+        </Link>
       </div>
 
       {/* ── Verification Checklist with Expandable Details ── */}
