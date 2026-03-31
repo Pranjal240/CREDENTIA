@@ -2,96 +2,68 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const ROLE_REDIRECT: Record<string, string> = {
-  student    : '/dashboard/student',
-  university : '/dashboard/university',
-  company    : '/dashboard/company',
-  admin      : '/dashboard/admin',
-}
-
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  })
-
-  const path = request.nextUrl.pathname
-
-  // Only protect /dashboard routes
-  // Let /login/* and / pass through freely
-  if (!path.startsWith('/dashboard')) {
-    return response
-  }
+  let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name) {
-          return request.cookies.get(name)?.value
+        getAll() {
+          return request.cookies.getAll()
         },
-        set(name, value, options) {
-          request.cookies.set({ name, value, ...options })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          response.cookies.set({ name, value, ...options })
-        },
-        remove(name, options) {
-          request.cookies.set({ name, value: '', ...options })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          response.cookies.set({ name, value: '', ...options })
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          )
+          supabaseResponse = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          )
         },
       },
     }
   )
 
-  const { data: { session } } = await supabase.auth.getSession()
+  const path = request.nextUrl.pathname
 
-  // No session → kick to login/home
-  if (!session) {
+  // Only protect /dashboard — let everything else pass
+  if (!path.startsWith('/dashboard')) {
+    return supabaseResponse
+  }
+
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 
-  // Fetch role from DB
   const { data: profile } = await supabase
     .from('profiles')
     .select('role, is_active')
-    .eq('id', session.user.id)
+    .eq('id', user.id)
     .single()
 
-  if (!profile) {
+  if (!profile || profile.is_active === false) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 
-  if (profile.is_active === false) {
-    await supabase.auth.signOut()
-    return NextResponse.redirect(new URL('/?error=account_banned', request.url))
+  const ROUTES: Record<string, string> = {
+    student    : '/dashboard/student',
+    university : '/dashboard/university',
+    company    : '/dashboard/company',
+    admin      : '/dashboard/admin',
   }
 
-  // If trying to access bare /dashboard, redirect to the correct role dashboard
-  if (path === '/dashboard') {
-     const base = ROLE_REDIRECT[profile.role]
-     if (base) return NextResponse.redirect(new URL(base, request.url))
+  const correct = ROUTES[profile.role]
+  if (correct && !path.startsWith(correct)) {
+    return NextResponse.redirect(new URL(correct, request.url))
   }
 
-  const correctBase = ROLE_REDIRECT[profile.role]
-  if (correctBase && !path.startsWith(correctBase)) {
-    return NextResponse.redirect(new URL(correctBase, request.url))
-  }
-
-  return response
+  return supabaseResponse
 }
 
 export const config = {
   matcher: ['/dashboard/:path*']
-  // Only match dashboard — NOT / or /login/*
 }

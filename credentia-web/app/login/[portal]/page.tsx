@@ -132,24 +132,18 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
     setGoogleLoading(true)
     setRuntimeError(null)
 
-    // Save portal context to localStorage BEFORE redirect.
-    // The callback page (client-side) will read this back.
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('credentia_login_portal', portal)
-    }
-
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-        // DO NOT add queryParams.state — Supabase uses it for PKCE
+        redirectTo: process.env.NODE_ENV === 'development'
+          ? `http://localhost:3000/auth/callback?portal=${portal}`
+          : `https://www.credentiaonline.in/auth/callback?portal=${portal}`,
       },
     })
 
     if (error) {
       setRuntimeError(error.message)
       setGoogleLoading(false)
-      localStorage.removeItem('credentia_login_portal')
     }
   }
 

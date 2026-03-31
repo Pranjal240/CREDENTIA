@@ -30,28 +30,19 @@ export default function RegisterPage() {
     setError('')
     
     const portal = selectedRole || 'student'
-    
-    // Save portal context to localStorage BEFORE redirect
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('credentia_login_portal', portal)
-    }
-
-    const callbackUrl = `${window.location.origin}/auth/callback`
 
     const { error: oauthErr } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: callbackUrl,
-        // DO NOT add queryParams.state — let Supabase handle it
+        redirectTo: process.env.NODE_ENV === 'development'
+          ? `http://localhost:3000/auth/callback?portal=${portal}`
+          : `https://www.credentiaonline.in/auth/callback?portal=${portal}`,
       },
     })
     
     if (oauthErr) {
       setError(oauthErr.message)
       setGoogleLoading(false)
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('credentia_login_portal')
-      }
     }
   }
 
