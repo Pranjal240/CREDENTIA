@@ -1,8 +1,6 @@
-'use client'
-
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 import Navbar from '@/components/landing/Navbar'
 import Hero from '@/components/landing/Hero'
 import Stats from '@/components/landing/Stats'
@@ -13,40 +11,47 @@ import Team from '@/components/landing/Team'
 import CTA from '@/components/landing/CTA'
 import Footer from '@/components/landing/Footer'
 
-// Lightweight session check — if user is already logged in, silently redirect
-// them to their dashboard. This runs client-side so it doesn't break SSG/SSR
-// of any of the landing page sections.
-//
-// The middleware ALSO performs this check server-side on the / route, so this
-// acts as a belt-AND-suspenders approach to ensure returning users never see
-// the landing page when already authenticated.
-function SessionRedirect() {
-  const router = useRouter()
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
-        .then(({ data: profile }) => {
-          if (profile?.role) {
-            router.replace(`/dashboard/${profile.role}`)
-          }
-        })
-    })
-  }, [router])
-
-  return null
+const ROLE_REDIRECT: Record<string, string> = {
+  student    : '/dashboard/student',
+  university : '/dashboard/university',
+  company    : '/dashboard/company',
+  admin      : '/dashboard/admin',
 }
 
-export default function Home() {
+export default async function Home() {
+  const cookieStore = cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value
+        },
+      },
+    }
+  )
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (session?.user?.id) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single()
+
+      if (profile?.role && ROLE_REDIRECT[profile.role]) {
+        redirect(ROLE_REDIRECT[profile.role])
+      }
+    }
+  } catch {
+    // Session check failed — show landing page
+  }
+
   return (
     <main className="gradient-bg min-h-screen">
-      {/* Silent session check — redirects to dashboard if already logged in */}
-      <SessionRedirect />
       <Navbar />
       <Hero />
       <Stats />

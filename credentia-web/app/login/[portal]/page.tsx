@@ -132,28 +132,24 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
     setGoogleLoading(true)
     setRuntimeError(null)
 
-    // Store portal type in a cookie BEFORE starting OAuth.
-    // The callback route will read this cookie to know which portal
-    // the user logged in from. This is bulletproof — even if Supabase
-    // strips query params from the redirect URL.
-    document.cookie = `login_portal=${portal}; path=/; max-age=600; SameSite=Lax`
-
-    const callbackUrl = `${window.location.origin}/auth/callback`
+    // Save portal context to localStorage BEFORE redirect.
+    // The callback page (client-side) will read this back.
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('credentia_login_portal', portal)
+    }
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: callbackUrl,
-        queryParams: {
-          access_type: 'offline',
-          prompt:      'select_account',
-        },
+        redirectTo: `${window.location.origin}/auth/callback`,
+        // DO NOT add queryParams.state — Supabase uses it for PKCE
       },
     })
 
     if (error) {
       setRuntimeError(error.message)
       setGoogleLoading(false)
+      localStorage.removeItem('credentia_login_portal')
     }
   }
 
