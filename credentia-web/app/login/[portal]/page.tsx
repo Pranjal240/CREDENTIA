@@ -128,22 +128,33 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
   const IconComponent = PortalIcon[meta.icon]
 
   // ── Google OAuth ──────────────────────────────────────────────────────────
+  // CRITICAL: skipBrowserRedirect prevents a race condition where the browser
+  // navigates to Google BEFORE the PKCE code_verifier cookie is flushed to
+  // document.cookie. We manually redirect after a small delay.
   const handleGoogleLogin = async () => {
     setGoogleLoading(true)
     setRuntimeError(null)
 
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: process.env.NODE_ENV === 'development'
           ? `http://localhost:3000/auth/callback?portal=${portal}`
           : `https://www.credentiaonline.in/auth/callback?portal=${portal}`,
+        skipBrowserRedirect: true,
       },
     })
 
     if (error) {
       setRuntimeError(error.message)
       setGoogleLoading(false)
+      return
+    }
+
+    if (data?.url) {
+      // Wait for the code_verifier cookie to be fully written
+      await new Promise(resolve => setTimeout(resolve, 200))
+      window.location.href = data.url
     }
   }
 
