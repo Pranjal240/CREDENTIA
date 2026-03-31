@@ -18,28 +18,51 @@ const ROLE_REDIRECT: Record<string, string> = {
   admin      : '/dashboard/admin',
 }
 
-export default async function Home() {
+export default async function Home({
+  searchParams
+}: {
+  searchParams: { error?: string }
+}) {
+  // CRITICAL: If there is an error param,
+  // NEVER auto-redirect. Show landing page.
+  // This breaks the session loop.
+  if (searchParams.error) {
+    return (
+      <main className="gradient-bg min-h-screen">
+        <Navbar />
+        <Hero />
+        <Stats />
+        <Features />
+        <HowItWorks />
+        <ForCompanies />
+        <Team />
+        <CTA />
+        <Footer />
+      </main>
+    )
+  }
+
   const cookieStore = cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
+        getAll() { return cookieStore.getAll() },
+        setAll() {},
       },
     }
   )
 
   try {
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { user } } =
+      await supabase.auth.getUser()
 
-    if (session?.user?.id) {
+    if (user?.id) {
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', session.user.id)
+        .eq('id', user.id)
         .single()
 
       if (profile?.role && ROLE_REDIRECT[profile.role]) {
@@ -47,7 +70,7 @@ export default async function Home() {
       }
     }
   } catch {
-    // Session check failed — show landing page
+    // show landing
   }
 
   return (

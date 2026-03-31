@@ -4,10 +4,13 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export async function GET(request: NextRequest) {
-  const requestUrl = new URL(request.url)
-  const code = requestUrl.searchParams.get('code')
-  const portal =
-    requestUrl.searchParams.get('portal') ?? 'student'
+  const url = new URL(request.url)
+  const code = url.searchParams.get('code')
+  const portal = url.searchParams.get('portal')
+    ?? 'student'
+
+  // NO www-redirect here — it was consuming the code
+  // The redirectTo is already hardcoded to www in login page
 
   if (!code) {
     return NextResponse.redirect(
@@ -16,7 +19,6 @@ export async function GET(request: NextRequest) {
   }
 
   const cookieStore = cookies()
-
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -27,11 +29,12 @@ export async function GET(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
+            cookiesToSet.forEach(
+              ({ name, value, options }) =>
               cookieStore.set(name, value, options)
             )
           } catch {
-            // Route handler — ignore cookie set errors
+            // ignore in route handler
           }
         },
       },
@@ -42,10 +45,10 @@ export async function GET(request: NextRequest) {
     await supabase.auth.exchangeCodeForSession(code)
 
   if (exchangeError) {
-    console.error('Exchange error:', exchangeError.message)
+    console.error('EXCHANGE ERROR:', exchangeError.message)
     return NextResponse.redirect(
       new URL(
-        `/login?error=exchange_failed`,
+        `/login/${portal}?error=exchange_failed`,
         request.url
       )
     )
@@ -53,7 +56,6 @@ export async function GET(request: NextRequest) {
 
   const { data: { user } } =
     await supabase.auth.getUser()
-
   if (!user) {
     return NextResponse.redirect(
       new URL('/login?error=no_user', request.url)
@@ -102,8 +104,10 @@ export async function GET(request: NextRequest) {
     if (!wl) {
       await supabase.auth.signOut()
       return NextResponse.redirect(
-        new URL('/login/admin?error=not_authorized',
-          request.url)
+        new URL(
+          '/login/admin?error=not_authorized',
+          request.url
+        )
       )
     }
   }
@@ -131,6 +135,9 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.redirect(
-    new URL(`/dashboard/${portal}/onboarding`, request.url)
+    new URL(
+      `/dashboard/${portal}/onboarding`,
+      request.url
+    )
   )
 }
