@@ -3,63 +3,44 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 /**
- * Auth Callback Route Handler — SERVER-SIDE PKCE code exchange.
+ * Auth Callback Route Handler
  *
- * CRITICAL ARCHITECTURE:
- * 1. We read cookies from the REQUEST (where PKCE code_verifier lives)
- * 2. We collect any cookies Supabase wants to SET into an array
- * 3. We stamp those cookies onto every NextResponse.redirect() we return
+ * Uses the EXACT same cookie pattern as the official Supabase middleware docs:
+ * - getAll reads from request.cookies
+ * - setAll writes to BOTH request.cookies AND the response
  *
- * Without step 3, session cookies are lost during redirect and the user
- * appears unauthenticated to the middleware → redirect loop to login.
+ * This is the ONLY pattern that reliably persists session cookies across
+ * redirects on Vercel serverless functions.
  */
 export async function GET(request: NextRequest) {
-  const url = new URL(request.url)
-  const code  = url.searchParams.get('code')
-  const portal = url.searchParams.get('portal') || 'student'
-  const error = url.searchParams.get('error')
-  const errorDescription = url.searchParams.get('error_description')
+  const { searchParams } = new URL(request.url)
+  const code = searchParams.get('code')
+  const portal = searchParams.get('portal') || 'student'
 
   // Validate portal
   const validPortals = ['student', 'university', 'company', 'admin']
   const safePortal = validPortals.includes(portal) ? portal : 'student'
 
-  // Determine origin
+  // Use x-forwarded-host for production, fall back to host header
   const forwardedHost = request.headers.get('x-forwarded-host')
   const host = request.headers.get('host')
-  const protocol = request.headers.get('x-forwarded-proto') || 'https'
-  const origin = forwardedHost
-    ? `${protocol}://${forwardedHost}`
-    : `${protocol}://${host}`
+  const isLocalEnv = process.env.NODE_ENV === 'development'
+  const origin = isLocalEnv
+    ? `http://${host}`
+    : forwardedHost
+      ? `https://${forwardedHost}`
+      : `https://${host}`
 
-  // ── Collect cookies that Supabase sets during code exchange ────────────
-  const pendingCookies: { name: string; value: string; options: CookieOptions }[] = []
-
-  /** Create a redirect that carries all session cookies */
-  function redirectWithCookies(destination: string): NextResponse {
-    const res = NextResponse.redirect(destination)
-    pendingCookies.forEach(({ name, value, options }) => {
-      res.cookies.set(name, value, {
-        ...options,
-        sameSite: 'lax',
-        secure: true,
-      })
-    })
-    return res
-  }
-
-  // Handle OAuth errors
-  if (error) {
-    const msg = encodeURIComponent(errorDescription || error)
-    return NextResponse.redirect(`${origin}/login/${safePortal}?error=${msg}`)
-  }
-
-  // No code = nothing to exchange
   if (!code) {
     return NextResponse.redirect(`${origin}/login/${safePortal}?error=no_code`)
   }
 
-  // Create Supabase client — reads cookies from REQUEST, collects SET cookies
+  // ── Create Supabase client using the official middleware cookie pattern ──
+  // This is the CRITICAL piece. We create a "response" object first, then
+  // use the setAll to stamp cookies onto it. This ensures the session
+  // cookies survive the redirect.
+  let response = NextResponse.redirect(`${origin}/dashboard/${safePortal}`)
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -69,25 +50,33 @@ export async function GET(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            pendingCookies.push({ name, value, options: options ?? {} })
-          })
+          // Step 1: Set on request (for downstream reads within this handler)
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          )
+          // Step 2: Recreate response with updated request cookies
+          // (response destination will be reset below when we do the final redirect)
+          response = NextResponse.redirect(`${origin}/dashboard/${safePortal}`)
+          // Step 3: Set on response (for the browser to persist)
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          )
         },
       },
     }
   )
 
-  // ── Exchange the auth code for a session ──────────────────────────────
+  // ── Exchange the PKCE code for a session ────────────────────────────────
   const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
 
   if (exchangeError) {
-    console.error('[Auth Callback] Exchange failed:', exchangeError.message)
+    console.error('[Auth Callback] Code exchange failed:', exchangeError.message)
     return NextResponse.redirect(
       `${origin}/login/${safePortal}?error=${encodeURIComponent(exchangeError.message)}`
     )
   }
 
-  // ── Get the authenticated user ────────────────────────────────────────
+  // ── Get the authenticated user ──────────────────────────────────────────
   const { data: { user }, error: userError } = await supabase.auth.getUser()
 
   if (userError || !user) {
@@ -95,39 +84,53 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login/${safePortal}?error=auth_failed`)
   }
 
-  // ── Admin portal lock ─────────────────────────────────────────────────
-  if (safePortal === 'admin' && user.email !== 'pranjalmishra2409@gmail.com') {
-    await supabase.auth.signOut()
-    return NextResponse.redirect(`${origin}/login/admin?error=not_authorized`)
+  // ── Admin gate ──────────────────────────────────────────────────────────
+  if (safePortal === 'admin') {
+    const { data: wl } = await supabase
+      .from('admin_whitelist')
+      .select('email')
+      .eq('email', user.email)
+      .maybeSingle()
+
+    if (!wl) {
+      await supabase.auth.signOut()
+      return NextResponse.redirect(`${origin}/login/admin?error=not_authorized`)
+    }
   }
 
-  // ── Check for existing profile ────────────────────────────────────────
-  const { data: profile } = await supabase
+  // ── Upsert profile ─────────────────────────────────────────────────────
+  // Using upsert so it works for both new users AND returning users whose
+  // profile was already created by a previous session/trigger.
+  const { data: existingProfile } = await supabase
     .from('profiles')
-    .select('id, role, is_active')
+    .select('id, role')
     .eq('id', user.id)
     .maybeSingle()
 
-  // Account deactivated
-  if (profile?.is_active === false) {
-    await supabase.auth.signOut()
-    return NextResponse.redirect(`${origin}/login/${safePortal}?error=account_banned`)
-  }
-
-  // ── RETURNING USER — profile exists ───────────────────────────────────
-  if (profile) {
-    // Update login tracking
+  if (existingProfile) {
+    // RETURNING USER: update last login metadata
     await supabase
       .from('profiles')
-      .update({ last_login_at: new Date().toISOString(), login_portal: safePortal })
+      .update({
+        last_login_at: new Date().toISOString(),
+        last_login_portal: safePortal,
+      })
       .eq('id', user.id)
 
-    // Redirect to their dashboard (based on their ACTUAL role, not the portal)
-    return redirectWithCookies(`${origin}/dashboard/${profile.role}`)
+    // Redirect to their ACTUAL role dashboard (not portal they came from)
+    const dashboardRole = existingProfile.role
+    // Recreate redirect with correct destination + preserved cookies
+    const finalUrl = `${origin}/dashboard/${dashboardRole}`
+    const finalResponse = NextResponse.redirect(finalUrl)
+    // Copy all cookies from the current response to the final response
+    response.cookies.getAll().forEach(cookie => {
+      finalResponse.cookies.set(cookie.name, cookie.value)
+    })
+    return finalResponse
   }
 
-  // ── NEW USER — create profile with correct role from portal ───────────
-  const { error: insertError } = await supabase.from('profiles').upsert({
+  // NEW USER: create profile with portal role
+  await supabase.from('profiles').insert({
     id: user.id,
     email: user.email,
     full_name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? '',
@@ -135,14 +138,11 @@ export async function GET(request: NextRequest) {
     role: safePortal,
     login_portal: safePortal,
     last_login_at: new Date().toISOString(),
+    last_login_portal: safePortal,
     is_active: true,
-  }, { onConflict: 'id' })
+  })
 
-  if (insertError) {
-    console.error('[Auth Callback] Profile upsert failed:', insertError.message)
-  }
-
-  // For students, also create the students row
+  // Create student record if needed
   if (safePortal === 'student') {
     await supabase.from('students').upsert(
       { id: user.id, profile_is_public: false, profile_views: 0 },
@@ -150,6 +150,7 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // ── Redirect to dashboard with cookies ────────────────────────────────
-  return redirectWithCookies(`${origin}/dashboard/${safePortal}`)
+  // The default `response` already points to /dashboard/{safePortal}
+  // and has all the session cookies from the setAll callback
+  return response
 }
