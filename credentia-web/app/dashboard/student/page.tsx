@@ -60,7 +60,7 @@ export default function StudentDashboard() {
     if (v.status === 'pending' || v.status === 'needs_review') return { label: 'Pending Review', color: '#f59e0b', bgColor: 'rgba(245,158,11,0.08)', icon: Clock, ready: false, status: v.status }
     if (v.status === 'ai_approved' || v.status === 'admin_verified' || v.status === 'verified') return { label: 'Verified ✓', color: '#22c55e', bgColor: 'rgba(34,197,94,0.08)', icon: CheckCircle2, ready: true, status: v.status }
     if (v.status === 'rejected') return { label: 'Rejected', color: '#ef4444', bgColor: 'rgba(239,68,68,0.08)', icon: AlertCircle, ready: false, status: v.status }
-    return { label: v.status, color: '#ef4444', bgColor: 'rgba(239,68,68,0.08)', icon: AlertCircle, ready: false, status: v.status }
+    return { label: 'Not Submitted', color: '#ef4444', bgColor: 'rgba(239,68,68,0.08)', icon: AlertCircle, ready: false, status: v.status }
   }
 
   const getVerification = (type: string) => verifications.find(x => x.type === type)
@@ -169,10 +169,10 @@ export default function StudentDashboard() {
       {/* ── Stat Cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'ATS Score', value: student?.ats_score || '—', icon: TrendingUp, suffix: student?.ats_score ? '/100' : '', gradient: 'from-blue-600/20 to-blue-400/5', iconColor: '#60a5fa', border: 'rgba(59,130,246,0.15)' },
+          { label: 'ATS Score', value: getVerification('resume')?.ai_result?.ats_score || student?.ats_score || '—', icon: TrendingUp, suffix: getVerification('resume')?.ai_result?.ats_score || student?.ats_score ? '/100' : '', gradient: 'from-blue-600/20 to-blue-400/5', iconColor: '#60a5fa', border: 'rgba(59,130,246,0.15)' },
           { label: 'Verified', value: verifiedCount, icon: CheckCircle2, suffix: '/4', gradient: 'from-emerald-600/20 to-emerald-400/5', iconColor: '#34d399', border: 'rgba(34,197,94,0.15)' },
           { label: 'Profile Views', value: student?.profile_views || 0, icon: Eye, suffix: '', gradient: 'from-violet-600/20 to-violet-400/5', iconColor: '#a78bfa', border: 'rgba(139,92,246,0.15)' },
-          { label: 'Trust Score', value: student?.verification_score || 0, icon: Shield, suffix: '%', gradient: 'from-teal-600/20 to-teal-400/5', iconColor: '#2dd4bf', border: 'rgba(20,184,166,0.15)' },
+          { label: 'Trust Score', value: completionPct, icon: Shield, suffix: '%', gradient: 'from-teal-600/20 to-teal-400/5', iconColor: '#2dd4bf', border: 'rgba(20,184,166,0.15)' },
         ].map((stat, i) => (
           <motion.div
             key={i}

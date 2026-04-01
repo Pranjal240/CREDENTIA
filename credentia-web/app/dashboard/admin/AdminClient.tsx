@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Users, Shield, CheckCircle2, AlertCircle, Clock, Search, Filter, ChevronDown, ChevronUp, Eye, X, TrendingUp, FileText, CreditCard, GraduationCap, ToggleLeft, ToggleRight, Building, Briefcase, ExternalLink, BarChart3 } from 'lucide-react'
+import { Users, Shield, CheckCircle2, AlertCircle, Clock, Search, Filter, ChevronDown, ChevronUp, Eye, X, TrendingUp, FileText, CreditCard, GraduationCap, ToggleLeft, ToggleRight, Building, Briefcase, ExternalLink, BarChart3, Edit2, Save } from 'lucide-react'
 
 type Props = {
   profiles: any[]
@@ -21,6 +21,54 @@ export default function AdminClient({ profiles, students, verifications, recentA
   const [localStudents, setLocalStudents] = useState(students)
   const [localVerifications, setLocalVerifications] = useState(verifications)
   const [activeTab, setActiveTab] = useState<'overview' | 'students' | 'queue'>('overview')
+  const [isEditingStudent, setIsEditingStudent] = useState(false)
+  const [editForm, setEditForm] = useState({ name: '', course: '' })
+
+  const openStudentModal = (student: any) => {
+    setSelectedStudent(student)
+    setEditForm({ name: student.fullName || '', course: student.course || '' })
+    setIsEditingStudent(false)
+  }
+
+  const handleEditStudent = async () => {
+    if (!selectedStudent) return
+    setActionLoading(prev => ({ ...prev, studentEdit: true }))
+    try {
+      const res = await fetch('/api/admin/update-student', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: selectedStudent.id, name: editForm.name, course: editForm.course, adminId: currentUserId })
+      })
+      if (res.ok) {
+        setLocalStudents(prev => prev.map(s => s.id === selectedStudent.id ? { ...s, name: editForm.name, course: editForm.course } : s))
+        // also update the modal's selectedStudent to reflect changes
+        setSelectedStudent({ ...selectedStudent, fullName: editForm.name, name: editForm.name, course: editForm.course })
+        setIsEditingStudent(false)
+      }
+    } catch {}
+    setActionLoading(prev => ({ ...prev, studentEdit: false }))
+  }
+
+  const handleUpdateVerification = async (verificationId: string, status: string) => {
+    setActionLoading(prev => ({ ...prev, [`v-edit-${verificationId}`]: true }))
+    try {
+      const res = await fetch('/api/admin/update-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verificationId, status, adminId: currentUserId })
+      })
+      if (res.ok) {
+        setLocalVerifications(prev => prev.map(v => v.id === verificationId ? { ...v, status } : v))
+        if (selectedStudent) {
+          setSelectedStudent((prev: any) => ({
+            ...prev,
+            verifications: (prev.verifications || []).map((v: any) => v.id === verificationId ? { ...v, status } : v)
+          }))
+        }
+      }
+    } catch {}
+    setActionLoading(prev => ({ ...prev, [`v-edit-${verificationId}`]: false }))
+  }
 
   // Stats
   const totalUsers = profiles.length
@@ -36,7 +84,27 @@ export default function AdminClient({ profiles, students, verifications, recentA
     return localStudents.map(s => {
       const prof = profiles.find(p => p.id === s.id)
       const vList = localVerifications.filter(v => v.student_id === s.id)
-      return { ...s, email: prof?.email || s.email, fullName: prof?.full_name || s.name || prof?.email?.split('@')[0] || 'Unknown', verifications: vList }
+      const resumeVerif = vList.find((v: any) => v.type === 'resume')
+      const degreeVerif = vList.find((v: any) => v.type === 'degree')
+      const aiResult = resumeVerif?.ai_result || {}
+      const degreeResult = degreeVerif?.ai_result || {}
+      
+      return { 
+        ...s, 
+        email: prof?.email || s.email, 
+        fullName: prof?.full_name || s.name || prof?.email?.split('@')[0] || 'Unknown', 
+        verifications: vList,
+        ats_score: aiResult.ats_score || s.ats_score || 0,
+        course: degreeResult.course || aiResult.course || s.course || '',
+        branch: degreeResult.branch || aiResult.branch || s.branch || '',
+        cgpa: degreeResult.grade_cgpa || aiResult.cgpa || s.cgpa || '',
+        graduation_year: degreeResult.year_of_passing || aiResult.graduation_year || s.graduation_year || '',
+        city: aiResult.city || s.city || '',
+        state: aiResult.state || s.state || '',
+        degree_verified: vList.some((v: any) => v.type === 'degree' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+        police_verified: vList.some((v: any) => v.type === 'police' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+        aadhaar_verified: vList.some((v: any) => v.type === 'aadhaar' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+      }
     })
   }, [localStudents, profiles, localVerifications])
 
@@ -107,8 +175,8 @@ export default function AdminClient({ profiles, students, verifications, recentA
     <div className="max-w-7xl mx-auto space-y-8">
       {/* Header */}
       <div>
-        <h1 className="font-heading text-3xl font-bold text-white mb-1">Admin Control Panel</h1>
-        <p className="text-sm text-white/40">Complete oversight of the Credentia platform.</p>
+        <h1 className="font-heading text-3xl font-bold text-white mb-1">Total Platform Analytics</h1>
+        <p className="text-sm text-white/40">Complete oversight of all users and verifications across the entire Credentia platform.</p>
       </div>
 
       {/* Stats Grid */}
@@ -147,7 +215,7 @@ export default function AdminClient({ profiles, students, verifications, recentA
         <div className="space-y-6">
           {/* Verification breakdown */}
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
-            <h3 className="font-heading font-bold text-sm text-white mb-4">Verification Breakdown</h3>
+            <h3 className="font-heading font-bold text-sm text-white mb-4">Total System Verifications Breakdown</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {['resume', 'police', 'aadhaar', 'degree'].map(type => {
                 const typeV = verifications.filter(v => v.type === type)
@@ -245,7 +313,7 @@ export default function AdminClient({ profiles, students, verifications, recentA
                         </button>
                       </td>
                       <td className="px-5 py-3">
-                        <button onClick={() => setSelectedStudent(s)} className="text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-lg hover:bg-blue-500/20 transition-colors">Details</button>
+                        <button onClick={() => openStudentModal(s)} className="text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-lg hover:bg-blue-500/20 transition-colors">Details</button>
                       </td>
                     </tr>
                   ))}
@@ -312,15 +380,50 @@ export default function AdminClient({ profiles, students, verifications, recentA
       {selectedStudent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} onClick={() => setSelectedStudent(null)}>
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#0e0e14] p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500/20 to-violet-500/20 border border-blue-500/30 flex items-center justify-center text-blue-300 font-bold text-lg">{(selectedStudent.fullName || 'U')[0].toUpperCase()}</div>
-                <div><p className="font-heading font-bold text-white">{selectedStudent.fullName}</p><p className="text-xs text-white/40">{selectedStudent.email}</p></div>
+            <div className="flex items-start justify-between mb-6 border-b border-white/10 pb-4">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-500/20 to-violet-500/20 border border-blue-500/30 flex items-center justify-center text-blue-300 font-bold text-xl">{(selectedStudent.fullName || 'U')[0].toUpperCase()}</div>
+                <div>
+                  {isEditingStudent ? (
+                    <div className="space-y-2">
+                      <input 
+                        type="text" 
+                        value={editForm.name} 
+                        onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                        className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-white text-sm focus:outline-none focus:border-blue-500 w-full"
+                        placeholder="Student Name"
+                      />
+                      <input 
+                        type="text" 
+                        value={editForm.course} 
+                        onChange={e => setEditForm(prev => ({ ...prev, course: e.target.value }))}
+                        className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-white text-sm focus:outline-none focus:border-blue-500 w-full"
+                        placeholder="Course/Specialization"
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <p className="font-heading font-bold text-xl text-white">{selectedStudent.fullName}</p>
+                      <p className="text-sm text-white/40">{selectedStudent.email}</p>
+                    </>
+                  )}
+                </div>
               </div>
-              <button onClick={() => setSelectedStudent(null)} className="p-2 rounded-lg hover:bg-white/5 text-white/30"><X size={20} /></button>
+              <div className="flex items-center gap-2">
+                {isEditingStudent ? (
+                  <button onClick={handleEditStudent} disabled={actionLoading.studentEdit} className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 disabled:opacity-50">
+                    {actionLoading.studentEdit ? <div className="w-5 h-5 border-2 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin" /> : <Save size={20} />}
+                  </button>
+                ) : (
+                  <button onClick={() => setIsEditingStudent(true)} className="p-2 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20">
+                    <Edit2 size={20} />
+                  </button>
+                )}
+                <button onClick={() => setSelectedStudent(null)} className="p-2 rounded-lg hover:bg-white/5 text-white/30"><X size={20} /></button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 mb-5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
               {[
                 { l: 'Course', v: selectedStudent.course },
                 { l: 'CGPA', v: selectedStudent.cgpa },
@@ -331,28 +434,46 @@ export default function AdminClient({ profiles, students, verifications, recentA
               ].map((d, i) => (
                 <div key={i} className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
                   <p className="text-[9px] text-white/25 uppercase mb-0.5">{d.l}</p>
-                  <p className="text-sm text-white/80">{d.v || '—'}</p>
+                  <p className="text-sm font-medium text-white/80">{d.v || '—'}</p>
                 </div>
               ))}
             </div>
 
-            <h4 className="text-xs font-bold text-white/40 uppercase tracking-wider mb-3">All Verifications</h4>
-            <div className="space-y-2">
+            <h4 className="text-xs font-bold text-white/40 uppercase tracking-wider mb-3">Verifications Control</h4>
+            <div className="space-y-3">
               {(selectedStudent.verifications || []).length === 0 ? (
-                <p className="text-sm text-white/30">No verifications found.</p>
+                <p className="text-sm text-white/30 bg-white/[0.02] p-4 rounded-xl text-center border border-white/5">No verifications found.</p>
               ) : (
                 selectedStudent.verifications.map((v: any, i: number) => {
                   const badge = getStatusBadge(v.status)
+                  const isLoading = actionLoading[`v-edit-${v.id}`]
                   return (
-                    <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/5">
+                    <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/5">
                       <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm text-white/70 font-medium capitalize">{v.type}</p>
-                          <span className="px-2 py-0.5 rounded text-[9px] font-bold" style={{ background: badge.bg, color: badge.color }}>{badge.label}</span>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-sm text-white/90 font-bold capitalize">{v.type}</p>
+                          <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider" style={{ background: badge.bg, color: badge.color }}>{badge.label}</span>
                         </div>
-                        <p className="text-[10px] text-white/30 mt-0.5">Confidence: {v.ai_confidence}% • Updated: {new Date(v.updated_at).toLocaleDateString('en-IN')}</p>
+                        <p className="text-xs text-white/40">Confidence: <span className="text-white/70 font-medium">{v.ai_confidence}%</span> • {new Date(v.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                        {v.document_url && <a href={v.document_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors mt-2"><ExternalLink size={12} /> View Document</a>}
                       </div>
-                      {v.document_url && <a href={v.document_url} target="_blank" rel="noreferrer" className="text-xs text-blue-400"><ExternalLink size={14} /></a>}
+
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={v.status}
+                          onChange={(e) => handleUpdateVerification(v.id, e.target.value)}
+                          disabled={isLoading}
+                          className="bg-white/5 border border-white/10 text-white/70 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="needs_review">Review</option>
+                          <option value="verified">Verified</option>
+                          <option value="ai_approved">AI Approved</option>
+                          <option value="admin_verified">Admin OK</option>
+                          <option value="rejected">Rejected</option>
+                        </select>
+                        {isLoading && <div className="w-4 h-4 border-2 border-white/20 border-t-blue-500 rounded-full animate-spin flex-shrink-0" />}
+                      </div>
                     </div>
                   )
                 })

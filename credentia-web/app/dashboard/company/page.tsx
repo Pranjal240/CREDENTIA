@@ -5,6 +5,12 @@ import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, Filter, ChevronDown, ChevronUp, Users, Shield, GraduationCap, CreditCard, FileText, TrendingUp, Eye, X, Bookmark, BookmarkCheck, Mail, ExternalLink, CheckCircle2, LayoutGrid, List, ChevronLeft, ChevronRight, Briefcase, Building, Download } from 'lucide-react'
 
+const calculateTrustScore = (verifications: any[]) => {
+  if (!verifications || !verifications.length) return 0
+  const verifiedCount = verifications.filter((v: any) => ['ai_approved', 'admin_verified', 'verified'].includes(v.status)).length
+  return Math.round((verifiedCount / 4) * 100)
+}
+
 export default function CompanyDashboard() {
   const [students, setStudents] = useState<any[]>([])
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
@@ -42,13 +48,42 @@ export default function CompanyDashboard() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
       setUserId(session.user.id)
-      const { data } = await supabase.from('students').select('*, profiles(email)').eq('profile_is_public', true).order('ats_score', { ascending: false })
-      
-      const mappedStudents = (data || []).map((s: any) => ({
-        ...s,
-        email: s.profiles?.email || '',
-      }))
-      
+
+      // Fetch students with profile_is_public = true
+      // Use student's own name/email as primary (populated on registration)
+      // Fall back to profiles join for older records
+      const { data, error } = await supabase
+        .from('students')
+        .select('*, profiles(email, full_name), verifications(*)')
+        .eq('profile_is_public', true)
+        .order('ats_score', { ascending: false })
+
+      if (error) console.error('[Company] students query error:', error.message)
+
+      const mappedStudents = (data || []).map((s: any) => {
+        const resumeVerif = s.verifications?.find((v: any) => v.type === 'resume')
+        const degreeVerif = s.verifications?.find((v: any) => v.type === 'degree')
+        const aiResult = resumeVerif?.ai_result || {}
+        const degreeResult = degreeVerif?.ai_result || {}
+
+        return {
+          ...s,
+          name: s.name || s.profiles?.full_name || 'Unknown',
+          email: s.email || s.profiles?.email || '',
+          verification_score: calculateTrustScore(s.verifications || []),
+          ats_score: aiResult.ats_score || s.ats_score || 0,
+          course: degreeResult.course || aiResult.course || s.course || '',
+          branch: degreeResult.branch || aiResult.branch || s.branch || '',
+          cgpa: degreeResult.grade_cgpa || aiResult.cgpa || s.cgpa || '',
+          graduation_year: degreeResult.year_of_passing || aiResult.graduation_year || s.graduation_year || '',
+          city: aiResult.city || s.city || '',
+          state: aiResult.state || s.state || '',
+          degree_verified: s.verifications?.some((v: any) => v.type === 'degree' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+          police_verified: s.verifications?.some((v: any) => v.type === 'police' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+          aadhaar_verified: s.verifications?.some((v: any) => v.type === 'aadhaar' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+        }
+      })
+
       setStudents(mappedStudents)
       const { data: saved } = await supabase.from('saved_candidates').select('student_id').eq('company_id', session.user.id)
       if (saved) setSavedIds(new Set(saved.map((s: any) => s.student_id)))

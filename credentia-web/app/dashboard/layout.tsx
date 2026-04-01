@@ -6,11 +6,12 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useTheme } from 'next-themes'
 import {
   LayoutDashboard, FileText, Shield, CreditCard, GraduationCap, Link2,
   ChevronLeft, ChevronRight, LogOut, Menu, X, Home, Users, Settings,
   BookmarkCheck, BarChart3, ClipboardList, Building2, Briefcase,
-  ScrollText, Search
+  ScrollText, Search, Sun, Moon
 } from 'lucide-react'
 
 const sidebarLinks: Record<string, { label: string; icon: any; href: string }[]> = {
@@ -62,16 +63,31 @@ const roleColors: Record<string, { bg: string; text: string; border: string }> =
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [role, setRole] = useState<string>('student')
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [isDesktop, setIsDesktop] = useState(true)
+
+  // Avoid hydration mismatch for theme toggle
+  useEffect(() => { setMounted(true) }, [])
 
   // Sidebar width values — used in JS for the main margin, NOT transition-all
   const SIDEBAR_OPEN = 260
   const SIDEBAR_CLOSED = 72
+
+  // Track viewport for sidebar margin — mobile has NO margin
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    setIsDesktop(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
 
   useEffect(() => {
     const init = async () => {
@@ -99,10 +115,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0A0A0F]">
+      <div className="min-h-screen flex items-center justify-center bg-base transition-colors">
         <div className="flex flex-col items-center gap-3">
           <div className="w-10 h-10 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
-          <span className="text-xs text-white/30 font-medium tracking-wider">LOADING</span>
+          <span className="text-xs text-text-muted font-medium tracking-wider">LOADING</span>
         </div>
       </div>
     )
@@ -128,20 +144,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           width: sidebarWidth,
           transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           willChange: 'width',
-          background: 'linear-gradient(180deg, rgba(14,17,40,0.98) 0%, rgba(8,10,25,1) 100%)',
-          borderRight: '1px solid rgba(255,255,255,0.06)',
+          background: 'var(--c-sidebar-bg)',
+          borderRight: '1px solid rgba(var(--border-default), 0.3)',
         }}
       >
         {/* Logo */}
         <div
           className="h-16 flex items-center px-4 gap-2.5 flex-shrink-0 overflow-hidden"
-          style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+          style={{ borderBottom: '1px solid rgba(var(--border-default), 0.3)' }}
         >
-          <div className="relative w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-white/10">
+          <div className="relative w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-border">
             <Image src="/logo.png" alt="C" fill className="object-contain p-0.5" />
           </div>
           <span
-            className="font-heading text-sm font-bold tracking-wide text-white whitespace-nowrap overflow-hidden"
+            className="font-heading text-sm font-bold tracking-wide text-text-primary whitespace-nowrap overflow-hidden"
             style={{
               opacity: collapsed ? 0 : 1,
               transform: collapsed ? 'translateX(-8px)' : 'translateX(0)',
@@ -174,8 +190,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 href={link.href}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium group relative overflow-hidden whitespace-nowrap"
                 style={{
-                  color: active ? 'white' : 'rgba(255,255,255,0.45)',
-                  background: active ? 'rgba(59,130,246,0.15)' : 'transparent',
+                  color: active ? 'rgb(var(--text-primary))' : 'rgb(var(--text-muted))',
+                  background: active ? 'rgba(var(--accent-rgb), 0.15)' : 'transparent',
                   transition: 'background 0.15s ease, color 0.15s ease',
                 }}
                 title={collapsed ? link.label : undefined}
@@ -208,7 +224,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
 
         {/* Bottom actions */}
-        <div className="p-3 space-y-1 flex-shrink-0 overflow-hidden" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="p-3 space-y-1 flex-shrink-0 overflow-hidden" style={{ borderTop: '1px solid rgba(var(--border-default), 0.3)' }}>
           {profile && (
             <div
               className="px-3 py-2 mb-2 overflow-hidden"
@@ -218,14 +234,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 transition: 'opacity 0.2s ease, max-height 0.3s ease',
               }}
             >
-              <p className="text-[11px] text-white/30 uppercase tracking-wider font-medium">Signed in as</p>
-              <p className="text-xs text-white/70 font-medium truncate mt-0.5">{profile.full_name || user?.email?.split('@')[0]}</p>
+              <p className="text-[11px] text-text-muted uppercase tracking-wider font-medium">Signed in as</p>
+              <p className="text-xs text-text-primary font-medium truncate mt-0.5">{profile.full_name || user?.email?.split('@')[0]}</p>
             </div>
           )}
+          {/* Theme toggle */}
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors hover:bg-black/5 dark:hover:bg-white/5 overflow-hidden text-text-muted"
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {mounted && (theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />)}
+            <span
+              style={{
+                opacity: collapsed ? 0 : 1,
+                maxWidth: collapsed ? 0 : 120,
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                transition: 'opacity 0.2s ease, max-width 0.3s ease',
+              }}
+            >
+              {mounted && (theme === 'dark' ? 'Switch to Light' : 'Switch to Dark')}
+            </span>
+          </button>
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors hover:bg-white/5 overflow-hidden"
-            style={{ color: 'rgba(255,255,255,0.35)' }}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors hover:bg-black/5 dark:hover:bg-white/5 overflow-hidden text-text-muted"
           >
             {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
             <span
@@ -265,18 +299,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div
         className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-between px-4"
         style={{
-          background: 'rgba(10,10,15,0.97)',
+          background: 'var(--c-mobile-header-bg)',
           backdropFilter: 'blur(20px)',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          borderBottom: '1px solid rgba(var(--border-default), 0.3)',
         }}
       >
-        <button onClick={() => setMobileOpen(true)} className="p-1.5 text-white/50 hover:text-white/80 transition-colors">
+        <button onClick={() => setMobileOpen(true)} className="p-1.5 text-text-muted hover:text-text-primary transition-colors">
           <Menu size={20} />
         </button>
-        <span className="font-heading font-bold text-xs tracking-widest text-white/80">CREDENTIA</span>
-        <button onClick={handleLogout} className="p-1.5 text-red-400/60 hover:text-red-400 transition-colors">
-          <LogOut size={18} />
-        </button>
+        <span className="font-heading font-bold text-xs tracking-widest text-text-primary">CREDENTIA</span>
+        <div className="flex items-center gap-2">
+          {mounted && (
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="p-1.5 text-text-muted hover:text-text-primary transition-colors"
+              title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            >
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+          )}
+          <button onClick={handleLogout} className="p-1.5 text-red-500/80 hover:text-red-600 transition-colors">
+            <LogOut size={18} />
+          </button>
+        </div>
       </div>
 
       {/* ── Mobile Sidebar ── */}
@@ -299,27 +344,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               transition={{ type: 'tween', duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
               className="fixed left-0 top-0 bottom-0 w-[260px] z-50 md:hidden flex flex-col"
               style={{
-                background: 'linear-gradient(180deg, rgba(14,17,40,0.99) 0%, rgba(8,10,25,1) 100%)',
-                borderRight: '1px solid rgba(255,255,255,0.08)',
+                background: 'var(--c-sidebar-bg)',
+                borderRight: '1px solid rgba(var(--border-default), 0.3)',
                 willChange: 'transform',
               }}
             >
-              <div className="h-14 flex items-center justify-between px-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="h-14 flex items-center justify-between px-4" style={{ borderBottom: '1px solid rgba(var(--border-default), 0.3)' }}>
                 <div className="flex items-center gap-2.5">
-                  <div className="relative w-7 h-7 rounded-full overflow-hidden ring-1 ring-white/10">
+                  <div className="relative w-7 h-7 rounded-full overflow-hidden ring-1 ring-border">
                     <Image src="/logo.png" alt="C" fill className="object-contain" />
                   </div>
-                  <span className="font-heading font-bold text-sm text-white tracking-wide">CREDENTIA</span>
+                  <span className="font-heading font-bold text-sm text-text-primary tracking-wide">CREDENTIA</span>
                 </div>
-                <button onClick={() => setMobileOpen(false)} className="text-white/40 hover:text-white/80 transition-colors p-1">
+                <button onClick={() => setMobileOpen(false)} className="text-text-muted hover:text-text-primary transition-colors p-1">
                   <X size={20} />
                 </button>
               </div>
 
               {/* Role badge */}
-              <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                <p className="text-[10px] text-white/25 uppercase tracking-wider">Signed in as</p>
-                <p className="text-xs text-white/70 font-medium mt-0.5 truncate">{profile?.full_name || user?.email?.split('@')[0] || 'User'}</p>
+              <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(var(--border-default), 0.2)' }}>
+                <p className="text-[10px] text-text-muted uppercase tracking-wider">Signed in as</p>
+                <p className="text-xs text-text-primary font-medium mt-0.5 truncate">{profile?.full_name || user?.email?.split('@')[0] || 'User'}</p>
                 <span
                   className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
                   style={{ background: rc.bg, color: rc.text, border: `1px solid ${rc.border}` }}
@@ -337,8 +382,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       href={link.href}
                       className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors relative"
                       style={{
-                        color: active ? 'white' : 'rgba(255,255,255,0.45)',
-                        background: active ? 'rgba(59,130,246,0.15)' : 'transparent',
+                        color: active ? 'rgb(var(--text-primary))' : 'rgb(var(--text-muted))',
+                        background: active ? 'rgba(var(--accent-rgb), 0.15)' : 'transparent',
                       }}
                     >
                       {active && (
@@ -365,7 +410,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <main
         className="flex-1 overflow-x-hidden mt-14 md:mt-0 min-w-0"
         style={{
-          marginLeft: `${sidebarWidth}px`,
+          marginLeft: isDesktop ? `${sidebarWidth}px` : 0,
           transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           willChange: 'margin-left',
         }}
@@ -374,14 +419,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div
           className="hidden md:flex items-center justify-between h-14 px-6 sticky top-0 z-30"
           style={{
-            background: 'rgba(8,10,25,0.92)',
+            background: 'var(--c-topbar-bg)',
             backdropFilter: 'blur(20px)',
-            borderBottom: '1px solid rgba(255,255,255,0.04)',
+            borderBottom: '1px solid rgba(var(--border-default), 0.3)',
           }}
         >
           <div className="flex items-center gap-2">
-            <span className="text-xs text-white/30">Welcome,</span>
-            <span className="font-heading font-semibold text-sm text-white/80">
+            <span className="text-xs text-text-muted">Welcome,</span>
+            <span className="font-heading font-semibold text-sm text-text-primary">
               {profile?.full_name || user?.email?.split('@')[0] || 'User'}
             </span>
           </div>
