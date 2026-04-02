@@ -1,8 +1,10 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Users, Shield, CheckCircle2, AlertCircle, Clock, Search, Filter, ChevronDown, ChevronUp, Eye, X, TrendingUp, FileText, CreditCard, GraduationCap, ToggleLeft, ToggleRight, Building, Briefcase, ExternalLink, BarChart3, Edit2, Save } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 
 type Props = {
   profiles: any[]
@@ -23,6 +25,21 @@ export default function AdminClient({ profiles, students, verifications, recentA
   const [activeTab, setActiveTab] = useState<'overview' | 'students' | 'queue'>('overview')
   const [isEditingStudent, setIsEditingStudent] = useState(false)
   const [editForm, setEditForm] = useState({ name: '', course: '' })
+  const router = useRouter()
+
+  useEffect(() => {
+    setLocalStudents(students)
+    setLocalVerifications(verifications)
+  }, [students, verifications])
+
+  useEffect(() => {
+    const channel = supabase.channel('admin_dashboard_rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verifications' }, () => router.refresh())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => router.refresh())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => router.refresh())
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [router])
 
   const openStudentModal = (student: any) => {
     setSelectedStudent(student)
@@ -279,8 +296,15 @@ export default function AdminClient({ profiles, students, verifications, recentA
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {filteredStudents.map(s => (
-                    <tr key={s.id} className="hover:bg-white/[0.02] transition-colors">
+                  <AnimatePresence>
+                  {filteredStudents.map((s, i) => (
+                    <motion.tr key={s.id} 
+                      initial={{ opacity: 0, x: -10 }} 
+                      animate={{ opacity: 1, x: 0 }} 
+                      exit={{ opacity: 0, x: -10 }}
+                      transition={{ delay: Math.min(i * 0.02, 0.2) }}
+                      className="hover:bg-white/[0.02] transition-colors"
+                    >
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/20 to-violet-500/20 border border-blue-500/20 flex items-center justify-center text-blue-300 font-bold text-xs">{(s.fullName || 'U')[0].toUpperCase()}</div>
@@ -315,8 +339,9 @@ export default function AdminClient({ profiles, students, verifications, recentA
                       <td className="px-5 py-3">
                         <button onClick={() => openStudentModal(s)} className="text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-lg hover:bg-blue-500/20 transition-colors">Details</button>
                       </td>
-                    </tr>
+                    </motion.tr>
                   ))}
+                  </AnimatePresence>
                 </tbody>
               </table>
             </div>
@@ -337,6 +362,7 @@ export default function AdminClient({ profiles, students, verifications, recentA
             </div>
           ) : (
             <div className="space-y-3">
+              <AnimatePresence>
               {pendingQueue.map((v, i) => {
                 const badge = getStatusBadge(v.status)
                 const typeLabels: Record<string, string> = { resume: 'Resume', police: 'Police', aadhaar: 'Aadhaar', degree: 'Degree', marksheet_10th: '10th Marksheet', marksheet_12th: '12th Marksheet', passport: 'Other Credential', pan: 'PAN Card' }
@@ -371,6 +397,7 @@ export default function AdminClient({ profiles, students, verifications, recentA
                   </motion.div>
                 )
               })}
+              </AnimatePresence>
             </div>
           )}
         </div>
