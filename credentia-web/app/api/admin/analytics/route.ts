@@ -32,7 +32,7 @@ export async function GET() {
       { data: students },
     ] = await Promise.all([
       supabaseAdmin.from('profiles').select('id, role, created_at').order('created_at', { ascending: true }),
-      supabaseAdmin.from('verifications').select('id, type, status, ai_confidence, created_at').order('created_at', { ascending: true }),
+      supabaseAdmin.from('verifications').select('id, student_id, type, status, ai_confidence, ai_result, created_at').order('created_at', { ascending: true }),
       supabaseAdmin.from('students').select('id, ats_score, cgpa, trust_score, degree_verified, police_verified, aadhaar_verified, created_at').order('created_at', { ascending: true }),
     ])
 

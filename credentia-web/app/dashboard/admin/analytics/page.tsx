@@ -45,6 +45,14 @@ export default function AdminAnalytics() {
   }, [])
 
   // Derived metrics
+  const computedStudents = useMemo(() => {
+    return allStudents.map(s => {
+      const resumeVer = verifications.filter(v => v.student_id === s.id && v.type === 'resume').pop()
+      const ats = resumeVer?.ai_result?.ats_score || s.ats_score || 0
+      return { ...s, ats_score: ats }
+    })
+  }, [allStudents, verifications])
+
   const userGrowthData = useMemo(() => {
     const counts: Record<string, number> = {}
     let cumulative = 0
@@ -120,13 +128,13 @@ export default function AdminAnalytics() {
     return Object.entries(b).map(([range, count]) => ({ range, count }))
   }
 
-  const trustScoreDistribution = useMemo(() => mkBuckets(allStudents, 'trust_score'), [allStudents])
-  const atsDistribution = useMemo(() => mkBuckets(students, 'ats_score'), [students])
+  const trustScoreDistribution = useMemo(() => mkBuckets(computedStudents, 'trust_score'), [computedStudents])
+  const atsDistribution = useMemo(() => mkBuckets(computedStudents, 'ats_score'), [computedStudents])
 
-  const avgTrustScore = allStudents.length ? Math.round(allStudents.reduce((a, s) => a + (s.trust_score || 0), 0) / allStudents.length) : 0
+  const avgTrustScore = computedStudents.length ? Math.round(computedStudents.reduce((a, s) => a + (s.trust_score || 0), 0) / computedStudents.length) : 0
   
   // Calculate Avg ATS Score filtering only valid positive scores, but at least showing 0
-  const validATS = students.filter(s => s.ats_score > 0)
+  const validATS = computedStudents.filter(s => s.ats_score > 0)
   const avgAtsScore = validATS.length ? Math.round(validATS.reduce((a, s) => a + (s.ats_score || 0), 0) / validATS.length) : 0
 
   const stats = [
@@ -227,45 +235,48 @@ export default function AdminAnalytics() {
         </motion.div>
 
         {/* Roles Distribution (Pie) */}
-        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="rounded-2xl p-6 border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }} className="rounded-2xl p-6 border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
           <h2 className="text-sm font-bold text-white mb-2 flex items-center gap-2"><Users size={16} className="text-emerald-400" /> Global User Distribution</h2>
           <div className="h-[290px] relative">
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart margin={{ top: 0, bottom: 20 }}>
+              <PieChart margin={{ top: -20, bottom: 40 }}>
                 <Pie 
                   data={roleDistribution} 
                   dataKey="value" 
                   nameKey="name" 
-                  cx="50%" cy="45%" 
-                  innerRadius={65} outerRadius={85} 
-                  paddingAngle={6}
+                  cx="50%" cy="40%" 
+                  innerRadius={55} outerRadius={75} 
+                  paddingAngle={8}
                   stroke="none"
+                  isAnimationActive={true}
+                  animationBegin={200}
                   animationDuration={1500}
+                  animationEasing="ease-out"
                 >
-                  {roleDistribution.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                  {roleDistribution.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} style={{ outline: 'none' }} />)}
                 </Pie>
                 <RechartsTooltip content={<CustomTooltip />} />
               </PieChart>
             </ResponsiveContainer>
             
             {/* Custom Legend */}
-            <div className="absolute bottom-1 w-full grid grid-cols-2 gap-x-2 gap-y-3 px-2">
-              {roleDistribution.map(r => (
-                 <div key={r.name} className="flex items-center gap-2 bg-white/[0.02] border border-white/5 p-2 rounded-lg">
-                   <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color, boxShadow: `0 0 8px ${r.color}80` }} />
+            <div className="absolute bottom-0 w-full grid grid-cols-2 gap-x-3 gap-y-3 px-1">
+              {roleDistribution.map((r, i) => (
+                 <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.8 + (i * 0.1) }} key={r.name} className="flex items-center gap-2 bg-white/[0.02] border border-white/5 p-2 rounded-lg">
+                   <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: r.color, boxShadow: `0 0 10px ${r.color}80` }} />
                    <div>
-                     <p className="text-[9px] uppercase font-bold text-white/40 leading-none mb-0.5">{r.name}</p>
-                     <p className="text-xs font-bold text-white leading-none">{r.value}</p>
+                     <p className="text-[10px] uppercase font-bold text-white/40 leading-none mb-1">{r.name}</p>
+                     <p className="text-sm font-black text-white leading-none">{r.value}</p>
                    </div>
-                 </div>
+                 </motion.div>
               ))}
             </div>
             
             {/* Center Label */}
-            <div className="absolute top-[45%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }} className="absolute top-[39%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
                <p className="text-3xl font-black text-white leading-none">{profiles.length}</p>
                <p className="text-[9px] uppercase tracking-widest font-bold text-white/30 mt-1">Users</p>
-            </div>
+            </motion.div>
           </div>
         </motion.div>
       </div>
