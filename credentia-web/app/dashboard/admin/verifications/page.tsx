@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { motion } from 'framer-motion'
-import { Shield, Search, FileText, CreditCard, GraduationCap, CheckCircle2, Clock, AlertCircle, X, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Shield, Search, FileText, CreditCard, GraduationCap, CheckCircle2, Clock, AlertCircle, X, ExternalLink, ChevronLeft, ChevronRight, BookOpen, Paperclip, BarChart3 } from 'lucide-react'
 
 export default function AdminVerifications() {
   const [verifications, setVerifications] = useState<any[]>([])
@@ -28,6 +28,14 @@ export default function AdminVerifications() {
       setLoading(false)
     }
     load()
+
+    // Realtime — auto-refresh on any verification change
+    const channel = supabase.channel('admin_verif_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verifications' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => load())
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   const enriched = useMemo(() => {
@@ -55,6 +63,7 @@ export default function AdminVerifications() {
   const handleAction = async (vId: string, action: 'approve' | 'reject') => {
     setActionLoading(prev => ({ ...prev, [vId]: true }))
     try {
+      // Update the verification status
       const res = await fetch('/api/admin/police-action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -63,6 +72,24 @@ export default function AdminVerifications() {
       if (res.ok) {
         const newStatus = action === 'approve' ? 'admin_verified' : 'rejected'
         setVerifications(prev => prev.map(v => v.id === vId ? { ...v, status: newStatus } : v))
+
+        // Trigger trust score recalculation via save-verification for approvals
+        if (action === 'approve') {
+          const verifRecord = verifications.find(v => v.id === vId)
+          if (verifRecord) {
+            await fetch('/api/save-verification', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                studentId: verifRecord.student_id,
+                type: verifRecord.type,
+                analysis: verifRecord.ai_result || {},
+                fileUrl: verifRecord.document_url || '',
+                status: 'admin_verified',
+              })
+            })
+          }
+        }
       }
     } catch {}
     setActionLoading(prev => ({ ...prev, [vId]: false }))
@@ -77,7 +104,14 @@ export default function AdminVerifications() {
     rejected: { c: '#ef4444', bg: 'rgba(239,68,68,0.08)', l: 'Rejected' },
   }
 
-  const typeIcons: Record<string, any> = { resume: FileText, police: Shield, aadhaar: CreditCard, degree: GraduationCap }
+  const typeIcons: Record<string, any> = { resume: FileText, police: Shield, aadhaar: CreditCard, degree: GraduationCap, marksheet_10th: BookOpen, marksheet_12th: BookOpen, passport: Paperclip }
+  const typeLabels: Record<string, string> = { resume: 'Resume', police: 'Police', aadhaar: 'Aadhaar', degree: 'Degree', marksheet_10th: '10th Marksheet', marksheet_12th: '12th Marksheet', passport: 'Other Credential' }
+
+  // Stat counts
+  const totalCount = verifications.length
+  const verifiedCountAdmin = verifications.filter(v => ['ai_approved', 'admin_verified', 'verified'].includes(v.status)).length
+  const pendingCount = verifications.filter(v => ['pending', 'needs_review'].includes(v.status)).length
+  const rejectedCount = verifications.filter(v => v.status === 'rejected').length
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" /></div>
 
@@ -86,6 +120,24 @@ export default function AdminVerifications() {
       <div>
         <h1 className="font-heading text-2xl font-bold text-white">All Verifications</h1>
         <p className="text-sm text-white/40 mt-1">Manage every verification record across the platform. Total: {verifications.length}</p>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Total Records', value: totalCount, icon: BarChart3, color: '#3b82f6', bg: 'rgba(59,130,246,0.08)' },
+          { label: 'Verified', value: verifiedCountAdmin, icon: CheckCircle2, color: '#22c55e', bg: 'rgba(34,197,94,0.08)' },
+          { label: 'Pending Review', value: pendingCount, icon: Clock, color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
+          { label: 'Rejected', value: rejectedCount, icon: AlertCircle, color: '#ef4444', bg: 'rgba(239,68,68,0.08)' },
+        ].map((s, i) => (
+          <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+            className="rounded-xl p-4 border border-white/5" style={{ background: s.bg }}
+          >
+            <s.icon size={16} style={{ color: s.color }} className="mb-2" />
+            <p className="font-heading text-xl font-bold text-white">{s.value}</p>
+            <p className="text-[9px] text-white/30 uppercase tracking-wider mt-0.5">{s.label}</p>
+          </motion.div>
+        ))}
       </div>
 
       {/* Filters */}
@@ -100,6 +152,9 @@ export default function AdminVerifications() {
           <option value="police">Police</option>
           <option value="aadhaar">Aadhaar</option>
           <option value="degree">Degree</option>
+          <option value="marksheet_10th">10th Marksheet</option>
+          <option value="marksheet_12th">12th Marksheet</option>
+          <option value="passport">Other Credential</option>
         </select>
         <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1) }} className="h-11 px-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white/70 focus:outline-none">
           <option value="all">All Status</option>
@@ -128,7 +183,7 @@ export default function AdminVerifications() {
                 return (
                   <tr key={v.id} className="hover:bg-white/[0.02] transition-colors">
                     <td className="px-4 py-3"><p className="text-xs text-white/80 font-medium">{v.studentName}</p><p className="text-[10px] text-white/30">{v.studentEmail}</p></td>
-                    <td className="px-4 py-3"><span className="flex items-center gap-1.5 text-xs text-white/60"><Icon size={14} /> <span className="capitalize">{v.type}</span></span></td>
+                    <td className="px-4 py-3"><span className="flex items-center gap-1.5 text-xs text-white/60"><Icon size={14} /> <span>{typeLabels[v.type] || v.type}</span></span></td>
                     <td className="px-4 py-3"><span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase" style={{ background: sc.bg, color: sc.c }}>{sc.l}</span></td>
                     <td className="px-4 py-3 text-xs text-white/50">{v.ai_confidence}%</td>
                     <td className="px-4 py-3">{v.document_url ? <a href={v.document_url} target="_blank" rel="noreferrer" className="text-blue-400 text-xs flex items-center gap-1"><ExternalLink size={12} /> View</a> : <span className="text-white/20 text-xs">—</span>}</td>

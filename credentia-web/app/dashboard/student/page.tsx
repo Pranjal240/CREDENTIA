@@ -39,7 +39,7 @@ export default function StudentDashboard() {
     }
     load()
 
-    // Realtime: re-fetch when verifications change
+    // Realtime: re-fetch when verifications OR student row changes
     const channel = supabase
       .channel('student-dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'verifications' }, () => {
@@ -47,6 +47,13 @@ export default function StudentDashboard() {
           if (!session) return
           supabase.from('verifications').select('*').eq('student_id', session.user.id).order('updated_at', { ascending: false })
             .then(({ data: v }) => { if (v) setVerifications(v) })
+        })
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'students' }, () => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (!session) return
+          supabase.from('students').select('*, profiles(email, linked_university_id)').eq('id', session.user.id).single()
+            .then(({ data: s }) => { if (s) setStudent(s) })
         })
       })
       .subscribe()
@@ -66,7 +73,8 @@ export default function StudentDashboard() {
   const getVerification = (type: string) => verifications.find(x => x.type === type)
 
   const verifiedCount = verifications.filter(v => ['ai_approved', 'admin_verified', 'verified'].includes(v.status)).length
-  const completionPct = Math.round((verifiedCount / 4) * 100)
+  const totalDocs = verifications.length
+  const trustScore = student?.trust_score ?? 0
 
   const tasks = [
     { type: 'resume', label: 'Resume Analysis', desc: 'Get your ATS score with AI-powered analysis', icon: FileText, href: '/dashboard/student/resume', accent: '#3b82f6', gradient: 'from-blue-600/20 to-blue-400/5' },
@@ -157,12 +165,12 @@ export default function StudentDashboard() {
         <div className="bg-white/[0.03] border border-white/10 rounded-xl p-4 w-full sm:w-72">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-white/50">Profile Completion</span>
-            <span className="text-xs font-bold text-emerald-400">{completionPct}%</span>
+            <span className="text-xs font-bold text-emerald-400">{trustScore}%</span>
           </div>
           <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
-            <motion.div initial={{ width: 0 }} animate={{ width: `${completionPct}%` }} transition={{ duration: 1, ease: 'easeOut' }} className="h-full bg-gradient-to-r from-blue-500 to-emerald-400 rounded-full" />
+            <motion.div initial={{ width: 0 }} animate={{ width: `${trustScore}%` }} transition={{ duration: 1, ease: 'easeOut' }} className="h-full bg-gradient-to-r from-blue-500 to-emerald-400 rounded-full" />
           </div>
-          <p className="text-[10px] text-white/25 mt-1.5">{verifiedCount}/4 documents verified</p>
+          <p className="text-[10px] text-white/25 mt-1.5">{verifiedCount} document{verifiedCount !== 1 ? 's' : ''} verified{totalDocs > verifiedCount ? ` · ${totalDocs - verifiedCount} pending` : ''}</p>
         </div>
       </div>
 
@@ -170,9 +178,9 @@ export default function StudentDashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: 'ATS Score', value: getVerification('resume')?.ai_result?.ats_score || student?.ats_score || '—', icon: TrendingUp, suffix: getVerification('resume')?.ai_result?.ats_score || student?.ats_score ? '/100' : '', gradient: 'from-blue-600/20 to-blue-400/5', iconColor: '#60a5fa', border: 'rgba(59,130,246,0.15)' },
-          { label: 'Verified', value: verifiedCount, icon: CheckCircle2, suffix: '/4', gradient: 'from-emerald-600/20 to-emerald-400/5', iconColor: '#34d399', border: 'rgba(34,197,94,0.15)' },
+          { label: 'Verified', value: verifiedCount, icon: CheckCircle2, suffix: ` doc${verifiedCount !== 1 ? 's' : ''}`, gradient: 'from-emerald-600/20 to-emerald-400/5', iconColor: '#34d399', border: 'rgba(34,197,94,0.15)' },
           { label: 'Profile Views', value: student?.profile_views || 0, icon: Eye, suffix: '', gradient: 'from-violet-600/20 to-violet-400/5', iconColor: '#a78bfa', border: 'rgba(139,92,246,0.15)' },
-          { label: 'Trust Score', value: completionPct, icon: Shield, suffix: '%', gradient: 'from-teal-600/20 to-teal-400/5', iconColor: '#2dd4bf', border: 'rgba(20,184,166,0.15)' },
+          { label: 'Trust Score', value: trustScore, icon: Shield, suffix: '%', gradient: 'from-teal-600/20 to-teal-400/5', iconColor: '#2dd4bf', border: 'rgba(20,184,166,0.15)' },
         ].map((stat, i) => (
           <motion.div
             key={i}
@@ -382,7 +390,7 @@ export default function StudentDashboard() {
                   </div>
                   <div className="flex-1">
                     <p className="font-medium text-sm text-white/90">
-                      {v.type === 'resume' ? 'Resume Analysis' : v.type === 'police' ? 'Police Verification' : v.type === 'aadhaar' ? 'Aadhaar Identity' : 'Degree Verification'}
+                      {v.type === 'resume' ? 'Resume Analysis' : v.type === 'police' ? 'Police Verification' : v.type === 'aadhaar' ? 'Aadhaar Identity' : v.type === 'marksheet_10th' ? '10th Marksheet' : v.type === 'marksheet_12th' ? '12th Marksheet' : v.type === 'degree' ? 'Degree Certificate' : 'Document Upload'}
                       {' '}<span className="text-white/40 font-normal">— {v.status.replace(/_/g, ' ')}</span>
                     </p>
                     <p className="text-xs text-white/30 mt-0.5">{new Date(v.updated_at || v.created_at).toLocaleString('en-IN')}</p>

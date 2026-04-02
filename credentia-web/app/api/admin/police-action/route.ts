@@ -34,22 +34,31 @@ export async function POST(request: Request) {
         admin_reviewed_at: new Date().toISOString(),
       })
       .eq('id', verificationId)
-      .select('student_id')
+      .select('student_id, type')
       .single()
 
     if (verErr) throw verErr
 
-    // If approved, update student's police_verified flag
+    // If approved, update the appropriate student verified flag
     if (action === 'approve' && verification?.student_id) {
-      await supabaseAdmin.from('students').update({
-        police_verified: true,
-        updated_at: new Date().toISOString(),
-      }).eq('id', verification.student_id)
+      const updateData: any = { updated_at: new Date().toISOString() }
+
+      // Map verification type to the correct student field
+      if (verification.type === 'police') updateData.police_verified = true
+      else if (verification.type === 'degree') updateData.degree_verified = true
+      else if (verification.type === 'aadhaar') updateData.aadhaar_verified = true
+      // marksheet_10th, marksheet_12th, passport — no specific flag, but trust score updates via save-verification
+
+      if (Object.keys(updateData).length > 1) { // more than just updated_at
+        await supabaseAdmin.from('students')
+          .update(updateData)
+          .eq('id', verification.student_id)
+      }
     }
 
     return NextResponse.json({ success: true, status: newStatus })
   } catch (error: any) {
-    console.error('Police action error:', error)
+    console.error('Admin verification action error:', error)
     return NextResponse.json({ success: false, error: error.message || 'Action failed' }, { status: 500 })
   }
 }

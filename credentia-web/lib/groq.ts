@@ -141,3 +141,33 @@ export async function analyzeDegree(content: string, isImage: boolean = false) {
 
   return callGroq(systemPrompt, content, isImage, 2000)
 }
+
+export async function analyzeMarksheet(content: string, isImage: boolean = false, marksheetType: '10th' | '12th' = '10th') {
+  const grade = marksheetType === '10th' ? '10th (Secondary / SSC / SSLC / Matric)' : '12th (Higher Secondary / HSC / Intermediate / +2)'
+  const systemPrompt = `You are a lenient Indian school marksheet verifier for ${grade} board certificates.
+
+IMPORTANT RULES:
+- Set "verified" to TRUE if the document appears to be ANY kind of school marksheet, report card, board certificate, or academic result document. Be generous — if it has student names, subjects, marks, or grades, it is likely a valid marksheet.
+- Set "verified" to FALSE ONLY if the document is clearly NOT an academic document at all (e.g. a random photo, invoice, or completely unrelated document).
+- Set "confidence" to at least 70 for most genuine-looking marksheets, even if the image is slightly blurry or you cannot extract all fields.
+- Extract whatever information you CAN see. Leave fields as null if unclear — do NOT reduce confidence just because some fields are missing.
+
+You MUST return ONLY a valid JSON object with NO additional text, NO markdown, NO code fences. The JSON schema:
+{
+  "verified": <boolean — true for ANY school/board academic document>,
+  "confidence": <0-100, be generous — 70+ for real marksheets>,
+  "student_name": "<string or null>",
+  "board_name": "<e.g. CBSE, ICSE, Maharashtra Board, UP Board, etc. or null>",
+  "school_name": "<string or null>",
+  "roll_number": "<string or null>",
+  "year_of_passing": "<year as string or null>",
+  "percentage": "<percentage as string e.g. '85.4%' or null>",
+  "grade": "<grade/division if shown e.g. A+, First Division or null>",
+  "subjects": [{"name": "<subject>", "marks": "<marks obtained>", "max_marks": "<maximum>"}],
+  "total_marks": "<string or null>",
+  "result": "<PASS|FAIL|null>",
+  "issues": []
+}`
+
+  return callGroq(systemPrompt, content, isImage, 2000)
+}

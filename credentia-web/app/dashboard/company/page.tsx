@@ -3,13 +3,8 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Filter, ChevronDown, ChevronUp, Users, Shield, GraduationCap, CreditCard, FileText, TrendingUp, Eye, X, Bookmark, BookmarkCheck, Mail, ExternalLink, CheckCircle2, LayoutGrid, List, ChevronLeft, ChevronRight, Briefcase, Building, Download } from 'lucide-react'
+import { Search, Filter, ChevronDown, ChevronUp, Users, Shield, GraduationCap, CreditCard, FileText, TrendingUp, Eye, X, Bookmark, BookmarkCheck, Mail, ExternalLink, CheckCircle2, LayoutGrid, List, ChevronLeft, ChevronRight, Briefcase, Building, Download, BookOpen, Paperclip } from 'lucide-react'
 
-const calculateTrustScore = (verifications: any[]) => {
-  if (!verifications || !verifications.length) return 0
-  const verifiedCount = verifications.filter((v: any) => ['ai_approved', 'admin_verified', 'verified'].includes(v.status)).length
-  return Math.round((verifiedCount / 4) * 100)
-}
 
 export default function CompanyDashboard() {
   const [students, setStudents] = useState<any[]>([])
@@ -70,7 +65,7 @@ export default function CompanyDashboard() {
           ...s,
           name: s.name || s.profiles?.full_name || 'Unknown',
           email: s.email || s.profiles?.email || '',
-          verification_score: calculateTrustScore(s.verifications || []),
+          trust_score: s.trust_score || 0,
           ats_score: aiResult.ats_score || s.ats_score || 0,
           course: degreeResult.course || aiResult.course || s.course || '',
           branch: degreeResult.branch || aiResult.branch || s.branch || '',
@@ -81,6 +76,7 @@ export default function CompanyDashboard() {
           degree_verified: s.verifications?.some((v: any) => v.type === 'degree' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
           police_verified: s.verifications?.some((v: any) => v.type === 'police' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
           aadhaar_verified: s.verifications?.some((v: any) => v.type === 'aadhaar' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+          verified_docs_count: (s.verifications || []).filter((v: any) => ['verified', 'ai_approved', 'admin_verified'].includes(v.status)).length,
         }
       })
 
@@ -125,7 +121,7 @@ export default function CompanyDashboard() {
       result.sort((a: any, b: any) => {
         let aVal = a[sortBy], bVal = b[sortBy]
         if (sortBy === 'name') { aVal = aVal?.toLowerCase() || ''; bVal = bVal?.toLowerCase() || '' }
-        if (['ats_score', 'cgpa', 'verification_score', 'graduation_year'].includes(sortBy)) { aVal = parseFloat(aVal) || 0; bVal = parseFloat(bVal) || 0 }
+        if (['ats_score', 'cgpa', 'trust_score', 'graduation_year'].includes(sortBy)) { aVal = parseFloat(aVal) || 0; bVal = parseFloat(bVal) || 0 }
         if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
         if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
         return 0
@@ -191,6 +187,7 @@ export default function CompanyDashboard() {
       graduation_year: student.graduation_year,
       cgpa: student.cgpa,
       ats_score: student.ats_score,
+      trust_score: student.trust_score || 0,
       verifications: {
         degree: student.degree_verified,
         police: student.police_verified,
@@ -207,6 +204,7 @@ export default function CompanyDashboard() {
 
   const policeVerCount = students.filter(s => s.police_verified).length
   const avgAts = students.length ? Math.round(students.reduce((a, s) => a + (s.ats_score || 0), 0) / students.length) : 0
+  const avgTrust = students.length ? Math.round(students.reduce((a, s) => a + (s.trust_score || 0), 0) / students.length) : 0
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="flex flex-col items-center gap-3"><div className="w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" /><span className="text-xs text-white/30 tracking-wider">LOADING TALENT POOL...</span></div></div>
 
@@ -224,12 +222,13 @@ export default function CompanyDashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {[
           { label: 'Available Talent', value: students.length, icon: Users, accent: '#10b981', gradient: 'from-emerald-500/15 to-emerald-400/5' },
           { label: 'Police Verified', value: policeVerCount, icon: Shield, accent: '#8b5cf6', gradient: 'from-violet-500/15 to-violet-400/5' },
           { label: 'Avg ATS Score', value: avgAts, icon: TrendingUp, accent: '#3b82f6', gradient: 'from-blue-500/15 to-blue-400/5' },
-          { label: 'Saved Candidates', value: savedIds.size, icon: BookmarkCheck, accent: '#f59e0b', gradient: 'from-amber-500/15 to-amber-400/5' },
+          { label: 'Avg Trust Score', value: `${avgTrust}%`, icon: CheckCircle2, accent: '#14b8a6', gradient: 'from-teal-500/15 to-teal-400/5' },
+          { label: 'Saved', value: savedIds.size, icon: BookmarkCheck, accent: '#f59e0b', gradient: 'from-amber-500/15 to-amber-400/5' },
         ].map((stat, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }} className={`rounded-2xl p-5 border border-white/5 bg-gradient-to-br ${stat.gradient}`}>
             <stat.icon size={18} style={{ color: stat.accent }} className="mb-3" />
@@ -340,7 +339,7 @@ export default function CompanyDashboard() {
                   <div>
                     <label className="text-[9px] text-white/25 uppercase tracking-wider mb-1 block">Sort By</label>
                     <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="w-full h-9 px-2 rounded-lg text-xs bg-white/5 border border-white/10 text-white/70 focus:outline-none">
-                      <option value="ats_score">ATS Score</option><option value="cgpa">CGPA</option><option value="name">Name</option><option value="verification_score">Trust Score</option><option value="graduation_year">Year</option>
+                      <option value="ats_score">ATS Score</option><option value="cgpa">CGPA</option><option value="name">Name</option><option value="trust_score">Trust Score</option><option value="graduation_year">Year</option>
                     </select>
                   </div>
                 </div>
@@ -460,10 +459,13 @@ export default function CompanyDashboard() {
                     <td className="px-5 py-3"><span className="font-bold" style={{ color: `hsl(${(s.ats_score || 0) * 1.2}, 70%, 50%)` }}>{s.ats_score || 0}</span></td>
                     <td className="px-5 py-3 text-white/60">{s.cgpa || '—'}</td>
                     <td className="px-5 py-3">
-                      <div className="flex gap-1">
-                        {[{ ok: s.police_verified, l: 'P' }, { ok: s.aadhaar_verified, l: 'A' }, { ok: s.degree_verified, l: 'D' }].map((b, j) => (
-                          <span key={j} className={`text-[8px] font-bold w-5 h-5 rounded flex items-center justify-center ${b.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/15 border border-white/5'}`}>{b.l}</span>
-                        ))}
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1">
+                          {[{ ok: s.police_verified, l: 'P' }, { ok: s.aadhaar_verified, l: 'A' }, { ok: s.degree_verified, l: 'D' }].map((b, j) => (
+                            <span key={j} className={`text-[8px] font-bold w-5 h-5 rounded flex items-center justify-center ${b.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/15 border border-white/5'}`}>{b.l}</span>
+                          ))}
+                        </div>
+                        <span className="text-[10px] text-white/30">{s.verified_docs_count || 0}</span>
                       </div>
                     </td>
                     <td className="px-5 py-3 flex items-center gap-2">
@@ -517,7 +519,7 @@ export default function CompanyDashboard() {
               </div>
               <div className="p-4 rounded-xl bg-white/[0.03] border border-white/5 text-center">
                 <p className="text-[9px] text-white/25 uppercase tracking-wider mb-1">Trust Score</p>
-                <p className="font-heading text-3xl font-bold text-teal-400">{selectedStudent.verification_score || 0}%</p>
+                <p className="font-heading text-3xl font-bold text-teal-400">{selectedStudent.trust_score || 0}%</p>
               </div>
             </div>
 
@@ -539,21 +541,34 @@ export default function CompanyDashboard() {
             </div>
 
             {/* Verifications */}
-            <h4 className="text-xs font-bold text-white/40 uppercase tracking-wider mb-2">Verifications</h4>
+            <h4 className="text-xs font-bold text-white/40 uppercase tracking-wider mb-2">Verifications <span className="text-emerald-400/60 ml-2">{selectedStudent.verified_docs_count || 0} docs verified</span></h4>
             <div className="space-y-2 mb-5">
               {[
-                { label: 'Police Check', verified: selectedStudent.police_verified, icon: Shield },
-                { label: 'Aadhaar KYC', verified: selectedStudent.aadhaar_verified, icon: CreditCard },
-                { label: 'Degree Certificate', verified: selectedStudent.degree_verified, icon: GraduationCap },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/5">
-                  <item.icon size={16} className={item.verified ? 'text-emerald-400' : 'text-white/20'} />
-                  <span className="text-sm text-white/70 flex-1">{item.label}</span>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg ${item.verified ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'}`}>
-                    {item.verified ? 'Verified ✓' : 'Pending'}
-                  </span>
-                </div>
-              ))}
+                { key: 'resume', label: 'Resume / ATS', icon: FileText, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+                { key: 'degree', label: 'Degree Certificate', icon: GraduationCap, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+                { key: 'marksheet_10th', label: '10th Marksheet', icon: BookOpen, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+                { key: 'marksheet_12th', label: '12th Marksheet', icon: BookOpen, color: 'text-violet-400', bg: 'bg-violet-500/10' },
+                { key: 'passport', label: 'Other Credential', icon: Paperclip, color: 'text-teal-400', bg: 'bg-teal-500/10' },
+                { key: 'police', label: 'Police Verification', icon: Shield, color: 'text-violet-400', bg: 'bg-violet-500/10' },
+                { key: 'aadhaar', label: 'Aadhaar KYC', icon: CreditCard, color: 'text-teal-400', bg: 'bg-teal-500/10' },
+              ].map((item, i) => {
+                const record = (selectedStudent.verifications || []).find((r: any) => r.type === item.key)
+                const isVerified = record && ['verified', 'ai_approved', 'admin_verified'].includes(record.status)
+                const isPending = record && ['pending', 'needs_review'].includes(record.status)
+                return (
+                  <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/5">
+                    <div className={`p-1.5 rounded-lg ${item.bg}`}><item.icon size={14} className={item.color} /></div>
+                    <span className="text-sm text-white/70 flex-1">{item.label}</span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg ${
+                      isVerified ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                      isPending ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                      'bg-white/5 text-white/30 border border-white/5'
+                    }`}>
+                      {isVerified ? 'Verified ✓' : isPending ? 'Pending' : 'Not Uploaded'}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
 
             {/* Actions */}
@@ -634,18 +649,25 @@ export default function CompanyDashboard() {
                       </div>
 
                       <div className="mt-6">
-                        <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-3 border-b border-white/5 pb-2">Verifications</h4>
-                        <div className="space-y-3">
+                        <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-3 border-b border-white/5 pb-2">Verifications <span className="text-emerald-400/50 ml-1">{student.verified_docs_count || 0} verified</span></h4>
+                        <div className="space-y-2">
                           {[
-                            { label: 'Police Verified', ok: student.police_verified, icon: Shield },
-                            { label: 'Degree Verified', ok: student.degree_verified, icon: GraduationCap },
-                            { label: 'Aadhaar Verified', ok: student.aadhaar_verified, icon: CreditCard },
-                          ].map((v, i) => (
-                            <div key={i} className="flex items-center justify-between">
-                              <span className="text-xs text-white/60 flex items-center gap-2"><v.icon size={12} className={v.ok ? 'text-emerald-400' : 'text-white/20'} /> {v.label}</span>
-                              {v.ok ? <span className="text-emerald-400"><CheckCircle2 size={16} /></span> : <span className="text-white/20"><X size={16} /></span>}
-                            </div>
-                          ))}
+                            { key: 'resume', label: 'Resume', icon: FileText },
+                            { key: 'degree', label: 'Degree', icon: GraduationCap },
+                            { key: 'marksheet_10th', label: '10th', icon: BookOpen },
+                            { key: 'marksheet_12th', label: '12th', icon: BookOpen },
+                            { key: 'police', label: 'Police', icon: Shield },
+                            { key: 'aadhaar', label: 'Aadhaar', icon: CreditCard },
+                          ].map((v, i) => {
+                            const record = (student.verifications || []).find((r: any) => r.type === v.key)
+                            const ok = record && ['verified', 'ai_approved', 'admin_verified'].includes(record.status)
+                            return (
+                              <div key={i} className="flex items-center justify-between">
+                                <span className="text-xs text-white/60 flex items-center gap-2"><v.icon size={12} className={ok ? 'text-emerald-400' : 'text-white/20'} /> {v.label}</span>
+                                {ok ? <span className="text-emerald-400"><CheckCircle2 size={16} /></span> : <span className="text-white/20"><X size={16} /></span>}
+                              </div>
+                            )
+                          })}
                         </div>
                       </div>
 

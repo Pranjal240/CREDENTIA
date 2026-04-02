@@ -3,29 +3,36 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { motion } from 'framer-motion'
-import { FileText, Shield, CreditCard, GraduationCap, CheckCircle2, Clock, AlertCircle, ExternalLink, Search, Filter, Download, Eye, X } from 'lucide-react'
+import { FileText, Shield, CreditCard, GraduationCap, CheckCircle2, Clock, AlertCircle, ExternalLink, Search, Eye, X, BookOpen, Paperclip, Star } from 'lucide-react'
 
 type Verification = { id: string; type: string; status: string; ai_confidence: number; ai_result: any; document_url: string; created_at: string; updated_at: string }
+type Document = { id: string; document_type: string; file_url: string; file_name: string | null; file_size: number | null; status: string; uploaded_at: string }
 
-const typeConfig: Record<string, { label: string; icon: any; color: string }> = {
-  resume: { label: 'Resume Analysis', icon: FileText, color: '#3b82f6' },
-  police: { label: 'Police Verification', icon: Shield, color: '#8b5cf6' },
-  aadhaar: { label: 'Aadhaar Verification', icon: CreditCard, color: '#14b8a6' },
-  degree: { label: 'Degree Verification', icon: GraduationCap, color: '#f59e0b' },
+const typeConfig: Record<string, { label: string; icon: any; color: string; group: string }> = {
+  resume: { label: 'Resume Analysis', icon: FileText, color: '#3b82f6', group: 'AI Verified' },
+  police: { label: 'Police Verification', icon: Shield, color: '#8b5cf6', group: 'AI Verified' },
+  aadhaar: { label: 'Aadhaar Verification', icon: CreditCard, color: '#14b8a6', group: 'AI Verified' },
+  degree: { label: 'Degree Certificate', icon: GraduationCap, color: '#f59e0b', group: 'AI Verified' },
+  marksheet_10th: { label: '10th Class Marksheet', icon: BookOpen, color: '#3b82f6', group: 'Uploaded' },
+  marksheet_12th: { label: '12th Class Marksheet', icon: FileText, color: '#8b5cf6', group: 'Uploaded' },
+  passport: { label: 'Other Credential', icon: Paperclip, color: '#14b8a6', group: 'Uploaded' },
+  pan: { label: 'PAN Card', icon: CreditCard, color: '#f59e0b', group: 'Uploaded' },
 }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   ai_approved: { label: 'AI Verified', color: '#22c55e', bg: 'rgba(34,197,94,0.08)' },
   admin_verified: { label: 'Admin Verified', color: '#22c55e', bg: 'rgba(34,197,94,0.08)' },
   verified: { label: 'Verified', color: '#22c55e', bg: 'rgba(34,197,94,0.08)' },
-  pending: { label: 'Pending', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
+  pending: { label: 'Pending Review', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
   needs_review: { label: 'Needs Review', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
   rejected: { label: 'Rejected', color: '#ef4444', bg: 'rgba(239,68,68,0.08)' },
   not_submitted: { label: 'Not Submitted', color: '#64748b', bg: 'rgba(100,116,139,0.08)' },
+  under_review: { label: 'Under Review', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
 }
 
 export default function SavedVerificationsPage() {
   const [verifications, setVerifications] = useState<Verification[]>([])
+  const [documents, setDocuments] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [filterType, setFilterType] = useState<string>('all')
   const [filterStatus, setFilterStatus] = useState<string>('all')
@@ -36,14 +43,43 @@ export default function SavedVerificationsPage() {
     const load = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-      const { data } = await supabase.from('verifications').select('*').eq('student_id', session.user.id).order('updated_at', { ascending: false })
-      setVerifications(data || [])
+      const uid = session.user.id
+
+      const [{ data: v }, { data: d }] = await Promise.all([
+        supabase.from('verifications').select('*').eq('student_id', uid).order('updated_at', { ascending: false }),
+        supabase.from('documents').select('*').eq('user_id', uid).order('uploaded_at', { ascending: false }),
+      ])
+
+      setVerifications(v || [])
+      // Filter out documents that already have a corresponding verification entry
+      // (to avoid duplicates for degree/police/aadhaar which appear in both tables)
+      const verifTypes = new Set((v || []).map(x => x.type))
+      const docTypeMap: Record<string, string> = { degree: 'degree', police: 'police', aadhaar: 'aadhaar', resume: 'resume' }
+      const filteredDocs = (d || []).filter(doc => !docTypeMap[doc.document_type] || !verifTypes.has(docTypeMap[doc.document_type]))
+      setDocuments(filteredDocs)
       setLoading(false)
     }
     load()
   }, [])
 
-  const filtered = verifications.filter(v => {
+  // Merge verifications + document-only entries into a unified list
+  const allItems = [
+    ...verifications.map(v => ({ ...v, _source: 'verification' as const })),
+    // Documents that don't have a matching verification
+    ...documents.map(d => ({
+      id: d.id,
+      type: d.document_type,
+      status: d.status,
+      ai_confidence: 0,
+      ai_result: { file_name: d.file_name, uploaded_at: d.uploaded_at },
+      document_url: d.file_url,
+      created_at: d.uploaded_at,
+      updated_at: d.uploaded_at,
+      _source: 'document' as const,
+    })),
+  ]
+
+  const filtered = allItems.filter(v => {
     if (filterType !== 'all' && v.type !== filterType) return false
     if (filterStatus !== 'all' && v.status !== filterStatus) return false
     if (searchQuery) {
@@ -53,13 +89,33 @@ export default function SavedVerificationsPage() {
     return true
   })
 
+  const verifiedCount = verifications.filter(v => ['ai_approved', 'admin_verified', 'verified'].includes(v.status)).length
+
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" /></div>
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div>
         <h1 className="font-heading text-2xl font-bold text-white">My Verifications</h1>
-        <p className="text-sm mt-1 text-white/40">View all your saved verification records and detailed AI analysis reports.</p>
+        <p className="text-sm mt-1 text-white/40">All your saved verification records, documents, and detailed AI analysis reports.</p>
+      </div>
+
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Total Records', value: allItems.length, color: '#3b82f6', bg: 'rgba(59,130,246,0.08)' },
+          { label: 'AI Verified', value: verifiedCount, color: '#22c55e', bg: 'rgba(34,197,94,0.08)' },
+          { label: 'Pending', value: allItems.filter(v => ['pending', 'needs_review', 'under_review'].includes(v.status)).length, color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
+          { label: 'Documents', value: verifications.length + documents.length, color: '#8b5cf6', bg: 'rgba(139,92,246,0.08)' },
+        ].map((s, i) => (
+          <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+            className="rounded-xl p-4 border border-white/5"
+            style={{ background: s.bg }}
+          >
+            <p className="font-heading text-xl font-bold" style={{ color: s.color }}>{s.value}</p>
+            <p className="text-[10px] text-white/30 uppercase tracking-wider mt-0.5">{s.label}</p>
+          </motion.div>
+        ))}
       </div>
 
       {/* Filters */}
@@ -75,6 +131,9 @@ export default function SavedVerificationsPage() {
             <option value="police">Police</option>
             <option value="aadhaar">Aadhaar</option>
             <option value="degree">Degree</option>
+            <option value="marksheet_10th">10th Marksheet</option>
+            <option value="marksheet_12th">12th Marksheet</option>
+            <option value="passport">Other Credential</option>
           </select>
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="h-10 px-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white/70 focus:outline-none appearance-none cursor-pointer">
             <option value="all">All Status</option>
@@ -88,7 +147,7 @@ export default function SavedVerificationsPage() {
       </div>
 
       {/* Results */}
-      <div className="text-xs text-white/30 px-1">{filtered.length} verification{filtered.length !== 1 ? 's' : ''} found</div>
+      <div className="text-xs text-white/30 px-1">{filtered.length} record{filtered.length !== 1 ? 's' : ''} found</div>
 
       {filtered.length === 0 ? (
         <div className="text-center py-16 rounded-2xl border border-white/5 bg-white/[0.01]">
@@ -99,26 +158,47 @@ export default function SavedVerificationsPage() {
       ) : (
         <div className="space-y-3">
           {filtered.map((v, i) => {
-            const tc = typeConfig[v.type] || { label: v.type, icon: FileText, color: '#fff' }
+            const tc = typeConfig[v.type] || { label: v.type, icon: FileText, color: '#fff', group: '' }
             const sc = statusConfig[v.status] || statusConfig.not_submitted
             const Icon = tc.icon
+            const isVerif = (v as any)._source === 'verification'
             return (
               <motion.div key={v.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
                 className="rounded-2xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] transition-colors cursor-pointer overflow-hidden"
-                onClick={() => setSelectedV(v)}
+                onClick={() => isVerif ? setSelectedV(v as Verification) : null}
               >
                 <div className="flex items-center gap-4 p-5">
                   <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${tc.color}15`, color: tc.color }}>
                     <Icon size={22} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-white/90">{tc.label}</p>
-                    <p className="text-xs text-white/30 mt-0.5">Last updated: {new Date(v.updated_at || v.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-white/90">{tc.label}</p>
+                      {tc.group && (
+                        <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded font-bold"
+                          style={{ background: tc.group === 'AI Verified' ? 'rgba(139,92,246,0.1)' : 'rgba(255,255,255,0.05)', color: tc.group === 'AI Verified' ? '#a78bfa' : 'rgba(255,255,255,0.3)' }}>
+                          {tc.group}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-white/30 mt-0.5">
+                      {isVerif
+                        ? `Last updated: ${new Date(v.updated_at || v.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                        : `Uploaded: ${new Date(v.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                      }
+                    </p>
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0">
-                    {v.ai_confidence > 0 && <span className="text-xs text-white/30 hidden sm:block">{v.ai_confidence}% confidence</span>}
+                    {(v as any).ai_confidence > 0 && <span className="text-xs text-white/30 hidden sm:block">{(v as any).ai_confidence}% confidence</span>}
                     <span className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider" style={{ background: sc.bg, color: sc.color }}>{sc.label}</span>
-                    <Eye size={14} className="text-white/20" />
+                    {v.document_url && (
+                      <a href={v.document_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                        className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                        title="View Document">
+                        <ExternalLink size={13} className="text-white/30 hover:text-blue-400" />
+                      </a>
+                    )}
+                    {isVerif && <Eye size={14} className="text-white/20" />}
                   </div>
                 </div>
               </motion.div>
@@ -160,7 +240,7 @@ export default function SavedVerificationsPage() {
             {/* AI Result */}
             {selectedV.ai_result && (
               <div>
-                <h4 className="text-xs font-bold text-white/50 uppercase tracking-wider mb-3">AI Analysis Report</h4>
+                <h4 className="text-xs font-bold text-white/50 uppercase tracking-wider mb-3">Analysis Report</h4>
                 <div className="rounded-xl bg-white/[0.02] border border-white/5 p-4 space-y-3">
                   {Object.entries(selectedV.ai_result).map(([key, value]) => {
                     if (value === null || value === undefined) return null

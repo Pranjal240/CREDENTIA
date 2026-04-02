@@ -3,15 +3,9 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { motion } from 'framer-motion'
-import { BarChart3, Users, Shield, GraduationCap, TrendingUp, CreditCard, CheckCircle2, Sparkles, BookmarkCheck, ArrowUpRight, Search, FileText, ChevronRight, X, LayoutTemplate } from 'lucide-react'
+import { BarChart3, Users, Shield, GraduationCap, TrendingUp, CreditCard, CheckCircle2, Sparkles, BookmarkCheck, ArrowUpRight, Search, FileText, ChevronRight, X, LayoutTemplate, BookOpen, Paperclip } from 'lucide-react'
 
-const calculateTrustScore = (verifications: any[]) => {
-  if (!verifications?.length) return 0
-  const verifiedCount = verifications.filter((v: any) =>
-    ['ai_approved', 'admin_verified', 'verified'].includes(v.status)
-  ).length
-  return Math.round((verifiedCount / 4) * 100)
-}
+
 
 export default function CompanyAnalytics() {
   const [students, setStudents] = useState<any[]>([])
@@ -43,12 +37,16 @@ export default function CompanyAnalytics() {
         return {
           ...s,
           ats_score: aiResult.ats_score || s.ats_score || 0,
-          course: degreeResult.course || aiResult.course || s.course || 'Unknown',
+          course: degreeResult.course || aiResult.course || s.course || '',
           cgpa: degreeResult.grade_cgpa || aiResult.cgpa || s.cgpa || '',
           degree_verified: s.verifications?.some((v: any) => v.type === 'degree' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
           police_verified: s.verifications?.some((v: any) => v.type === 'police' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
           aadhaar_verified: s.verifications?.some((v: any) => v.type === 'aadhaar' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          verification_score: calculateTrustScore(s.verifications || []),
+          resume_verified: s.verifications?.some((v: any) => v.type === 'resume' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+          marksheet10_verified: s.verifications?.some((v: any) => v.type === 'marksheet_10th' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+          marksheet12_verified: s.verifications?.some((v: any) => v.type === 'marksheet_12th' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+          passport_verified: s.verifications?.some((v: any) => v.type === 'passport' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+          trust_score: s.trust_score || 0,
         }
       })
 
@@ -78,10 +76,15 @@ export default function CompanyAnalytics() {
   const stats = useMemo(() => {
     const list = students
     const total = list.length
+    const resumeV = list.filter(s => s.resume_verified).length
     const policeV = list.filter(s => s.police_verified).length
     const aadhaarV = list.filter(s => s.aadhaar_verified).length
     const degreeV = list.filter(s => s.degree_verified).length
+    const mark10V = list.filter(s => s.marksheet10_verified).length
+    const mark12V = list.filter(s => s.marksheet12_verified).length
+    const passportV = list.filter(s => s.passport_verified).length
     const avgAts = total ? Math.round(list.reduce((a, s) => a + (s.ats_score || 0), 0) / total) : 0
+    const avgTrust = total ? Math.round(list.reduce((a, s) => a + (s.trust_score || 0), 0) / total) : 0
     const fullyVerified = list.filter(s => s.degree_verified && s.police_verified && s.aadhaar_verified).length
     const highAts = list.filter(s => (s.ats_score || 0) >= 70).length
 
@@ -95,13 +98,15 @@ export default function CompanyAnalytics() {
 
     const courseBreakdown = (Object.entries(
       list.reduce((acc: Record<string, number>, s) => {
-        const c = s.course || 'Unknown'
-        acc[c] = (acc[c] || 0) + 1
+        const c = (s.course || '').trim()
+        if (c && c !== 'Unknown' && c !== 'N/A') {
+          acc[c] = (acc[c] || 0) + 1
+        }
         return acc
       }, {})
     ) as [string, number][]).sort((a, b) => b[1] - a[1]).slice(0, 8)
 
-    return { total, policeV, aadhaarV, degreeV, avgAts, fullyVerified, highAts, atsRanges, courseBreakdown }
+    return { total, resumeV, policeV, aadhaarV, degreeV, mark10V, mark12V, passportV, avgAts, avgTrust, fullyVerified, highAts, atsRanges, courseBreakdown }
   }, [students])
 
   const filteredStudents = useMemo(() => {
@@ -127,8 +132,8 @@ export default function CompanyAnalytics() {
   const statCards = [
     { label: 'Total Candidates', value: stats.total, icon: Users, accent: '#10b981', gradient: 'from-emerald-500/15 to-emerald-400/5' },
     { label: 'Avg ATS Score', value: stats.avgAts, icon: TrendingUp, accent: '#3b82f6', gradient: 'from-blue-500/15 to-blue-400/5' },
-    { label: 'High ATS (70+)', value: stats.highAts, icon: Sparkles, accent: '#22c55e', gradient: 'from-green-500/15 to-green-400/5' },
-    { label: 'Fully Verified', value: stats.fullyVerified, icon: CheckCircle2, accent: '#14b8a6', gradient: 'from-teal-500/15 to-teal-400/5' },
+    { label: 'Avg Trust Score', value: `${stats.avgTrust}%`, icon: CheckCircle2, accent: '#14b8a6', gradient: 'from-teal-500/15 to-teal-400/5' },
+    { label: 'Fully Verified', value: stats.fullyVerified, icon: Sparkles, accent: '#22c55e', gradient: 'from-green-500/15 to-green-400/5' },
     { label: 'Police Verified', value: stats.policeV, icon: Shield, accent: '#8b5cf6', gradient: 'from-violet-500/15 to-violet-400/5' },
     { label: 'Saved by You', value: savedCount, icon: BookmarkCheck, accent: '#f59e0b', gradient: 'from-amber-500/15 to-amber-400/5' },
   ]
@@ -217,7 +222,10 @@ export default function CompanyAnalytics() {
         <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
           <h2 className="font-heading font-bold text-sm text-text-primary mb-4">Top Courses in Pool</h2>
           {stats.courseBreakdown.length === 0 ? (
-            <p className="text-sm text-text-muted">No data available.</p>
+            <div className="py-8 text-center">
+              <p className="text-sm text-text-muted">No course data available yet.</p>
+              <p className="text-xs text-text-muted mt-1">Course info is extracted from resume and degree uploads.</p>
+            </div>
           ) : (
             <div className="space-y-2.5 sm:space-y-3">
               {stats.courseBreakdown.map(([course, count], i) => {
@@ -244,19 +252,27 @@ export default function CompanyAnalytics() {
         </div>
       </div>
 
-      {/* Verification Coverage */}
+      {/* Verification Coverage — All 7 Types */}
       <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
         <h2 className="font-heading font-bold text-sm text-text-primary mb-4">Verification Coverage</h2>
         <div className="space-y-3 sm:space-y-4">
           {[
+            { label: 'Resume / ATS', count: stats.resumeV, color: '#3b82f6', icon: FileText },
+            { label: 'Degree Certificate', count: stats.degreeV, color: '#f59e0b', icon: GraduationCap },
+            { label: '10th Marksheet', count: stats.mark10V, color: '#60a5fa', icon: BookOpen },
+            { label: '12th Marksheet', count: stats.mark12V, color: '#a78bfa', icon: BookOpen },
+            { label: 'Other Credential', count: stats.passportV, color: '#2dd4bf', icon: Paperclip },
             { label: 'Police Verification', count: stats.policeV, color: '#8b5cf6', icon: Shield },
             { label: 'Aadhaar KYC', count: stats.aadhaarV, color: '#14b8a6', icon: CreditCard },
-            { label: 'Degree Certificate', count: stats.degreeV, color: '#f59e0b', icon: GraduationCap },
           ].map((item, i) => {
             const pct = stats.total > 0 ? Math.round((item.count / stats.total) * 100) : 0
             return (
-              <div key={i} className="flex items-center gap-3 sm:gap-4">
-                <item.icon size={16} style={{ color: item.color }} className="flex-shrink-0" />
+              <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 + i * 0.05 }}
+                className="flex items-center gap-3 sm:gap-4"
+              >
+                <div className="p-1.5 rounded-lg flex-shrink-0" style={{ background: `${item.color}15` }}>
+                  <item.icon size={16} style={{ color: item.color }} />
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1 gap-2">
                     <span className="text-xs sm:text-sm text-text-primary opacity-80 truncate">{item.label}</span>
@@ -266,13 +282,13 @@ export default function CompanyAnalytics() {
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${pct}%` }}
-                      transition={{ duration: 1, delay: 0.3 + i * 0.1 }}
+                      transition={{ duration: 1, delay: 0.4 + i * 0.08 }}
                       className="h-full rounded-full"
                       style={{ background: item.color }}
                     />
                   </div>
                 </div>
-              </div>
+              </motion.div>
             )
           })}
         </div>
@@ -355,7 +371,7 @@ export default function CompanyAnalytics() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-text-primary">{student.verification_score}%</span>
+                            <span className="font-bold text-text-primary">{student.trust_score || 0}%</span>
                             <div className="flex -space-x-1">
                               {student.degree_verified && <div className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center"><GraduationCap size={10} /></div>}
                               {student.police_verified && <div className="w-4 h-4 rounded-full bg-violet-500/20 text-violet-500 flex items-center justify-center"><Shield size={10} /></div>}
@@ -414,7 +430,7 @@ export default function CompanyAnalytics() {
               </div>
               <div className="bg-base border border-border rounded-xl p-4 text-center">
                 <p className="text-xs text-text-muted uppercase tracking-wider mb-1">Trust Score</p>
-                <div className="text-3xl font-bold text-blue-500">{selectedStudent.verification_score}%</div>
+                <div className="text-3xl font-bold text-blue-500">{selectedStudent.trust_score || 0}%</div>
               </div>
             </div>
 
@@ -432,12 +448,17 @@ export default function CompanyAnalytics() {
               <h4 className="font-heading font-semibold text-text-primary border-b border-border pb-2">Verifications</h4>
               <div className="space-y-2">
                 {[
-                  { key: 'degree', label: 'Degree Verification', icon: GraduationCap, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-                  { key: 'police', label: 'Police Check', icon: Shield, color: 'text-violet-500', bg: 'bg-violet-500/10' },
+                  { key: 'resume', label: 'Resume / ATS', icon: FileText, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                  { key: 'degree', label: 'Degree Certificate', icon: GraduationCap, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+                  { key: 'marksheet_10th', label: '10th Marksheet', icon: BookOpen, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                  { key: 'marksheet_12th', label: '12th Marksheet', icon: BookOpen, color: 'text-violet-500', bg: 'bg-violet-500/10' },
+                  { key: 'passport', label: 'Other Credential', icon: Paperclip, color: 'text-teal-500', bg: 'bg-teal-500/10' },
+                  { key: 'police', label: 'Police Verification', icon: Shield, color: 'text-violet-500', bg: 'bg-violet-500/10' },
                   { key: 'aadhaar', label: 'Aadhaar KYC', icon: CreditCard, color: 'text-teal-500', bg: 'bg-teal-500/10' },
                 ].map((v) => {
                   const record = selectedStudent.verifications?.find((r: any) => r.type === v.key)
                   const isVerified = record && ['verified', 'ai_approved', 'admin_verified'].includes(record.status)
+                  const isPending = record && ['pending', 'needs_review'].includes(record.status)
                   return (
                     <div key={v.key} className="flex items-center justify-between p-3 rounded-xl border border-border bg-base">
                       <div className="flex items-center gap-3">
@@ -445,9 +466,11 @@ export default function CompanyAnalytics() {
                         <span className="text-sm font-medium text-text-primary">{v.label}</span>
                       </div>
                       <span className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase ${
-                        isVerified ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-red-500/10 text-red-600 dark:text-red-400'
+                        isVerified ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' :
+                        isPending ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' :
+                        'bg-red-500/10 text-red-600 dark:text-red-400'
                       }`}>
-                        {isVerified ? 'Verified' : 'Unverified'}
+                        {isVerified ? 'Verified' : isPending ? 'Pending' : 'Not Uploaded'}
                       </span>
                     </div>
                   )

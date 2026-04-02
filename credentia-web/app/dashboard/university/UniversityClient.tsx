@@ -1,23 +1,38 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   GraduationCap, Users, CheckCircle2, Shield, Home, Building, Download,
   Search, Filter, ChevronDown, ChevronUp, SortAsc, SortDesc, X, CreditCard,
-  TrendingUp, ChevronLeft, ChevronRight,
+  TrendingUp, ChevronLeft, ChevronRight, BookOpen, Paperclip, FileText,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 
 type Props = {
   students: any[]
 }
 
 export default function UniversityClient({ students: initialStudents }: Props) {
-  const [students] = useState<any[]>(initialStudents)
+  const [students, setStudents] = useState<any[]>(initialStudents)
+  const router = useRouter()
   const [loadingInsights, setLoadingInsights] = useState(false)
   const [aiInsights, setAiInsights] = useState<string | null>(null)
   const [showInsightsModal, setShowInsightsModal] = useState(false)
+
+  // Keep students synced with server data
+  useEffect(() => { setStudents(initialStudents) }, [initialStudents])
+
+  // Realtime subscription — auto-refresh when students or verifications change
+  useEffect(() => {
+    const channel = supabase.channel('uni_registry_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => router.refresh())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verifications' }, () => router.refresh())
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [router])
 
   const [searchQuery, setSearchQuery] = useState('')
   const [filterDegree, setFilterDegree] = useState<string>('all')
@@ -70,7 +85,8 @@ export default function UniversityClient({ students: initialStudents }: Props) {
   const degreeVerifiedCount = students.filter(s => s.degree_verified).length
   const policeVerifiedCount = students.filter(s => s.police_verified).length
   const avgCgpa = students.length ? (students.reduce((a, s) => a + (parseFloat(s.cgpa) || 0), 0) / students.length).toFixed(1) : '0.0'
-  const integrityScore = students.length ? Math.round((students.filter(s => s.degree_verified && s.police_verified).length / students.length) * 100) : 0
+  const avgTrustScore = students.length ? Math.round(students.reduce((a, s) => a + (s.trust_score || 0), 0) / students.length) : 0
+  const totalVerifiedDocs = students.reduce((a, s) => a + (s.verified_docs_count || 0), 0)
 
   const handleExportCSV = () => {
     if (filtered.length === 0) return
@@ -136,13 +152,14 @@ export default function UniversityClient({ students: initialStudents }: Props) {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
         {[
           { label: 'Total Students', value: students.length, icon: Users, accent: '#8b5cf6', gradient: 'from-purple-500/20 to-purple-400/5' },
           { label: 'Degree Verified', value: degreeVerifiedCount, icon: GraduationCap, accent: '#10b981', gradient: 'from-emerald-500/20 to-emerald-400/5' },
           { label: 'Police Verified', value: policeVerifiedCount, icon: Shield, accent: '#3b82f6', gradient: 'from-blue-500/20 to-blue-400/5' },
           { label: 'Avg CGPA', value: avgCgpa, icon: TrendingUp, accent: '#f59e0b', gradient: 'from-amber-500/20 to-amber-400/5' },
-          { label: 'Integrity Score', value: `${integrityScore}%`, icon: CheckCircle2, accent: '#14b8a6', gradient: 'from-teal-500/20 to-teal-400/5' },
+          { label: 'Avg Trust Score', value: `${avgTrustScore}%`, icon: CheckCircle2, accent: '#14b8a6', gradient: 'from-teal-500/20 to-teal-400/5' },
+          { label: 'Docs Verified', value: totalVerifiedDocs, icon: GraduationCap, accent: '#f59e0b', gradient: 'from-amber-500/20 to-amber-400/5' },
         ].map((stat, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className={`rounded-2xl p-5 border border-white/5 bg-gradient-to-br ${stat.gradient}`}>
             <stat.icon size={20} style={{ color: stat.accent }} className="mb-3" />
@@ -229,6 +246,7 @@ export default function UniversityClient({ students: initialStudents }: Props) {
                     { label: 'Course / Year', field: 'course' },
                     { label: 'CGPA', field: 'cgpa' },
                     { label: 'ATS', field: 'ats_score' },
+                    { label: 'Trust', field: 'trust_score' },
                     { label: 'Verifications', field: null },
                     { label: 'Joined', field: 'created_at' },
                     { label: 'Actions', field: null },
@@ -252,14 +270,25 @@ export default function UniversityClient({ students: initialStudents }: Props) {
                     <td className="px-5 py-3"><span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/5 border border-white/10 text-white/80 text-xs font-bold font-mono">{s.cgpa || 'N/A'}</span></td>
                     <td className="px-5 py-3"><span className="text-xs font-bold" style={{ color: `hsl(${(s.ats_score || 0) * 1.2}, 70%, 50%)` }}>{s.ats_score || '—'}</span></td>
                     <td className="px-5 py-3">
-                      <div className="flex gap-1.5">
-                        {[
-                          { ok: s.degree_verified, label: 'DEG' },
-                          { ok: s.police_verified, label: 'PCC' },
-                          { ok: s.aadhaar_verified, label: 'KYC' },
-                        ].map((b, j) => (
-                          <span key={j} className={`text-[8px] uppercase font-bold px-1.5 py-0.5 rounded border ${b.ok ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400' : 'border-white/5 bg-white/5 text-white/20'}`}>{b.label}</span>
-                        ))}
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-12 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${s.trust_score || 0}%`, background: `hsl(${(s.trust_score || 0) * 1.2}, 65%, 50%)` }} />
+                        </div>
+                        <span className="text-xs font-bold" style={{ color: `hsl(${(s.trust_score || 0) * 1.2}, 65%, 50%)` }}>{s.trust_score || 0}%</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1.5">
+                          {[
+                            { ok: s.degree_verified, label: 'DEG' },
+                            { ok: s.police_verified, label: 'PCC' },
+                            { ok: s.aadhaar_verified, label: 'KYC' },
+                          ].map((b, j) => (
+                            <span key={j} className={`text-[8px] uppercase font-bold px-1.5 py-0.5 rounded border ${b.ok ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400' : 'border-white/5 bg-white/5 text-white/20'}`}>{b.label}</span>
+                          ))}
+                        </div>
+                        <span className="text-[10px] text-white/30 font-medium">{s.verified_docs_count || 0} verified</span>
                       </div>
                     </td>
                     <td className="px-5 py-3 text-xs text-white/40">{new Date(s.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</td>
@@ -299,31 +328,44 @@ export default function UniversityClient({ students: initialStudents }: Props) {
               <button onClick={() => setSelectedStudent(null)} className="p-2 rounded-lg hover:bg-white/5 text-white/30"><X size={20} /></button>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-500/10 to-transparent border border-indigo-500/20 flex items-center gap-4">
-                <div className="relative w-14 h-14">
-                  <svg className="w-14 h-14 -rotate-90">
-                    <circle cx="28" cy="28" r="24" stroke="rgba(255,255,255,0.05)" strokeWidth="4" fill="none" />
-                    <circle cx="28" cy="28" r="24" stroke={`hsl(${(selectedStudent.ats_score || 0) * 1.2}, 70%, 50%)`} strokeWidth="4" fill="none" strokeDasharray={`${2 * Math.PI * 24}`} strokeDashoffset={`${2 * Math.PI * 24 * (1 - (selectedStudent.ats_score || 0) / 100)}`} strokeLinecap="round" />
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-500/10 to-transparent border border-indigo-500/20 flex items-center gap-3">
+                <div className="relative w-12 h-12">
+                  <svg className="w-12 h-12 -rotate-90">
+                    <circle cx="24" cy="24" r="20" stroke="rgba(255,255,255,0.05)" strokeWidth="3.5" fill="none" />
+                    <circle cx="24" cy="24" r="20" stroke={`hsl(${(selectedStudent.ats_score || 0) * 1.2}, 70%, 50%)`} strokeWidth="3.5" fill="none" strokeDasharray={`${2 * Math.PI * 20}`} strokeDashoffset={`${2 * Math.PI * 20 * (1 - (selectedStudent.ats_score || 0) / 100)}`} strokeLinecap="round" />
                   </svg>
-                  <span className="absolute inset-0 flex items-center justify-center font-bold text-sm text-white">{selectedStudent.ats_score || 0}</span>
+                  <span className="absolute inset-0 flex items-center justify-center font-bold text-xs text-white">{selectedStudent.ats_score || 0}</span>
                 </div>
                 <div>
-                  <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold mb-1">ATS Score</p>
-                  <p className="text-xs text-white/60">Resume Match</p>
+                  <p className="text-[9px] text-white/40 uppercase tracking-widest font-bold mb-0.5">ATS</p>
+                  <p className="text-[10px] text-white/50">Resume</p>
                 </div>
               </div>
-              <div className="p-4 rounded-xl bg-gradient-to-br from-teal-500/10 to-transparent border border-teal-500/20 flex items-center gap-4">
-                <div className="relative w-14 h-14">
-                  <svg className="w-14 h-14 -rotate-90">
-                    <circle cx="28" cy="28" r="24" stroke="rgba(255,255,255,0.05)" strokeWidth="4" fill="none" />
-                    <circle cx="28" cy="28" r="24" stroke="#14b8a6" strokeWidth="4" fill="none" strokeDasharray={`${2 * Math.PI * 24}`} strokeDashoffset={`${2 * Math.PI * 24 * (1 - (parseFloat(selectedStudent.cgpa) || 0) / 10)}`} strokeLinecap="round" />
+              <div className="p-4 rounded-xl bg-gradient-to-br from-teal-500/10 to-transparent border border-teal-500/20 flex items-center gap-3">
+                <div className="relative w-12 h-12">
+                  <svg className="w-12 h-12 -rotate-90">
+                    <circle cx="24" cy="24" r="20" stroke="rgba(255,255,255,0.05)" strokeWidth="3.5" fill="none" />
+                    <circle cx="24" cy="24" r="20" stroke="#14b8a6" strokeWidth="3.5" fill="none" strokeDasharray={`${2 * Math.PI * 20}`} strokeDashoffset={`${2 * Math.PI * 20 * (1 - (parseFloat(selectedStudent.cgpa) || 0) / 10)}`} strokeLinecap="round" />
                   </svg>
-                  <span className="absolute inset-0 flex items-center justify-center font-bold text-sm text-white">{selectedStudent.cgpa || '0.0'}</span>
+                  <span className="absolute inset-0 flex items-center justify-center font-bold text-xs text-white">{selectedStudent.cgpa || '0'}</span>
                 </div>
                 <div>
-                  <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold mb-1">CGPA</p>
-                  <p className="text-xs text-white/60">Academic</p>
+                  <p className="text-[9px] text-white/40 uppercase tracking-widest font-bold mb-0.5">CGPA</p>
+                  <p className="text-[10px] text-white/50">Academic</p>
+                </div>
+              </div>
+              <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-500/10 to-transparent border border-emerald-500/20 flex items-center gap-3">
+                <div className="relative w-12 h-12">
+                  <svg className="w-12 h-12 -rotate-90">
+                    <circle cx="24" cy="24" r="20" stroke="rgba(255,255,255,0.05)" strokeWidth="3.5" fill="none" />
+                    <circle cx="24" cy="24" r="20" stroke="#22c55e" strokeWidth="3.5" fill="none" strokeDasharray={`${2 * Math.PI * 20}`} strokeDashoffset={`${2 * Math.PI * 20 * (1 - (selectedStudent.trust_score || 0) / 100)}`} strokeLinecap="round" />
+                  </svg>
+                  <span className="absolute inset-0 flex items-center justify-center font-bold text-xs text-white">{selectedStudent.trust_score || 0}</span>
+                </div>
+                <div>
+                  <p className="text-[9px] text-white/40 uppercase tracking-widest font-bold mb-0.5">Trust</p>
+                  <p className="text-[10px] text-white/50">Score</p>
                 </div>
               </div>
             </div>
@@ -341,21 +383,35 @@ export default function UniversityClient({ students: initialStudents }: Props) {
               ))}
             </div>
 
-            <h4 className="text-xs font-bold text-white/40 uppercase tracking-wider mb-3">Verification Status</h4>
+            <h4 className="text-xs font-bold text-white/40 uppercase tracking-wider mb-3">Verification Status <span className="text-emerald-400/60 ml-2">{selectedStudent.verified_docs_count || 0} docs verified</span></h4>
             <div className="space-y-2">
               {[
-                { label: 'Degree', verified: selectedStudent.degree_verified, icon: GraduationCap },
-                { label: 'Police', verified: selectedStudent.police_verified, icon: Shield },
-                { label: 'Aadhaar', verified: selectedStudent.aadhaar_verified, icon: CreditCard },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/5">
-                  <item.icon size={16} className={item.verified ? 'text-emerald-400' : 'text-white/20'} />
-                  <span className="text-sm text-white/70 flex-1">{item.label}</span>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg ${item.verified ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'}`}>
-                    {item.verified ? 'Verified' : 'Pending'}
-                  </span>
-                </div>
-              ))}
+                { key: 'resume', label: 'Resume / ATS', icon: FileText, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+                { key: 'degree', label: 'Degree Certificate', icon: GraduationCap, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+                { key: 'marksheet_10th', label: '10th Marksheet', icon: BookOpen, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+                { key: 'marksheet_12th', label: '12th Marksheet', icon: BookOpen, color: 'text-violet-400', bg: 'bg-violet-500/10' },
+                { key: 'passport', label: 'Other Credential', icon: Paperclip, color: 'text-teal-400', bg: 'bg-teal-500/10' },
+                { key: 'police', label: 'Police Verification', icon: Shield, color: 'text-violet-400', bg: 'bg-violet-500/10' },
+                { key: 'aadhaar', label: 'Aadhaar KYC', icon: CreditCard, color: 'text-teal-400', bg: 'bg-teal-500/10' },
+              ].map((item, i) => {
+                const vList = selectedStudent.verification_list || []
+                const record = vList.find((r: any) => r.type === item.key)
+                const isVerified = record && ['verified', 'ai_approved', 'admin_verified'].includes(record.status)
+                const isPending = record && ['pending', 'needs_review'].includes(record.status)
+                return (
+                  <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/5">
+                    <div className={`p-1.5 rounded-lg ${item.bg}`}><item.icon size={14} className={item.color} /></div>
+                    <span className="text-sm text-white/70 flex-1">{item.label}</span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg ${
+                      isVerified ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                      isPending ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                      'bg-white/5 text-white/30 border border-white/5'
+                    }`}>
+                      {isVerified ? 'Verified' : isPending ? 'Pending' : 'Not Uploaded'}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           </motion.div>
         </div>

@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   GraduationCap, FileText, BookOpen, Paperclip, Upload,
-  Check, X, Loader2, RotateCcw, AlertCircle, Sparkles, Eye
+  Check, X, Loader2, RotateCcw, AlertCircle, Sparkles, Eye, CheckCircle2, Clock, Shield
 } from 'lucide-react'
 
 const SLOTS = [
@@ -17,6 +17,7 @@ const SLOTS = [
     colorBg: 'rgba(245,158,11,0.08)',
     colorBorder: 'rgba(245,158,11,0.25)',
     desc: 'Final degree certificate or consolidated marksheet',
+    verifType: 'degree',
   },
   {
     id: '10th',
@@ -26,6 +27,7 @@ const SLOTS = [
     colorBg: 'rgba(59,130,246,0.08)',
     colorBorder: 'rgba(59,130,246,0.25)',
     desc: 'Secondary school (Class X) board marksheet',
+    verifType: 'marksheet_10th',
   },
   {
     id: '12th',
@@ -35,6 +37,7 @@ const SLOTS = [
     colorBg: 'rgba(139,92,246,0.08)',
     colorBorder: 'rgba(139,92,246,0.25)',
     desc: 'Senior secondary (Class XII) board marksheet',
+    verifType: 'marksheet_12th',
   },
   {
     id: 'other',
@@ -44,6 +47,7 @@ const SLOTS = [
     colorBg: 'rgba(20,184,166,0.08)',
     colorBorder: 'rgba(20,184,166,0.25)',
     desc: 'Diploma, certificate, or any other academic credential',
+    verifType: 'passport',
   },
 ]
 
@@ -83,12 +87,31 @@ export default function DegreePage() {
   )
   const [dragOver, setDragOver] = useState<string | null>(null)
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const [degreeVerifs, setDegreeVerifs] = useState<any[]>([])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setUserId(session.user.id)
+      if (session) {
+        setUserId(session.user.id)
+        // Fetch existing verifications for degree-related types
+        supabase.from('verifications')
+          .select('type, status')
+          .eq('student_id', session.user.id)
+          .in('type', ['degree', 'marksheet_10th', 'marksheet_12th', 'passport'])
+          .then(({ data }) => setDegreeVerifs(data || []))
+      }
     })
   }, [])
+
+  // Degree verification stats
+  const degreeDocTypes = [
+    { type: 'degree', label: 'Degree', color: '#f59e0b' },
+    { type: 'marksheet_10th', label: '10th', color: '#3b82f6' },
+    { type: 'marksheet_12th', label: '12th', color: '#8b5cf6' },
+    { type: 'passport', label: 'Other', color: '#14b8a6' },
+  ]
+  const verifiedDegreeCount = degreeVerifs.filter(v => ['ai_approved', 'admin_verified', 'verified'].includes(v.status)).length
+  const pendingDegreeCount = degreeVerifs.filter(v => ['pending', 'needs_review'].includes(v.status)).length
 
   const updateSlot = (id: string, patch: Partial<SlotState>) => {
     setSlots(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }))
@@ -120,6 +143,7 @@ export default function DegreePage() {
 
   const handleUploadAndVerify = async (slotId: string) => {
     const slot = slots[slotId]
+    const slotDef = SLOTS.find(s => s.id === slotId)!
     if (!slot.file || !userId) return
 
     // Upload phase
@@ -148,10 +172,11 @@ export default function DegreePage() {
       updateSlot(slotId, { progress: 100 })
       await new Promise(r => setTimeout(r, 400))
 
-      // Verify phase (only for 'degree' type — others just saved as uploaded)
+      // Verify phase
       updateSlot(slotId, { status: 'verifying' })
 
       if (slotId === 'degree') {
+        // Main degree slot: AI verify + auto-save to verifications
         const verifyRes = await fetch('/api/verify-degree', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -163,7 +188,7 @@ export default function DegreePage() {
         const analysis = verifyData.analysis || verifyData
         const saveStatus = analysis.verified ? 'ai_approved' : 'needs_review'
 
-        // Auto-save
+        // Auto-save to verifications
         await fetch('/api/save-verification', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -171,8 +196,21 @@ export default function DegreePage() {
         })
 
         updateSlot(slotId, { status: 'success', result: analysis, fileUrl: uploadData.url, saved: true, progress: 100 })
-      } else {
-        // For 10th, 12th, other — save to documents table as pending
+      } else if (slotId === '10th' || slotId === '12th') {
+        // 10th/12th: call real AI marksheet verifier
+        updateSlot(slotId, { status: 'verifying' })
+        const verifyRes = await fetch('/api/verify-marksheet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileUrl: uploadData.url, studentId: userId, marksheetType: slotId }),
+        })
+        const verifyData = await verifyRes.json()
+        if (!verifyRes.ok) throw new Error(verifyData.error || 'Marksheet verification failed')
+
+        const analysis = verifyData.analysis || {}
+        const saveStatus = verifyData.status || 'pending'
+
+        // Save to documents table
         await fetch('/api/save-document', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -184,6 +222,54 @@ export default function DegreePage() {
             fileSize: slot.file.size,
           }),
         })
+
+        // Save to verifications table with real AI result
+        await fetch('/api/save-verification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentId: userId,
+            type: slotDef.verifType,
+            analysis,
+            fileUrl: uploadData.url,
+            status: saveStatus,
+          }),
+        })
+
+        updateSlot(slotId, { status: 'success', result: analysis, fileUrl: uploadData.url, saved: true, progress: 100 })
+      } else {
+        // 'other' slot — no AI, save as pending for manual review
+        await fetch('/api/save-document', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            documentType: slotId,
+            fileUrl: uploadData.url,
+            fileName: slot.file.name,
+            fileSize: slot.file.size,
+          }),
+        })
+
+        const analysis = {
+          document_type: slotDef.label,
+          file_name: slot.file.name,
+          file_size_mb: (slot.file.size / 1024 / 1024).toFixed(2),
+          status: 'uploaded',
+          confidence: 0,
+        }
+        await fetch('/api/save-verification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentId: userId,
+            type: slotDef.verifType,
+            analysis,
+            fileUrl: uploadData.url,
+            status: 'pending',
+          }),
+        })
+
         updateSlot(slotId, { status: 'success', fileUrl: uploadData.url, saved: true, progress: 100 })
       }
     } catch (err: any) {
@@ -223,6 +309,58 @@ export default function DegreePage() {
         <p className="text-sm mt-1 text-white/40">
           Upload your academic credentials for AI-powered verification. All 4 slots are independent.
         </p>
+      </div>
+
+      {/* ── Degree Verification Status Bar ── */}
+      <div className="rounded-2xl p-4 sm:p-5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Shield size={16} className="text-emerald-400" />
+            <span className="text-xs font-bold text-white/70 uppercase tracking-wider">Document Verification Progress</span>
+          </div>
+          <span className="text-xs font-bold text-emerald-400">{verifiedDegreeCount}/4 verified</span>
+        </div>
+        {/* Segmented progress bar */}
+        <div className="flex gap-1.5 mb-3">
+          {degreeDocTypes.map((dt) => {
+            const v = degreeVerifs.find(vr => vr.type === dt.type)
+            const isVerified = v && ['ai_approved', 'admin_verified', 'verified'].includes(v.status)
+            const isPending = v && ['pending', 'needs_review'].includes(v.status)
+            return (
+              <motion.div
+                key={dt.type}
+                initial={{ scaleX: 0 }}
+                animate={{ scaleX: 1 }}
+                transition={{ duration: 0.6, ease: 'easeOut' }}
+                className="flex-1 h-2 rounded-full"
+                style={{
+                  background: isVerified ? dt.color : isPending ? `${dt.color}40` : 'rgba(255,255,255,0.06)',
+                  transformOrigin: 'left',
+                }}
+              />
+            )
+          })}
+        </div>
+        {/* Individual doc indicators */}
+        <div className="flex gap-3 flex-wrap">
+          {degreeDocTypes.map((dt) => {
+            const v = degreeVerifs.find(vr => vr.type === dt.type)
+            const isVerified = v && ['ai_approved', 'admin_verified', 'verified'].includes(v.status)
+            const isPending = v && ['pending', 'needs_review'].includes(v.status)
+            return (
+              <div key={dt.type} className="flex items-center gap-1.5">
+                {isVerified ? (
+                  <CheckCircle2 size={12} style={{ color: dt.color }} />
+                ) : isPending ? (
+                  <Clock size={12} className="text-amber-400" />
+                ) : (
+                  <div className="w-3 h-3 rounded-full border" style={{ borderColor: 'rgba(255,255,255,0.15)' }} />
+                )}
+                <span className={`text-[10px] font-medium ${isVerified ? 'text-white/70' : 'text-white/30'}`}>{dt.label}</span>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       {/* Upload slots grid */}
@@ -271,10 +409,13 @@ export default function DegreePage() {
                   <div className="rounded-xl p-4 flex flex-col items-center gap-3 text-center" style={{ background: 'rgba(16,185,129,0.04)' }}>
                     <SuccessTick />
                     <div>
-                      <p className="text-sm font-medium text-emerald-400">Document Uploaded</p>
+                      <p className="text-sm font-medium text-emerald-400">Document Saved & Uploaded</p>
                       <p className="text-xs text-white/30 mt-0.5 break-all">{s.fileName}</p>
                       {s.fileSize && (
                         <p className="text-[11px] text-white/20 mt-0.5">{(s.fileSize / 1024 / 1024).toFixed(2)} MB</p>
+                      )}
+                      {slot.id !== 'degree' && (
+                        <p className="text-[11px] text-teal-400/70 mt-1">✓ Saved to My Verifications</p>
                       )}
                     </div>
                     {/* Degree-specific result */}
@@ -291,6 +432,42 @@ export default function DegreePage() {
                             <span className="text-xs text-white/70 font-medium">{item.v}</span>
                           </div>
                         ))}
+                      </div>
+                    )}
+                    {/* Marksheet AI result for 10th/12th */}
+                    {(slot.id === '10th' || slot.id === '12th') && s.result && (
+                      <div className="w-full rounded-lg p-3 text-left space-y-1.5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <Sparkles size={11} style={{ color: slot.color }} />
+                          <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: slot.color }}>AI Analysis</span>
+                          <span className="text-[10px] text-white/30 ml-auto">Confidence: {s.result.confidence || 0}%</span>
+                        </div>
+                        {[
+                          { l: 'Board', v: s.result.board_name },
+                          { l: 'School', v: s.result.school_name },
+                          { l: 'Year', v: s.result.year_of_passing },
+                          { l: 'Percentage', v: s.result.percentage },
+                          { l: 'Grade', v: s.result.grade },
+                          { l: 'Result', v: s.result.result },
+                        ].filter(x => x.v).map((item, i) => (
+                          <div key={i} className="flex items-center justify-between">
+                            <span className="text-[10px] text-white/25 uppercase tracking-wider">{item.l}</span>
+                            <span className="text-xs text-white/70 font-medium">{item.v}</span>
+                          </div>
+                        ))}
+                        {s.result.subjects && s.result.subjects.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-white/5">
+                            <p className="text-[10px] text-white/25 uppercase tracking-wider mb-1.5">Subjects</p>
+                            <div className="space-y-1">
+                              {s.result.subjects.slice(0, 4).map((sub: any, i: number) => (
+                                <div key={i} className="flex items-center justify-between">
+                                  <span className="text-[11px] text-white/50">{sub.name}</span>
+                                  <span className="text-[11px] text-white/40">{sub.marks}{sub.max_marks ? `/${sub.max_marks}` : ''}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                     <div className="flex gap-2 w-full">
@@ -380,8 +557,12 @@ export default function DegreePage() {
                           ) : (
                             <>
                               <Sparkles size={28} className="text-violet-400 animate-pulse" />
-                              <p className="text-sm font-medium text-white/60">AI Verifying...</p>
-                              <p className="text-xs text-white/25">Extracting document data</p>
+                              <p className="text-sm font-medium text-white/60">
+                                {slot.id === 'degree' ? 'AI Verifying...' : 'Saving...'}
+                              </p>
+                              <p className="text-xs text-white/25">
+                                {slot.id === 'degree' ? 'Extracting document data' : 'Storing securely'}
+                              </p>
                             </>
                           )}
                         </div>
@@ -408,7 +589,7 @@ export default function DegreePage() {
                           }}
                         >
                           <Upload size={16} />
-                          {slot.id === 'degree' ? 'Upload & Verify' : 'Upload Document'}
+                          {slot.id === 'degree' ? 'Upload & Verify' : 'Upload & Save'}
                         </button>
                         <button
                           onClick={() => resetSlot(slot.id)}
@@ -434,7 +615,7 @@ export default function DegreePage() {
           <p className="text-sm font-semibold text-blue-300 mb-1">AI-Powered Degree Verification</p>
           <p className="text-xs text-white/40 leading-relaxed">
             The Degree Marksheet slot uses Groq AI to extract and verify your credentials automatically.
-            Other documents (10th, 12th, Other) are securely stored and sent for manual university verification.
+            Other documents (10th, 12th, Other) are securely stored, saved to your verification profile, and count toward your Trust Score.
             All documents are encrypted and accessible only to you, your linked university, and verified companies.
           </p>
         </div>

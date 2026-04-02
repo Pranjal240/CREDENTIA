@@ -339,7 +339,7 @@ export default function AdminClient({ profiles, students, verifications, recentA
             <div className="space-y-3">
               {pendingQueue.map((v, i) => {
                 const badge = getStatusBadge(v.status)
-                const typeLabels: Record<string, string> = { resume: 'Resume', police: 'Police', aadhaar: 'Aadhaar', degree: 'Degree' }
+                const typeLabels: Record<string, string> = { resume: 'Resume', police: 'Police', aadhaar: 'Aadhaar', degree: 'Degree', marksheet_10th: '10th Marksheet', marksheet_12th: '12th Marksheet', passport: 'Other Credential', pan: 'PAN Card' }
                 return (
                   <motion.div key={v.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
                     className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4"
@@ -427,14 +427,15 @@ export default function AdminClient({ profiles, students, verifications, recentA
               {[
                 { l: 'Course', v: selectedStudent.course },
                 { l: 'CGPA', v: selectedStudent.cgpa },
-                { l: 'ATS Score', v: selectedStudent.ats_score },
+                { l: 'ATS Score', v: selectedStudent.ats_score ? `${selectedStudent.ats_score}/100` : null },
+                { l: 'Trust Score', v: selectedStudent.trust_score !== undefined ? `${selectedStudent.trust_score}%` : null },
                 { l: 'Year', v: selectedStudent.graduation_year },
                 { l: 'City', v: selectedStudent.city },
                 { l: 'State', v: selectedStudent.state },
               ].map((d, i) => (
                 <div key={i} className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
                   <p className="text-[9px] text-white/25 uppercase mb-0.5">{d.l}</p>
-                  <p className="text-sm font-medium text-white/80">{d.v || '—'}</p>
+                  <p className="text-sm font-medium" style={{ color: d.l === 'Trust Score' && d.v ? `hsl(${parseInt(d.v) * 1.2}, 65%, 55%)` : 'rgba(255,255,255,0.8)' }}>{d.v || '—'}</p>
                 </div>
               ))}
             </div>

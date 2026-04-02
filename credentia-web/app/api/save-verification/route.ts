@@ -94,60 +94,93 @@ export async function POST(request: Request) {
             .eq('id', studentId)
         }
       }
-    } else if (type === 'aadhaar' && analysis.verified) {
+    } else if (type === 'aadhaar') {
       await supabaseAdmin.from('students').upsert({
         id: studentId,
-        aadhaar_verified: true,
+        aadhaar_verified: ['ai_approved', 'admin_verified', 'verified'].includes(status),
         aadhaar_last4: analysis.aadhaar_last4 || null,
         aadhaar_name: analysis.name || null,
         aadhaar_dob: analysis.dob || null,
         aadhaar_state: analysis.state || null,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' })
-    } else if (type === 'degree' && analysis.verified) {
+    } else if (type === 'degree') {
       await supabaseAdmin.from('students').upsert({
         id: studentId,
-        degree_verified: true,
+        degree_verified: ['ai_approved', 'admin_verified', 'verified'].includes(status),
         course: analysis.course || analysis.degree || null,
         cgpa: analysis.grade_cgpa || null,
         graduation_year: analysis.year_of_passing ? parseInt(analysis.year_of_passing) || null : null,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' })
-    } else if (type === 'police' && analysis.verified) {
+    } else if (type === 'police') {
       await supabaseAdmin.from('students').upsert({
         id: studentId,
-        police_verified: true,
+        police_verified: ['ai_approved', 'admin_verified', 'verified'].includes(status),
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' })
     }
+    // For marksheet_10th, marksheet_12th, passport (other) — no specific student column updates
+    // but they are stored in verifications and contribute to profile completion
 
-    // 5. Recalculate profile completion percentage
+    // 5. Fetch all verifications for this student to recalculate scores
+    const { data: allVerifs } = await supabaseAdmin
+      .from('verifications')
+      .select('type, status')
+      .eq('student_id', studentId)
+
     const { data: studentData } = await supabaseAdmin
       .from('students')
       .select('name, course, branch, city, cgpa, graduation_year, ats_score, degree_verified, police_verified, aadhaar_verified, resume_url')
       .eq('id', studentId)
       .single()
 
+    // 6. Recalculate profile completion percentage + trust score
     if (studentData) {
+      // Profile completion: based on filled fields (60%) + core verifications (40%)
       const fields = [
         studentData.name, studentData.course, studentData.branch,
         studentData.city, studentData.cgpa, studentData.graduation_year,
         studentData.resume_url
       ]
       const filledFields = fields.filter(f => f !== null && f !== undefined && f !== '').length
-      const verifications = [studentData.degree_verified, studentData.police_verified, studentData.aadhaar_verified].filter(Boolean).length
-      const pct = Math.round(((filledFields / fields.length) * 60) + ((verifications / 3) * 40))
+      const coreVerifiedCount = [studentData.degree_verified, studentData.police_verified, studentData.aadhaar_verified].filter(Boolean).length
+      const pct = Math.round(((filledFields / fields.length) * 60) + ((coreVerifiedCount / 3) * 40))
+
+      // Trust score: based on ALL verification types, dynamically weighted
+      const verifiedStatuses = ['ai_approved', 'admin_verified', 'verified']
+      const coreTypes = ['resume', 'police', 'aadhaar', 'degree']
+      const bonusTypes = ['marksheet_10th', 'marksheet_12th', 'passport']
+      const coreVerified = (allVerifs || []).filter(v => coreTypes.includes(v.type) && verifiedStatuses.includes(v.status)).length
+      const bonusVerified = (allVerifs || []).filter(v => bonusTypes.includes(v.type) && verifiedStatuses.includes(v.status)).length
+      // Core types: 4 pillars, each worth 21.25% (total 85%)
+      // Bonus types: each adds 5% (capped at 15% total)
+      const trustScore = Math.min(
+        Math.round((coreVerified / 4) * 85) + Math.min(bonusVerified * 5, 15),
+        100
+      )
+
+      const totalVerifiedDocs = (allVerifs || []).filter(v => verifiedStatuses.includes(v.status)).length
 
       await supabaseAdmin.from('students')
-        .update({ profile_complete_pct: Math.min(pct, 100), updated_at: new Date().toISOString() })
+        .update({
+          profile_complete_pct: Math.min(pct, 100),
+          trust_score: trustScore,
+          verified_docs_count: totalVerifiedDocs,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', studentId)
     }
 
-    // 6. Cache invalidation
+    // 7. Cache invalidation — cover all portals
     revalidatePath('/dashboard/student', 'layout')
     revalidatePath(`/dashboard/student/${type}`, 'page')
+    revalidatePath('/dashboard/student/saved', 'page')
     revalidatePath('/dashboard/admin', 'page')
+    revalidatePath('/dashboard/admin/analytics', 'page')
     revalidatePath('/dashboard/university', 'page')
+    revalidatePath('/dashboard/university/analytics', 'page')
+    revalidatePath('/dashboard/company', 'page')
 
     return NextResponse.json({ success: true })
 

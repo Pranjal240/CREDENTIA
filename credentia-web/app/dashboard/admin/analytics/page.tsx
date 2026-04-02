@@ -4,11 +4,13 @@ import { useEffect, useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 import { TrendingUp, Users, Shield, FileText, CheckCircle2, AlertCircle, Clock, Building, GraduationCap, RefreshCw } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 export default function AdminAnalytics() {
   const [profiles, setProfiles] = useState<any[]>([])
   const [verifications, setVerifications] = useState<any[]>([])
   const [students, setStudents] = useState<any[]>([])
+  const [allStudents, setAllStudents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -23,6 +25,7 @@ export default function AdminAnalytics() {
       if (data.error) throw new Error(data.error)
       setProfiles(data.profiles || [])
       setVerifications(data.verifications || [])
+      setAllStudents(data.students || [])
       setStudents((data.students || []).filter((s: any) => s.ats_score > 0))
     } catch (err: any) {
       setError(err.message)
@@ -31,7 +34,16 @@ export default function AdminAnalytics() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    // Realtime — auto-refresh on changes
+    const channel = supabase.channel('admin_analytics_rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verifications' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => load())
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
 
   // Process data for charts
   const userGrowthData = useMemo(() => {
@@ -61,18 +73,30 @@ export default function AdminAnalytics() {
   }, [profiles])
 
   const verificationStatusData = useMemo(() => {
+    const typeMap: Record<string, string> = { resume: 'Resume', police: 'Police', aadhaar: 'Aadhaar', degree: 'Degree', marksheet_10th: '10th', marksheet_12th: '12th', passport: 'Other' }
     const counts = verifications.reduce((acc, v) => {
-      const type = v.type === 'resume' ? 'Resume' : v.type === 'police' ? 'Police' : v.type === 'aadhaar' ? 'Aadhaar' : 'Degree'
+      const type = typeMap[v.type] || 'Other'
       if (!acc[type]) acc[type] = { name: type, verified: 0, pending: 0, rejected: 0 }
-      
       if (['ai_approved', 'admin_verified', 'verified'].includes(v.status)) acc[type].verified++
       else if (['rejected'].includes(v.status)) acc[type].rejected++
       else acc[type].pending++
-      
       return acc
     }, {} as Record<string, any>)
     return Object.values(counts)
   }, [verifications])
+
+  const trustScoreDistribution = useMemo(() => {
+    const buckets = { '0-20': 0, '21-40': 0, '41-60': 0, '61-80': 0, '81-100': 0 }
+    allStudents.forEach(s => {
+      const score = s.trust_score || 0
+      if (score <= 20) buckets['0-20']++
+      else if (score <= 40) buckets['21-40']++
+      else if (score <= 60) buckets['41-60']++
+      else if (score <= 80) buckets['61-80']++
+      else buckets['81-100']++
+    })
+    return Object.entries(buckets).map(([range, count]) => ({ range, count }))
+  }, [allStudents])
 
   const atsDistribution = useMemo(() => {
     const buckets = { '0-20': 0, '21-40': 0, '41-60': 0, '61-80': 0, '81-100': 0 }
@@ -87,11 +111,14 @@ export default function AdminAnalytics() {
     return Object.entries(buckets).map(([range, count]) => ({ range, count }))
   }, [students])
 
+  const avgTrustScore = allStudents.length ? Math.round(allStudents.reduce((a, s) => a + (s.trust_score || 0), 0) / allStudents.length) : 0
+  
   const stats = [
     { label: 'Total Users', value: profiles.length, icon: Users, color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
     { label: 'Total Verifications', value: verifications.length, icon: Shield, color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
     { label: 'Verified Documents', value: verifications.filter(v => ['ai_approved', 'admin_verified', 'verified'].includes(v.status)).length, icon: CheckCircle2, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
     { label: 'Avg ATS Score', value: students.length ? Math.round(students.reduce((a, s) => a + (s.ats_score || 0), 0) / students.length) : 0, icon: TrendingUp, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
+    { label: 'Avg Trust Score', value: `${avgTrustScore}%`, icon: GraduationCap, color: '#14b8a6', bg: 'rgba(20,184,166,0.1)' },
   ]
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-red-500/30 border-t-red-500 rounded-full animate-spin" /></div>
@@ -119,7 +146,7 @@ export default function AdminAnalytics() {
         </div>
       )}
       {/* Top Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {stats.map((s, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="rounded-2xl p-5 border border-white/5 bg-white/[0.02]">
             <div className="flex items-start justify-between">
@@ -227,6 +254,31 @@ export default function AdminAnalytics() {
         </motion.div>
 
       </div>
+
+      {/* Trust Score Distribution */}
+      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="rounded-2xl p-6 border border-white/5 bg-white/[0.02]">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-sm font-bold text-white flex items-center gap-2"><Shield size={16} className="text-teal-400" /> Trust Score Distribution (All Students)</h2>
+          <span className="text-xs text-white/30">Avg: <span className="text-teal-400 font-bold">{avgTrustScore}%</span></span>
+        </div>
+        <div className="h-52">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={trustScoreDistribution} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="colorTrust" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.9}/>
+                  <stop offset="95%" stopColor="#14b8a6" stopOpacity={0.2}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+              <XAxis dataKey="range" stroke="rgba(255,255,255,0.2)" fontSize={11} tickMargin={10} axisLine={false} tickLine={false} />
+              <YAxis stroke="rgba(255,255,255,0.2)" fontSize={11} axisLine={false} tickLine={false} allowDecimals={false} />
+              <RechartsTooltip contentStyle={{ backgroundColor: '#0e0e14', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px', fontSize: '12px' }} cursor={{ fill: 'rgba(255,255,255,0.02)' }} />
+              <Bar dataKey="count" name="Students" fill="url(#colorTrust)" radius={[4, 4, 0, 0]} barSize={60} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </motion.div>
     </div>
   )
 }
