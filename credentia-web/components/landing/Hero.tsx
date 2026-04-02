@@ -2,7 +2,14 @@
 
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { Shield, ArrowRight } from 'lucide-react'
+import { Shield, ArrowRight, Zap, Lock, Share2, Bot } from 'lucide-react'
+
+const trustPills = [
+  { icon: Bot,    label: 'AI-Powered Verification',  color: 'blue',    delay: 0 },
+  { icon: Lock,   label: 'Tamper-Proof Credentials', color: 'emerald', delay: 0.5 },
+  { icon: Share2, label: 'One Link, Every Company',  color: 'teal',    delay: 1 },
+  { icon: Zap,    label: 'Verified in Minutes',       color: 'indigo',  delay: 1.5 },
+]
 
 export default function Hero() {
   return (
@@ -64,47 +71,68 @@ export default function Hero() {
           </a>
         </motion.div>
 
-        {/* Social proof */}
+        {/* Platform trust bar — 3 real platform pillars, no fake numbers */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.6 }}
-          className="flex items-center justify-center mb-10"
-        >
-          <div className="px-5 py-2.5 rounded-full border border-[rgb(var(--border-default))] glass flex items-center gap-2">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[rgb(var(--success))] opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-[rgb(var(--success))]"></span>
-            </span>
-            <span className="text-[rgb(var(--text-secondary))] text-sm font-medium">
-              Join <strong className="text-[rgb(var(--text-primary))]">50,000+</strong> students already verified
-            </span>
-          </div>
-        </motion.div>
-
-        {/* Floating verification badges */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 1, delay: 0.8 }}
-          className="flex flex-wrap items-center justify-center gap-3"
+          className="flex flex-wrap items-center justify-center gap-3 mb-10"
         >
           {[
-            { label: 'Resume Verified — 94/100', color: 'blue' },
-            { label: 'Police Verified — Delhi', color: 'emerald' },
-            { label: 'Aadhaar Verified', color: 'teal' },
-          ].map((badge, i) => (
+            { dot: 'bg-blue-400',    text: 'Gemini AI Document Analysis' },
+            { dot: 'bg-emerald-400', text: 'Government-Grade KYC Verification' },
+            { dot: 'bg-teal-400',    text: 'Fraud-Proof Credential Certificate' },
+          ].map((item, i) => (
             <motion.div
               key={i}
-              animate={{ y: [0, -6, 0] }}
-              transition={{ duration: 3, delay: i * 0.5, repeat: Infinity, ease: 'easeInOut' }}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl glass text-sm font-medium text-[rgb(var(--text-primary))]`}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.65 + i * 0.08 }}
+              className="px-4 py-2 rounded-full border border-[rgb(var(--border-default))] glass flex items-center gap-2"
             >
-              <Shield size={14} className={`text-${badge.color}-400`} />
-              {badge.label}
+              <span className={`w-2 h-2 rounded-full ${item.dot} flex-shrink-0`} />
+              <span className="text-[rgb(var(--text-secondary))] text-xs sm:text-sm font-medium whitespace-nowrap">
+                {item.text}
+              </span>
             </motion.div>
           ))}
         </motion.div>
+
+        {/* Trust Feature Pills — themed, no fake data */}
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          {trustPills.map((pill, i) => (
+            /* Outer: staged entry — slides up + fades in + spring scale */
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 18, scale: 0.88 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{
+                duration: 0.55,
+                delay: 0.85 + i * 0.1,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+            >
+              {/* Inner: perpetual gentle float — completely separate from entry */}
+              <motion.div
+                animate={{ y: [0, -7, 0] }}
+                transition={{
+                  duration: 3.5 + i * 0.5,
+                  delay: 1.5 + i * 0.25,
+                  repeat: Infinity,
+                  ease: 'easeInOut',
+                }}
+                whileHover={{ scale: 1.06, transition: { duration: 0.18 } }}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl glass text-sm font-medium
+                           text-[rgb(var(--text-primary))] border border-${pill.color}-400/20
+                           bg-${pill.color}-400/5 hover:bg-${pill.color}-400/15
+                           cursor-default transition-colors duration-200`}
+              >
+                <pill.icon size={14} className={`text-${pill.color}-400`} />
+                {pill.label}
+              </motion.div>
+            </motion.div>
+          ))}
+        </div>
       </div>
     </section>
   )

@@ -46,9 +46,9 @@ export default function Footer() {
             </p>
             <div className="flex items-center gap-3">
               {[
-                { icon: XIcon, href: '#', label: 'X' },
-                { icon: LinkedInIcon, href: '#', label: 'LinkedIn' },
-                { icon: InstagramIcon, href: '#', label: 'Instagram' },
+                { icon: XIcon, href: 'https://x.com/Nihal81788', label: 'X' },
+                { icon: LinkedInIcon, href: 'https://www.linkedin.com/in/pranjal-mishra-3a7256291/', label: 'LinkedIn' },
+                { icon: InstagramIcon, href: 'https://www.instagram.com/pranjal.__.mishra/', label: 'Instagram' },
               ].map((social) => (
                 <a key={social.label} href={social.href} target="_blank" rel="noreferrer" className="w-9 h-9 rounded-lg flex items-center justify-center text-[rgb(var(--text-muted))] hover:text-[rgb(var(--accent))] hover:bg-[rgb(var(--accent))]/5 transition-all" aria-label={social.label}>
                   <social.icon />
