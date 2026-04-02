@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
+import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 import { TrendingUp, Users, Shield, FileText, CheckCircle2, GraduationCap, RefreshCw, BarChart2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -24,7 +25,8 @@ export default function AdminAnalytics() {
       setProfiles(data.profiles || [])
       setVerifications(data.verifications || [])
       setAllStudents(data.students || [])
-      setStudents((data.students || []).filter((s: any) => s.ats_score > 0))
+      // We process all students for ATS, even if 0, so the chart isn't empty.
+      setStudents(data.students || [])
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -46,10 +48,20 @@ export default function AdminAnalytics() {
   const userGrowthData = useMemo(() => {
     const counts: Record<string, number> = {}
     let cumulative = 0
+    // Generate empty buckets if profiles is small
+    if (profiles.length < 2) {
+      const now = new Date()
+      for(let i=5; i>=0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        counts[d.toLocaleString('default', { month: 'short', year: '2-digit' })] = 0
+      }
+    }
+    
     profiles.forEach(p => {
       const month = new Date(p.created_at).toLocaleString('default', { month: 'short', year: '2-digit' })
       counts[month] = (counts[month] || 0) + 1
     })
+    
     return Object.entries(counts).map(([month, count]) => {
       cumulative += count
       return { month, newUsers: count, totalUsers: cumulative }
@@ -61,12 +73,13 @@ export default function AdminAnalytics() {
       acc[p.role || 'student'] = (acc[p.role || 'student'] || 0) + 1
       return acc
     }, {} as Record<string, number>)
-    const total = profiles.length || 1
+    
+    // Add default values to ensure chart never looks entirely blank
     return [
-      { name: 'Students', value: counts.student || 0, color: '#3b82f6', per: ((counts.student || 0)/total)*100 },
-      { name: 'Companies', value: counts.company || 0, color: '#10b981', per: ((counts.company || 0)/total)*100 },
-      { name: 'Universities', value: counts.university || 0, color: '#8b5cf6', per: ((counts.university || 0)/total)*100 },
-      { name: 'Admins', value: counts.admin || 0, color: '#f43f5e', per: ((counts.admin || 0)/total)*100 },
+      { name: 'Students', value: counts.student || 0, color: '#3b82f6' },
+      { name: 'Companies', value: counts.company || 0, color: '#10b981' },
+      { name: 'Universities', value: counts.university || 0, color: '#8b5cf6' },
+      { name: 'Admins', value: counts.admin || 0, color: '#f43f5e' },
     ]
   }, [profiles])
 
@@ -74,13 +87,23 @@ export default function AdminAnalytics() {
     const typeMap: Record<string, string> = { resume: 'Resume', police: 'Police', aadhaar: 'Aadhaar', degree: 'Degree', marksheet_10th: '10th', marksheet_12th: '12th', passport: 'Other' }
     const counts = verifications.reduce((acc, v) => {
       const type = typeMap[v.type] || 'Other'
-      if (!acc[type]) acc[type] = { name: type, verified: 0, pending: 0, rejected: 0, total: 0 }
-      acc[type].total++
+      if (!acc[type]) acc[type] = { name: type, verified: 0, pending: 0, rejected: 0 }
       if (['ai_approved', 'admin_verified', 'verified'].includes(v.status)) acc[type].verified++
       else if (['rejected'].includes(v.status)) acc[type].rejected++
       else acc[type].pending++
       return acc
-    }, {} as Record<string, {name: string, verified: number, pending: number, rejected: number, total: number}>)
+    }, {} as Record<string, {name: string, verified: number, pending: number, rejected: number}>)
+    
+    // Default filler to make empty state look good
+    if (Object.keys(counts).length === 0) {
+      return [
+        { name: 'Resume', verified: 0, pending: 0, rejected: 0 },
+        { name: 'Aadhaar', verified: 0, pending: 0, rejected: 0 },
+        { name: '10th', verified: 0, pending: 0, rejected: 0 },
+        { name: '12th', verified: 0, pending: 0, rejected: 0 },
+      ]
+    }
+    
     return Object.values(counts)
   }, [verifications])
 
@@ -94,27 +117,47 @@ export default function AdminAnalytics() {
       else if (v <= 80) b['61-80']++
       else b['81-100']++
     })
-    const max = Math.max(...Object.values(b), 1)
-    return Object.entries(b).map(([range, count]) => ({ range, count, max }))
+    return Object.entries(b).map(([range, count]) => ({ range, count }))
   }
 
   const trustScoreDistribution = useMemo(() => mkBuckets(allStudents, 'trust_score'), [allStudents])
   const atsDistribution = useMemo(() => mkBuckets(students, 'ats_score'), [students])
 
   const avgTrustScore = allStudents.length ? Math.round(allStudents.reduce((a, s) => a + (s.trust_score || 0), 0) / allStudents.length) : 0
+  
+  // Calculate Avg ATS Score filtering only valid positive scores, but at least showing 0
+  const validATS = students.filter(s => s.ats_score > 0)
+  const avgAtsScore = validATS.length ? Math.round(validATS.reduce((a, s) => a + (s.ats_score || 0), 0) / validATS.length) : 0
 
   const stats = [
     { label: 'Total Users', value: profiles.length, icon: Users, color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
     { label: 'Total Verifications', value: verifications.length, icon: Shield, color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
     { label: 'Verified Documents', value: verifications.filter(v => ['ai_approved', 'admin_verified', 'verified'].includes(v.status)).length, icon: CheckCircle2, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
-    { label: 'Avg ATS Score', value: students.length ? Math.round(students.reduce((a, s) => a + (s.ats_score || 0), 0) / students.length) : 0, icon: TrendingUp, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
+    { label: 'Avg ATS Score', value: avgAtsScore, icon: TrendingUp, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
     { label: 'Avg Trust Score', value: `${avgTrustScore}%`, icon: GraduationCap, color: '#14b8a6', bg: 'rgba(20,184,166,0.1)' },
   ]
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-red-500/30 border-t-red-500 rounded-full animate-spin" /></div>
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-[#0e0e14]/90 backdrop-blur-xl border border-white/10 p-3 rounded-xl shadow-xl shadow-black/50">
+          <p className="text-white/60 text-[10px] font-bold tracking-widest uppercase mb-2">{label}</p>
+          <div className="space-y-1">
+            {payload.map((p: any, i: number) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: p.color || p.fill }} />
+                <span className="text-white/80 text-xs">{p.name}:</span>
+                <span className="text-white font-bold text-sm ml-auto">{p.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
 
-  // Max value for growth scale
-  const maxGrowth = Math.max(...userGrowthData.map(d => d.totalUsers), 1)
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" /></div>
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -125,92 +168,104 @@ export default function AdminAnalytics() {
         </div>
         <button
           onClick={load}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-colors hover:bg-white/5"
-          style={{ color: 'rgba(255,255,255,0.35)', border: '1px solid rgba(255,255,255,0.08)' }}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-colors hover:bg-white/5 bg-white/[0.02]"
+          style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}
         >
           <RefreshCw size={14} /> Refresh
         </button>
       </div>
 
       {error && (
-        <div className="rounded-xl px-4 py-3 text-sm"
+        <div className="rounded-xl px-4 py-3 text-sm flex items-center gap-2"
           style={{ background: 'rgba(239,68,68,0.08)', color: '#f87171', border: '1px solid rgba(239,68,68,0.15)' }}>
-          ⚠ {error}
+          <span className="font-bold">Error:</span> {error}
         </div>
       )}
 
       {/* Top Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <AnimatePresence>
-          {stats.map((s, i) => (
-            <motion.div key={i} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.05, type: 'spring' }} className="rounded-2xl p-5 border border-white/5 bg-white/[0.02]">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-[10px] text-white/30 uppercase tracking-wider font-semibold mb-1">{s.label}</p>
-                  <p className="font-heading text-2xl font-bold text-white">{s.value}</p>
-                </div>
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: s.bg, color: s.color }}><s.icon size={20} /></div>
+        {stats.map((s, i) => (
+          <motion.div key={i} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, type: "spring", stiffness: 100 }} className="rounded-2xl p-5 border border-white/5 bg-gradient-to-br from-white/[0.03] to-white/[0.01] hover:bg-white/[0.05] transition-colors relative overflow-hidden group">
+            <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full blur-[40px] opacity-10 group-hover:opacity-30 transition-opacity" style={{ background: s.color }} />
+            <div className="flex items-start justify-between relative z-10">
+              <div>
+                <p className="text-[9px] text-white/40 uppercase tracking-widest font-bold mb-1.5">{s.label}</p>
+                <p className="font-heading text-3xl font-black text-white">{s.value}</p>
               </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-inner relative overflow-hidden" style={{ background: s.bg, color: s.color }}>
+                 <div className="absolute inset-0 bg-gradient-to-tr from-transparent to-white/10" />
+                 <s.icon size={18} className="relative z-10 drop-shadow-md" />
+              </div>
+            </div>
+          </motion.div>
+        ))}
       </div>
 
       {/* Main Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         
-        {/* User Growth (Bars) */}
-        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lg:col-span-2 rounded-2xl p-6 border border-white/5 bg-white/[0.02] flex flex-col">
+        {/* User Growth (Area) */}
+        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lg:col-span-2 rounded-2xl p-6 border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
           <h2 className="text-sm font-bold text-white mb-6 flex items-center gap-2"><TrendingUp size={16} className="text-blue-400" /> Platform Total Growth</h2>
-          <div className="flex-1 flex items-end gap-3 min-h-[16rem]">
-            {userGrowthData.length === 0 ? (
-               <div className="flex-1 text-center text-white/30 text-sm py-12">No data yet.</div>
-            ) : (
-               userGrowthData.map((d, i) => {
-                 const h = (d.totalUsers / maxGrowth) * 100
-                 return (
-                   <div key={d.month} className="flex-1 flex flex-col items-center justify-end gap-2 group">
-                     <div className="w-full relative flex items-end justify-center h-full rounded-md overflow-hidden bg-white/[0.01] hover:bg-white/[0.03] transition-colors pb-6 pt-2">
-                        <motion.div 
-                          className="w-full rounded-t-sm" style={{ background: 'linear-gradient(to top, rgba(59,130,246,0.8), rgba(59,130,246,0.3))', bottom: 0, position: 'absolute' }}
-                          initial={{ height: 0 }} animate={{ height: `${h}%` }} transition={{ duration: 0.8, delay: i * 0.05 + 0.3 }}
-                        />
-                        <span className="absolute bottom-1 text-[10px] text-blue-300 font-bold opacity-0 group-hover:opacity-100 transition-opacity z-10">{d.totalUsers}</span>
-                     </div>
-                     <span className="text-[10px] font-medium text-white/40 uppercase">{d.month}</span>
-                   </div>
-                 )
-               })
-            )}
+          <div className="h-[280px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={userGrowthData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.5}/>
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+                <XAxis dataKey="month" stroke="rgba(255,255,255,0.2)" fontSize={10} tickMargin={12} axisLine={false} tickLine={false} />
+                <YAxis stroke="rgba(255,255,255,0.2)" fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
+                <RechartsTooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                <Area type="monotone" dataKey="totalUsers" name="Total Users" stroke="#3b82f6" strokeWidth={4} fill="url(#colorUsers)" activeDot={{ r: 6, fill: '#3b82f6', stroke: '#0e0e14', strokeWidth: 3 }} animationDuration={1500} />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         </motion.div>
 
-        {/* Roles Distribution (Stacked Flex) */}
-        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="rounded-2xl p-6 border border-white/5 bg-white/[0.02]">
-          <h2 className="text-sm font-bold text-white mb-6 flex items-center gap-2"><Users size={16} className="text-emerald-400" /> Global User Distribution</h2>
-          <div className="h-64 flex flex-col justify-center">
-            {profiles.length === 0 ? (
-              <div className="text-center text-white/30 text-sm">No profiles found.</div>
-            ) : (
-              <div className="space-y-4">
-                <div className="w-full h-8 rounded-full overflow-hidden flex shadow-[inset_0_2px_4px_rgba(0,0,0,0.3)]">
-                  {roleDistribution.map((r, i) => r.per > 0 && (
-                    <motion.div key={r.name} initial={{ width: 0 }} animate={{ width: `${r.per}%` }} transition={{ duration: 0.8, delay: 0.4 }} style={{ backgroundColor: r.color }} className="h-full border-r border-black/20 last:border-0" title={`${r.name}: ${r.value}`} />
-                  ))}
-                </div>
-                <div className="grid grid-cols-2 gap-3 pt-4">
-                  {roleDistribution.map(r => r.value > 0 && (
-                    <div key={r.name} className="flex items-center gap-3 p-3 rounded-xl border border-white/5 bg-white/[0.01]">
-                      <div className="w-3 h-3 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" style={{ backgroundColor: r.color }} />
-                      <div className="flex-1">
-                        <p className="text-[10px] font-bold text-white/40 uppercase mb-0.5">{r.name}</p>
-                        <p className="text-lg font-bold text-white leading-none">{r.value} <span className="text-xs text-white/30 font-normal">({Math.round(r.per)}%)</span></p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+        {/* Roles Distribution (Pie) */}
+        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="rounded-2xl p-6 border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
+          <h2 className="text-sm font-bold text-white mb-2 flex items-center gap-2"><Users size={16} className="text-emerald-400" /> Global User Distribution</h2>
+          <div className="h-[290px] relative">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart margin={{ top: 0, bottom: 20 }}>
+                <Pie 
+                  data={roleDistribution} 
+                  dataKey="value" 
+                  nameKey="name" 
+                  cx="50%" cy="45%" 
+                  innerRadius={65} outerRadius={85} 
+                  paddingAngle={6}
+                  stroke="none"
+                  animationDuration={1500}
+                >
+                  {roleDistribution.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                </Pie>
+                <RechartsTooltip content={<CustomTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+            
+            {/* Custom Legend */}
+            <div className="absolute bottom-1 w-full grid grid-cols-2 gap-x-2 gap-y-3 px-2">
+              {roleDistribution.map(r => (
+                 <div key={r.name} className="flex items-center gap-2 bg-white/[0.02] border border-white/5 p-2 rounded-lg">
+                   <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color, boxShadow: `0 0 8px ${r.color}80` }} />
+                   <div>
+                     <p className="text-[9px] uppercase font-bold text-white/40 leading-none mb-0.5">{r.name}</p>
+                     <p className="text-xs font-bold text-white leading-none">{r.value}</p>
+                   </div>
+                 </div>
+              ))}
+            </div>
+            
+            {/* Center Label */}
+            <div className="absolute top-[45%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+               <p className="text-3xl font-black text-white leading-none">{profiles.length}</p>
+               <p className="text-[9px] uppercase tracking-widest font-bold text-white/30 mt-1">Users</p>
+            </div>
           </div>
         </motion.div>
       </div>
@@ -218,105 +273,71 @@ export default function AdminAnalytics() {
       {/* Secondary Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         
-        {/* Verification Status (Custom Bars) */}
-        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="rounded-2xl p-6 border border-white/5 bg-white/[0.02]">
+        {/* Verification Status (Stacked Bar) */}
+        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="rounded-2xl p-6 border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
           <h2 className="text-sm font-bold text-white mb-6 flex items-center gap-2"><Shield size={16} className="text-violet-400" /> Verifications by Type</h2>
-          <div className="h-64 flex items-end gap-3 justify-between pt-8">
-             {verificationStatusData.length === 0 ? (
-               <div className="w-full text-center text-white/30 text-sm">No data yet.</div>
-             ) : (
-               verificationStatusData.map((d: any, i) => {
-                 const overallMax = Math.max(...verificationStatusData.map((v: any) => v.total), 1)
-                 const totalH = (d.total / overallMax) * 100
-                 const vH = (d.verified / Math.max(d.total, 1)) * 100
-                 const pH = (d.pending / Math.max(d.total, 1)) * 100
-                 const rH = (d.rejected / Math.max(d.total, 1)) * 100
-                 return (
-                   <div key={d.name} className="flex-1 flex flex-col items-center justify-end gap-3 h-full group">
-                     {/* The stacked bar container */}
-                     <div className="w-full relative flex flex-col justify-end gap-1 rounded-md overflow-hidden bg-white/[0.02] p-1 pb-0 w-12 hover:bg-white/[0.05] transition-colors cursor-pointer" style={{ height: `${Math.max(totalH, 15)}%` }}>
-                        
-                        <div className="w-full flex-1 flex flex-col justify-end gap-[1px]">
-                          {/* Rejected */}
-                          {d.rejected > 0 && <motion.div className="w-full bg-red-500 rounded-t-sm" initial={{ height: 0 }} animate={{ height: `${rH}%` }} transition={{ duration: 0.5, delay: i*0.05+0.2 }} title={`${d.rejected} Rejected`} />}
-                          {/* Pending */}
-                          {d.pending > 0 && <motion.div className="w-full bg-amber-500 rounded-t-sm" initial={{ height: 0 }} animate={{ height: `${pH}%` }} transition={{ duration: 0.5, delay: i*0.05+0.3 }} title={`${d.pending} Pending`} />}
-                          {/* Verified */}
-                          {d.verified > 0 && <motion.div className="w-full bg-emerald-500 rounded-t-sm" initial={{ height: 0 }} animate={{ height: `${vH}%` }} transition={{ duration: 0.5, delay: i*0.05+0.4 }} title={`${d.verified} Verified`} />}
-                        </div>
-                        
-                        {/* Hover popup */}
-                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/90 p-2 rounded-lg border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap shadow-xl">
-                          <p className="text-[10px] text-white/50 mb-1">{d.name} Breakdown</p>
-                          <div className="flex gap-2">
-                            <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-1 rounded">{d.verified} ✓</span>
-                            <span className="text-xs text-amber-400 font-bold bg-amber-500/10 px-1 rounded">{d.pending} ⧖</span>
-                            <span className="text-xs text-red-500 font-bold bg-red-500/10 px-1 rounded">{d.rejected} ✗</span>
-                          </div>
-                        </div>
-                     </div>
-                     <span className="text-[10px] font-medium text-white/40 uppercase truncate max-w-[50px]">{d.name}</span>
-                   </div>
-                 )
-               })
-             )}
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={verificationStatusData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }} barSize={32}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+                <XAxis dataKey="name" stroke="rgba(255,255,255,0.2)" fontSize={10} tickMargin={12} axisLine={false} tickLine={false} />
+                <YAxis stroke="rgba(255,255,255,0.2)" fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
+                <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '10px', opacity: 0.6 }} />
+                <Bar dataKey="verified" name="Verified" stackId="a" fill="#10b981" radius={[0, 0, 4, 4]} animationDuration={1000} />
+                <Bar dataKey="pending" name="Pending" stackId="a" fill="#f59e0b" animationDuration={1000} />
+                <Bar dataKey="rejected" name="Rejected" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} animationDuration={1000} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </motion.div>
 
-        {/* ATS Distribution (Custom Bar) */}
-        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="rounded-2xl p-6 border border-white/5 bg-white/[0.02]">
+        {/* ATS Distribution (Bar) */}
+        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="rounded-2xl p-6 border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
           <h2 className="text-sm font-bold text-white mb-6 flex items-center gap-2"><BarChart2 size={16} className="text-amber-400" /> ATS Score Distribution</h2>
-          <div className="h-64 flex items-end gap-2 pt-8">
-            {atsDistribution.length === 0 ? (
-               <div className="w-full text-center text-white/30 text-sm">No data yet.</div>
-            ) : (
-               atsDistribution.map((d, i) => {
-                 const h = d.max > 0 ? (d.count / d.max) * 100 : 0
-                 return (
-                   <div key={d.range} className="flex-1 flex flex-col items-center justify-end gap-3 h-full group">
-                     <span className="text-xs font-bold text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md">{d.count}</span>
-                     <div className="w-full relative rounded-md overflow-hidden bg-white/[0.01] hover:bg-white/[0.03] transition-colors p-1 pb-0 w-12" style={{ height: '100%' }}>
-                        <motion.div 
-                          className="w-full rounded-t-sm absolute bottom-0 left-0 bg-amber-500/80 shadow-[0_0_15px_rgba(245,158,11,0.5)] border-t border-amber-400"
-                          initial={{ height: 0 }} animate={{ height: `${Math.max(h, 2)}%` }} transition={{ duration: 0.6, delay: i*0.05 + 0.4 }}
-                        />
-                     </div>
-                     <span className="text-[10px] font-medium text-white/40">{d.range}</span>
-                   </div>
-                 )
-               })
-            )}
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={atsDistribution} margin={{ top: 10, right: 10, left: -25, bottom: 0 }} barSize={40}>
+                <defs>
+                  <linearGradient id="colorAts" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.9}/>
+                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.1}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+                <XAxis dataKey="range" stroke="rgba(255,255,255,0.2)" fontSize={10} tickMargin={12} axisLine={false} tickLine={false} />
+                <YAxis stroke="rgba(255,255,255,0.2)" fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
+                <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                <Bar dataKey="count" name="Students" fill="url(#colorAts)" radius={[4, 4, 0, 0]} animationDuration={1000} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </motion.div>
 
       </div>
 
       {/* Trust Score Distribution */}
-      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="rounded-2xl p-6 border border-white/5 bg-white/[0.02]">
+      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="rounded-2xl p-6 border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-sm font-bold text-white flex items-center gap-2"><Shield size={16} className="text-teal-400" /> Trust Score Distribution (All Students)</h2>
-          <span className="text-xs text-white/30 uppercase tracking-wider font-bold bg-white/5 px-3 py-1 rounded-lg">Avg: <span className="text-teal-400">{avgTrustScore}%</span></span>
+          <span className="text-xs text-teal-300 bg-teal-500/10 px-3 py-1 rounded-lg border border-teal-500/20 font-bold uppercase tracking-widest">Avg Default: {avgTrustScore}%</span>
         </div>
-        <div className="h-48 flex items-end gap-4 pt-6">
-          {trustScoreDistribution.length === 0 ? (
-             <div className="w-full text-center text-white/30 text-sm">No data yet.</div>
-          ) : (
-             trustScoreDistribution.map((d, i) => {
-               const h = d.max > 0 ? (d.count / d.max) * 100 : 0
-               return (
-                 <div key={d.range} className="flex-1 flex flex-col items-center justify-end gap-3 h-full group">
-                   <span className="text-[10px] px-2 py-1 bg-teal-500/20 text-teal-300 font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity -mb-2 z-10 scale-90 group-hover:scale-100">{d.count} Students</span>
-                   <div className="w-full relative rounded-md overflow-hidden bg-white/[0.01] hover:bg-white/[0.04] transition-colors p-1 pb-0" style={{ height: '100%' }}>
-                      <motion.div 
-                        className="w-full rounded-t-sm absolute bottom-0 left-0 bg-teal-500/80 shadow-[0_0_20px_rgba(20,184,166,0.3)] border-t border-teal-400"
-                        initial={{ height: 0 }} animate={{ height: `${Math.max(h, 4)}%` }} transition={{ duration: 0.6, delay: i * 0.1 + 0.5 }}
-                      />
-                   </div>
-                   <span className="text-xs font-bold text-white/60 group-hover:text-teal-400 transition-colors">{d.range}</span>
-                 </div>
-               )
-             })
-          )}
+        <div className="h-56">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={trustScoreDistribution} margin={{ top: 10, right: 10, left: -25, bottom: 0 }} barSize={50}>
+              <defs>
+                <linearGradient id="colorTrust" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#14b8a6" stopOpacity={0.9}/>
+                  <stop offset="100%" stopColor="#14b8a6" stopOpacity={0.1}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+              <XAxis dataKey="range" stroke="rgba(255,255,255,0.2)" fontSize={10} tickMargin={12} axisLine={false} tickLine={false} />
+              <YAxis stroke="rgba(255,255,255,0.2)" fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
+              <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+              <Bar dataKey="count" name="Students" fill="url(#colorTrust)" radius={[6, 6, 0, 0]} animationDuration={1000} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </motion.div>
     </div>
