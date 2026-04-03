@@ -13,6 +13,7 @@ import {
   BookmarkCheck, BarChart3, ClipboardList, Building2, Briefcase,
   ScrollText, Search, Sun, Moon
 } from 'lucide-react'
+import { ProfileAvatar } from '@/components/ProfileAvatar'
 
 const sidebarLinks: Record<string, { label: string; icon: any; href: string }[]> = {
   student: [
@@ -227,15 +228,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="p-3 space-y-1 flex-shrink-0 overflow-hidden" style={{ borderTop: '1px solid rgba(var(--border-default), 0.3)' }}>
           {profile && (
             <div
-              className="px-3 py-2 mb-2 overflow-hidden"
+              className="px-3 py-2 mb-2 flex items-center gap-3 overflow-hidden"
               style={{
                 opacity: collapsed ? 0 : 1,
                 maxHeight: collapsed ? 0 : 60,
                 transition: 'opacity 0.2s ease, max-height 0.3s ease',
               }}
             >
-              <p className="text-[11px] text-text-muted uppercase tracking-wider font-medium">Signed in as</p>
-              <p className="text-xs text-text-primary font-medium truncate mt-0.5">{profile.full_name || user?.email?.split('@')[0]}</p>
+              <ProfileAvatar 
+                profile={profile} 
+                userId={user?.id}
+                onUploadSuccess={(url) => setProfile({ ...profile, avatar_url: url })}
+                size="sm"
+              />
+              <div className="min-w-0">
+                <p className="text-[11px] text-text-muted uppercase tracking-wider font-medium">Signed in as</p>
+                <p className="text-xs text-text-primary font-medium truncate mt-0.5">{profile.full_name || user?.email?.split('@')[0]}</p>
+              </div>
             </div>
           )}
           {/* Theme toggle */}
@@ -309,6 +318,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </button>
         <span className="font-heading font-bold text-xs tracking-widest text-text-primary">CREDENTIA</span>
         <div className="flex items-center gap-2">
+          {profile && (
+            <div className="mr-1 transform scale-90">
+              <ProfileAvatar 
+                profile={profile} 
+                userId={user?.id}
+                onUploadSuccess={(url) => setProfile({ ...profile, avatar_url: url })}
+                size="sm"
+              />
+            </div>
+          )}
           {mounted && (
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -362,15 +381,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
 
               {/* Role badge */}
-              <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(var(--border-default), 0.2)' }}>
-                <p className="text-[10px] text-text-muted uppercase tracking-wider">Signed in as</p>
-                <p className="text-xs text-text-primary font-medium mt-0.5 truncate">{profile?.full_name || user?.email?.split('@')[0] || 'User'}</p>
-                <span
-                  className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
-                  style={{ background: rc.bg, color: rc.text, border: `1px solid ${rc.border}` }}
-                >
-                  {role}
-                </span>
+              <div className="px-4 py-4 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(var(--border-default), 0.2)' }}>
+                <ProfileAvatar 
+                  profile={profile} 
+                  userId={user?.id}
+                  onUploadSuccess={(url) => setProfile({ ...profile, avatar_url: url })}
+                  size="md"
+                />
+                <div className="min-w-0">
+                  <p className="text-[10px] text-text-muted uppercase tracking-wider">Signed in as</p>
+                  <p className="text-xs text-text-primary font-medium mt-0.5 truncate">{profile?.full_name || user?.email?.split('@')[0] || 'User'}</p>
+                  <span
+                    className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                    style={{ background: rc.bg, color: rc.text, border: `1px solid ${rc.border}` }}
+                  >
+                    {role}
+                  </span>
+                </div>
               </div>
 
               <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto scrollbar-thin">
@@ -424,18 +451,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             borderBottom: '1px solid rgba(var(--border-default), 0.3)',
           }}
         >
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-text-muted">Welcome,</span>
-            <span className="font-heading font-semibold text-sm text-text-primary">
+          <div className="flex items-center gap-3">
+            <span
+              className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mr-2"
+              style={{ background: rc.bg, color: rc.text, border: `1px solid ${rc.border}` }}
+            >
+              {role}
+            </span>
+            <span className="text-xs text-text-muted hidden sm:inline">Welcome,</span>
+            <span className="font-heading font-semibold text-sm text-text-primary hidden sm:inline">
               {profile?.full_name || user?.email?.split('@')[0] || 'User'}
             </span>
+            {profile && (
+              <ProfileAvatar 
+                profile={profile} 
+                userId={user?.id}
+                onUploadSuccess={(url) => setProfile({ ...profile, avatar_url: url })}
+                size="sm"
+              />
+            )}
           </div>
-          <span
-            className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
-            style={{ background: rc.bg, color: rc.text, border: `1px solid ${rc.border}` }}
-          >
-            {role}
-          </span>
         </div>
 
         {/* Page content */}

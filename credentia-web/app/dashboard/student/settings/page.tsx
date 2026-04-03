@@ -7,6 +7,7 @@ import {
   User, Save, Loader2, CheckCircle2, AlertCircle, Eye, EyeOff,
   Building, Search, MapPin, X, ExternalLink, GraduationCap, Plus
 } from 'lucide-react'
+import { ProfileAvatar } from '@/components/ProfileAvatar'
 
 export default function StudentSettingsPage() {
   const [userId, setUserId] = useState('')
@@ -133,9 +134,12 @@ export default function StudentSettingsPage() {
       {/* Avatar */}
       <div className="rounded-2xl p-6 border border-white/10 bg-white/[0.02]">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500/30 to-violet-500/30 border border-white/10 flex items-center justify-center text-white font-heading font-bold text-xl">
-            {(form.name || 'S')[0].toUpperCase()}
-          </div>
+          <ProfileAvatar 
+            profile={profile} 
+            userId={userId}
+            onUploadSuccess={(url) => setProfile({ ...profile, avatar_url: url })}
+            size="lg"
+          />
           <div>
             <p className="font-heading font-bold text-white">{form.name || 'Student'}</p>
             <p className="text-xs text-white/40">{profile?.email}</p>

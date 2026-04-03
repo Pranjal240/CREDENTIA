@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { motion } from 'framer-motion'
 import { Settings, AlertCircle, Briefcase, Loader2, CheckCircle2 } from 'lucide-react'
+import { ProfileAvatar } from '@/components/ProfileAvatar'
 
 export default function CompanySettings() {
   const [profile, setProfile] = useState<any>(null)
@@ -59,7 +60,21 @@ export default function CompanySettings() {
 
       <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 space-y-4">
         <h2 className="font-heading font-bold text-sm text-white flex items-center gap-2"><Briefcase size={16} className="text-emerald-400" /> Company Profile</h2>
-        <div className="space-y-4">
+        
+        <div className="flex items-center gap-4 py-2">
+          <ProfileAvatar 
+            profile={profile} 
+            userId={profile?.id}
+            onUploadSuccess={(url) => setProfile({ ...profile, avatar_url: url })}
+            size="lg"
+          />
+          <div>
+            <p className="font-heading font-bold text-white">{form.company_name || 'Company Name'}</p>
+            <p className="text-xs text-white/40">{profile?.email}</p>
+          </div>
+        </div>
+
+        <div className="space-y-4 pt-2">
           <div>
             <label className="text-[10px] text-white/30 uppercase tracking-wider font-medium mb-1 block">Company Name</label>
             <input 
