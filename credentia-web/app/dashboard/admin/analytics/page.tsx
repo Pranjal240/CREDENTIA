@@ -235,18 +235,20 @@ export default function AdminAnalytics() {
         </motion.div>
 
         {/* Roles Distribution (Pie) */}
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }} className="rounded-2xl p-6 border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
-          <h2 className="text-sm font-bold text-white mb-2 flex items-center gap-2"><Users size={16} className="text-emerald-400" /> Global User Distribution</h2>
-          <div className="h-[290px] relative">
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }} className="rounded-2xl p-4 sm:p-6 border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent flex flex-col min-h-0">
+          <h2 className="text-sm font-bold text-white mb-1 flex items-center gap-2"><Users size={16} className="text-emerald-400" /> Global User Distribution</h2>
+          
+          {/* Pie Chart — percentage radii scale with the container */}
+          <div className="w-full relative flex-1 min-h-[140px] max-h-[180px]">
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart margin={{ top: -20, bottom: 40 }}>
+              <PieChart>
                 <Pie 
                   data={roleDistribution} 
                   dataKey="value" 
                   nameKey="name" 
-                  cx="50%" cy="40%" 
-                  innerRadius={55} outerRadius={75} 
-                  paddingAngle={8}
+                  cx="50%" cy="50%" 
+                  innerRadius="55%" outerRadius="78%" 
+                  paddingAngle={6}
                   stroke="none"
                   isAnimationActive={true}
                   animationBegin={200}
@@ -259,24 +261,24 @@ export default function AdminAnalytics() {
               </PieChart>
             </ResponsiveContainer>
             
-            {/* Custom Legend */}
-            <div className="absolute bottom-0 w-full grid grid-cols-2 gap-x-3 gap-y-3 px-1">
-              {roleDistribution.map((r, i) => (
-                 <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.8 + (i * 0.1) }} key={r.name} className="flex items-center gap-2 bg-white/[0.02] border border-white/5 p-2 rounded-lg">
-                   <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: r.color, boxShadow: `0 0 10px ${r.color}80` }} />
-                   <div>
-                     <p className="text-[10px] uppercase font-bold text-white/40 leading-none mb-1">{r.name}</p>
-                     <p className="text-sm font-black text-white leading-none">{r.value}</p>
-                   </div>
-                 </motion.div>
-              ))}
-            </div>
-            
             {/* Center Label */}
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }} className="absolute top-[39%] left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-               <p className="text-3xl font-black text-white leading-none">{profiles.length}</p>
-               <p className="text-[9px] uppercase tracking-widest font-bold text-white/30 mt-1">Users</p>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+               <p className="text-2xl sm:text-3xl font-black text-white leading-none">{profiles.length}</p>
+               <p className="text-[8px] sm:text-[9px] uppercase tracking-widest font-bold text-white/30 mt-0.5">Users</p>
             </motion.div>
+          </div>
+          
+          {/* Legend — standard flow, never overlaps */}
+          <div className="w-full grid grid-cols-2 gap-1.5 sm:gap-2 pt-3 sm:pt-4">
+            {roleDistribution.map((r, i) => (
+               <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.8 + (i * 0.1) }} key={r.name} className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.02] border border-white/5 p-1.5 sm:p-2 rounded-lg">
+                 <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: r.color, boxShadow: `0 0 10px ${r.color}80` }} />
+                 <div className="min-w-0">
+                   <p className="text-[9px] sm:text-[10px] uppercase font-bold text-white/40 leading-none mb-0.5 sm:mb-1 truncate">{r.name}</p>
+                   <p className="text-xs sm:text-sm font-black text-white leading-none">{r.value}</p>
+                 </div>
+               </motion.div>
+            ))}
           </div>
         </motion.div>
       </div>
