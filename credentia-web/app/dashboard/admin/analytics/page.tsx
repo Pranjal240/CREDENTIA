@@ -1,21 +1,83 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
-import { motion } from 'framer-motion'
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
-import { TrendingUp, Users, Shield, FileText, CheckCircle2, GraduationCap, RefreshCw, BarChart2 } from 'lucide-react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { motion, AnimatePresence, useInView } from 'framer-motion'
+import {
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell,
+  Line,
+} from 'recharts'
+import {
+  TrendingUp, Users, Shield, CheckCircle2, GraduationCap, RefreshCw,
+  BarChart2, Activity, Zap, ArrowUpRight,
+} from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useTheme } from 'next-themes'
 
+/* ─── Animated Counter ─── */
+function AnimatedNumber({ value, suffix = '' }: { value: number; suffix?: string }) {
+  const [display, setDisplay] = useState(0)
+  const ref = useRef<HTMLSpanElement>(null)
+  const inView = useInView(ref, { once: true })
+  useEffect(() => {
+    if (!inView) return
+    const dur = 1200, start = performance.now()
+    const tick = (now: number) => {
+      const p = Math.min((now - start) / dur, 1)
+      const e = p === 1 ? 1 : 1 - Math.pow(2, -10 * p)
+      setDisplay(Math.round(value * e))
+      if (p < 1) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }, [value, inView])
+  return <span ref={ref}>{display}{suffix}</span>
+}
+
+/* ─── Tooltip (fully inline, no CSS dependency) ─── */
+function TT({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null
+  return (
+    <div style={{
+      background: 'rgba(10,12,30,0.94)', backdropFilter: 'blur(16px)',
+      border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12,
+      padding: '10px 14px', boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+    }}>
+      <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '0.12em', color: '#94a3b8', marginBottom: 6 }}>{label}</div>
+      {payload.map((p: any, i: number) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: p.color || p.fill, flexShrink: 0 }} />
+          <span style={{ fontSize: 11, color: '#e2e8f0' }}>{p.name}:</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: '#fff', marginLeft: 'auto', paddingLeft: 12 }}>{p.value}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+const noTTBg: React.CSSProperties = { backgroundColor: 'transparent', border: 'none', padding: 0, boxShadow: 'none' }
+
+/* ─── Animations ─── */
+const stagger = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.06, delayChildren: 0.05 } } }
+const fadeUp = { hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 100, damping: 18 } } }
+const springIn = { type: 'spring' as const, stiffness: 80, damping: 20 }
+
+/* ═════════════════════════════════════════════════════════
+   ADMIN ANALYTICS — Connected to real Supabase data
+   ═════════════════════════════════════════════════════════ */
 export default function AdminAnalytics() {
+  const { resolvedTheme } = useTheme()
+  const isDark = resolvedTheme === 'dark'
   const [profiles, setProfiles] = useState<any[]>([])
   const [verifications, setVerifications] = useState<any[]>([])
-  const [students, setStudents] = useState<any[]>([])
   const [allStudents, setAllStudents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
-  const load = async () => {
-    setLoading(true)
+  /* ── Fetch from /api/admin/analytics ── */
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true)
+    else setLoading(true)
     setError('')
     try {
       const res = await fetch('/api/admin/analytics')
@@ -25,26 +87,29 @@ export default function AdminAnalytics() {
       setProfiles(data.profiles || [])
       setVerifications(data.verifications || [])
       setAllStudents(data.students || [])
-      // We process all students for ATS, even if 0, so the chart isn't empty.
-      setStudents(data.students || [])
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+      setLastUpdated(new Date())
+    } catch (err: any) { setError(err.message) }
+    finally { setLoading(false); setRefreshing(false) }
+  }, [])
 
+  /* ── Realtime: listen for changes on all 3 tables ── */
   useEffect(() => {
     load()
     const channel = supabase.channel('admin_analytics_rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'verifications' }, () => load())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => load())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verifications' }, () => load(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => load(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => load(true))
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [])
+  }, [load])
 
-  // Derived metrics
+  /*
+   * ══════════════════════════════════════════════
+   *  DERIVED DATA — all connected to real DB rows
+   * ══════════════════════════════════════════════
+   */
+
+  /* Merge ATS scores from resume verification ai_result into students */
   const computedStudents = useMemo(() => {
     return allStudents.map(s => {
       const resumeVer = verifications.filter(v => v.student_id === s.id && v.type === 'resume').pop()
@@ -53,302 +118,376 @@ export default function AdminAnalytics() {
     })
   }, [allStudents, verifications])
 
+  /* Platform Growth — always render 6 months of time buckets */
   const userGrowthData = useMemo(() => {
-    const counts: Record<string, number> = {}
-    let cumulative = 0
-    // Generate empty buckets if profiles is small
-    if (profiles.length < 2) {
-      const now = new Date()
-      for(let i=5; i>=0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-        counts[d.toLocaleString('default', { month: 'short', year: '2-digit' })] = 0
-      }
+    const now = new Date()
+    const months: string[] = []
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      months.push(d.toLocaleString('default', { month: 'short', year: '2-digit' }))
     }
-    
+    const mc: Record<string, number> = {}
+    months.forEach(m => (mc[m] = 0))
     profiles.forEach(p => {
-      const month = new Date(p.created_at).toLocaleString('default', { month: 'short', year: '2-digit' })
-      counts[month] = (counts[month] || 0) + 1
+      const m = new Date(p.created_at).toLocaleString('default', { month: 'short', year: '2-digit' })
+      if (mc[m] !== undefined) mc[m]++
     })
-    
-    return Object.entries(counts).map(([month, count]) => {
-      cumulative += count
-      return { month, newUsers: count, totalUsers: cumulative }
-    })
+    let cum = 0
+    return months.map(month => { cum += mc[month] || 0; return { month, newUsers: mc[month] || 0, totalUsers: cum } })
   }, [profiles])
 
+  /* Role Distribution for donut */
   const roleDistribution = useMemo(() => {
-    const counts = profiles.reduce((acc, p) => {
-      acc[p.role || 'student'] = (acc[p.role || 'student'] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
-    
-    // Add default values to ensure chart never looks entirely blank
+    const c = profiles.reduce((a, p) => { a[p.role || 'student'] = (a[p.role || 'student'] || 0) + 1; return a }, {} as Record<string, number>)
     return [
-      { name: 'Students', value: counts.student || 0, color: '#3b82f6' },
-      { name: 'Companies', value: counts.company || 0, color: '#10b981' },
-      { name: 'Universities', value: counts.university || 0, color: '#8b5cf6' },
-      { name: 'Admins', value: counts.admin || 0, color: '#f43f5e' },
+      { name: 'Students', value: c.student || 0, color: '#818cf8' },
+      { name: 'Companies', value: c.company || 0, color: '#34d399' },
+      { name: 'Universities', value: c.university || 0, color: '#c084fc' },
+      { name: 'Admins', value: c.admin || 0, color: '#fb7185' },
     ]
   }, [profiles])
 
+  /*
+   * Verification Status by Type
+   * IMPORTANT: "not_submitted" means the student hasn't uploaded anything.
+   * That is NOT "pending" — it's "Not Submitted". Only actual submitted
+   * documents that are awaiting review should be "Pending".
+   *
+   * Real statuses in DB:
+   *   - not_submitted → Not Submitted (student hasn't uploaded)
+   *   - pending / uploaded / processing → Pending (awaiting AI/admin review)
+   *   - ai_approved / admin_verified / verified → Verified
+   *   - rejected → Rejected
+   */
   const verificationStatusData = useMemo(() => {
-    const typeMap: Record<string, string> = { resume: 'Resume', police: 'Police', aadhaar: 'Aadhaar', degree: 'Degree', marksheet_10th: '10th', marksheet_12th: '12th', passport: 'Other' }
+    const typeMap: Record<string, string> = {
+      resume: 'Resume', police: 'Police', aadhaar: 'Aadhaar',
+      degree: 'Degree', marksheet_10th: '10th', marksheet_12th: '12th',
+    }
     const counts = verifications.reduce((acc, v) => {
       const type = typeMap[v.type] || 'Other'
-      if (!acc[type]) acc[type] = { name: type, verified: 0, pending: 0, rejected: 0 }
-      if (['ai_approved', 'admin_verified', 'verified'].includes(v.status)) acc[type].verified++
-      else if (['rejected'].includes(v.status)) acc[type].rejected++
-      else acc[type].pending++
+      if (!acc[type]) acc[type] = { name: type, verified: 0, pending: 0, rejected: 0, notSubmitted: 0 }
+
+      const st = v.status
+      if (['ai_approved', 'admin_verified', 'verified'].includes(st)) {
+        acc[type].verified++
+      } else if (st === 'rejected') {
+        acc[type].rejected++
+      } else if (st === 'not_submitted') {
+        acc[type].notSubmitted++
+      } else {
+        // pending, uploaded, processing, etc.
+        acc[type].pending++
+      }
       return acc
-    }, {} as Record<string, {name: string, verified: number, pending: number, rejected: number}>)
-    
-    // Default filler to make empty state look good
-    if (Object.keys(counts).length === 0) {
-      return [
-        { name: 'Resume', verified: 0, pending: 0, rejected: 0 },
-        { name: 'Aadhaar', verified: 0, pending: 0, rejected: 0 },
-        { name: '10th', verified: 0, pending: 0, rejected: 0 },
-        { name: '12th', verified: 0, pending: 0, rejected: 0 },
-      ]
+    }, {} as Record<string, { name: string; verified: number; pending: number; rejected: number; notSubmitted: number }>)
+
+    if (!Object.keys(counts).length) {
+      return [{ name: 'No Data', verified: 0, pending: 0, rejected: 0, notSubmitted: 0 }]
     }
-    
     return Object.values(counts)
   }, [verifications])
 
+  /* Score Buckets — skip students with 0/null scores */
   const mkBuckets = (arr: any[], key: string) => {
-    const b = { '0-20': 0, '21-40': 0, '41-60': 0, '61-80': 0, '81-100': 0 }
+    const labels = ['1-20', '21-40', '41-60', '61-80', '81-100']
+    const b: Record<string, number> = {}
+    labels.forEach(l => (b[l] = 0))
     arr.forEach(s => {
       const v = s[key] || 0
-      if (v <= 20) b['0-20']++
+      if (v <= 0) return // only count students with actual scores
+      if (v <= 20) b['1-20']++
       else if (v <= 40) b['21-40']++
       else if (v <= 60) b['41-60']++
       else if (v <= 80) b['61-80']++
       else b['81-100']++
     })
-    return Object.entries(b).map(([range, count]) => ({ range, count }))
+    return labels.map(range => ({ range, count: b[range] }))
   }
+  const trustDist = useMemo(() => mkBuckets(computedStudents, 'trust_score'), [computedStudents])
+  const atsDist = useMemo(() => mkBuckets(computedStudents, 'ats_score'), [computedStudents])
 
-  const trustScoreDistribution = useMemo(() => mkBuckets(computedStudents, 'trust_score'), [computedStudents])
-  const atsDistribution = useMemo(() => mkBuckets(computedStudents, 'ats_score'), [computedStudents])
-
-  const avgTrustScore = computedStudents.length ? Math.round(computedStudents.reduce((a, s) => a + (s.trust_score || 0), 0) / computedStudents.length) : 0
-  
-  // Calculate Avg ATS Score filtering only valid positive scores, but at least showing 0
+  /* Averages */
+  const avgTrust = computedStudents.length ? Math.round(computedStudents.reduce((a, s) => a + (s.trust_score || 0), 0) / computedStudents.length) : 0
   const validATS = computedStudents.filter(s => s.ats_score > 0)
-  const avgAtsScore = validATS.length ? Math.round(validATS.reduce((a, s) => a + (s.ats_score || 0), 0) / validATS.length) : 0
+  const avgATS = validATS.length ? Math.round(validATS.reduce((a, s) => a + s.ats_score, 0) / validATS.length) : 0
 
+  /* Counts */
+  const verifiedCount = verifications.filter(v => ['ai_approved', 'admin_verified', 'verified'].includes(v.status)).length
+  const submittedCount = verifications.filter(v => v.status !== 'not_submitted').length
+
+  /* ── Theme Colors ── */
+  const t = useMemo(() => ({
+    grid: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)',
+    axis: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.3)',
+    cur: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+    ds: isDark ? '#0f172a' : '#ffffff',
+    bg: isDark ? 'rgba(15,23,42,0.6)' : 'rgba(255,255,255,0.7)',
+    border: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)',
+    tp: isDark ? '#f1f5f9' : '#0f172a',
+    tm: isDark ? '#64748b' : '#94a3b8',
+    subtle: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+  }), [isDark])
+
+  /* Card data */
   const stats = [
-    { label: 'Total Users', value: profiles.length, icon: Users, color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
-    { label: 'Total Verifications', value: verifications.length, icon: Shield, color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
-    { label: 'Verified Documents', value: verifications.filter(v => ['ai_approved', 'admin_verified', 'verified'].includes(v.status)).length, icon: CheckCircle2, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
-    { label: 'Avg ATS Score', value: avgAtsScore, icon: TrendingUp, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
-    { label: 'Avg Trust Score', value: `${avgTrustScore}%`, icon: GraduationCap, color: '#14b8a6', bg: 'rgba(20,184,166,0.1)' },
+    { label: 'Total Users', value: profiles.length, icon: Users, color: '#818cf8', bg: 'rgba(129,140,248,0.12)' },
+    { label: 'Submitted', value: submittedCount, icon: Shield, color: '#34d399', bg: 'rgba(52,211,153,0.12)' },
+    { label: 'Verified', value: verifiedCount, icon: CheckCircle2, color: '#c084fc', bg: 'rgba(192,132,252,0.12)' },
+    { label: 'Avg ATS', value: avgATS, icon: TrendingUp, color: '#fbbf24', bg: 'rgba(251,191,36,0.12)' },
+    { label: 'Trust Score', value: avgTrust, suffix: '%', icon: GraduationCap, color: '#22d3ee', bg: 'rgba(34,211,238,0.12)' },
   ]
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-[#0e0e14]/90 backdrop-blur-xl border border-white/10 p-3 rounded-xl shadow-xl shadow-black/50">
-          <p className="text-white/60 text-[10px] font-bold tracking-widest uppercase mb-2">{label}</p>
-          <div className="space-y-1">
-            {payload.map((p: any, i: number) => (
-              <div key={i} className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: p.color || p.fill }} />
-                <span className="text-white/80 text-xs">{p.name}:</span>
-                <span className="text-white font-bold text-sm ml-auto">{p.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
+  const card: React.CSSProperties = { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 16, padding: 16, backdropFilter: 'blur(12px)' }
+  const cardLg: React.CSSProperties = { ...card, padding: 20 }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" /></div>
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative"><div className="w-12 h-12 border-2 border-indigo-500/20 rounded-full" /><div className="absolute inset-0 w-12 h-12 border-2 border-transparent border-t-indigo-500 rounded-full animate-spin" /></div>
+        <span style={{ fontSize: 11, color: t.tm, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Loading Analytics</span>
+      </div>
+    </div>
+  )
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div style={{ maxWidth: 1400, margin: '0 auto', paddingBottom: 32 }} className="space-y-4 sm:space-y-5 px-3 sm:px-4 lg:px-6 w-full overflow-x-hidden">
+
+      {/* ══ HEADER ══ */}
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="font-heading text-2xl font-bold text-white">Platform-Wide Analytics</h1>
-          <p className="text-sm mt-1 text-white/40">Real-time metrics measuring the entire Credentia ecosystem.</p>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: t.tp }} className="flex items-center gap-2">
+            <Activity size={20} className="text-indigo-400" /> Platform Analytics
+          </h1>
+          <p style={{ fontSize: 11, color: t.tm, marginTop: 4 }} className="flex items-center gap-2">
+            Real-time metrics · Credentia ecosystem
+            <span className="inline-flex items-center gap-1" style={{ fontSize: 9, color: '#34d399', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.15em' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34d399' }} className="animate-pulse" /> Live
+            </span>
+          </p>
         </div>
-        <button
-          onClick={load}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-colors hover:bg-white/5 bg-white/[0.02]"
-          style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}
-        >
-          <RefreshCw size={14} /> Refresh
-        </button>
-      </div>
-
-      {error && (
-        <div className="rounded-xl px-4 py-3 text-sm flex items-center gap-2"
-          style={{ background: 'rgba(239,68,68,0.08)', color: '#f87171', border: '1px solid rgba(239,68,68,0.15)' }}>
-          <span className="font-bold">Error:</span> {error}
+        <div className="flex items-center gap-3">
+          {lastUpdated && <span style={{ fontSize: 10, color: t.tm }} className="hidden md:inline">{lastUpdated.toLocaleTimeString()}</span>}
+          <button onClick={() => load(true)} disabled={refreshing} className="admin-refresh-btn">
+            <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline" style={{ fontSize: 11 }}>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+          </button>
         </div>
-      )}
+      </motion.div>
 
-      {/* Top Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <AnimatePresence>
+        {error && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="admin-error-banner"><Zap size={14} /> <strong>Error:</strong> {error}</motion.div>}
+      </AnimatePresence>
+
+      {/* ══ STAT CARDS ══ */}
+      <motion.div variants={stagger} initial="hidden" animate="visible" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
         {stats.map((s, i) => (
-          <motion.div key={i} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, type: "spring", stiffness: 100 }} className="rounded-2xl p-5 border border-white/5 bg-gradient-to-br from-white/[0.03] to-white/[0.01] hover:bg-white/[0.05] transition-colors relative overflow-hidden group">
-            <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full blur-[40px] opacity-10 group-hover:opacity-30 transition-opacity" style={{ background: s.color }} />
-            <div className="flex items-start justify-between relative z-10">
-              <div>
-                <p className="text-[9px] text-white/40 uppercase tracking-widest font-bold mb-1.5">{s.label}</p>
-                <p className="font-heading text-3xl font-black text-white">{s.value}</p>
+          <motion.div key={i} variants={fadeUp} style={card} className="group relative overflow-hidden cursor-default">
+            <div className="absolute -right-3 -top-3 w-16 h-16 rounded-full opacity-0 group-hover:opacity-30 transition-opacity duration-500 blur-2xl" style={{ background: s.color }} />
+            <div className="flex items-start justify-between relative z-10 gap-2">
+              <div className="min-w-0 flex-1 truncate">
+                <div style={{ fontSize: 'clamp(8px, 1.5vw, 9px)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: t.tm, marginBottom: 4 }} className="truncate">{s.label}</div>
+                <div style={{ fontSize: 'clamp(1.1rem, 2.5vw, 1.6rem)', fontWeight: 900, color: t.tp, lineHeight: 1.1 }}><AnimatedNumber value={s.value} suffix={s.suffix || ''} /></div>
               </div>
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-inner relative overflow-hidden" style={{ background: s.bg, color: s.color }}>
-                 <div className="absolute inset-0 bg-gradient-to-tr from-transparent to-white/10" />
-                 <s.icon size={18} className="relative z-10 drop-shadow-md" />
+              <div style={{ width: 'clamp(28px, 6vw, 34px)', height: 'clamp(28px, 6vw, 34px)', borderRadius: 10, background: s.bg, color: s.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <s.icon size={16} />
               </div>
             </div>
           </motion.div>
         ))}
-      </div>
+      </motion.div>
 
-      {/* Main Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        
-        {/* User Growth (Area) */}
-        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="lg:col-span-2 rounded-2xl p-6 border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
-          <h2 className="text-sm font-bold text-white mb-6 flex items-center gap-2"><TrendingUp size={16} className="text-blue-400" /> Platform Total Growth</h2>
-          <div className="h-[280px]">
+      {/* ══ ROW 1: GROWTH + DONUT ══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 sm:gap-4">
+
+        {/* Platform Growth */}
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={springIn} viewport={{ once: true }} className="lg:col-span-3" style={cardLg}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2.5">
+              <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(129,140,248,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <TrendingUp size={14} className="text-indigo-400" />
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.tp }}>Platform Growth</div>
+                <div style={{ fontSize: 10, color: t.tm }} className="hidden sm:block">User registrations over time</div>
+              </div>
+            </div>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#818cf8', background: 'rgba(129,140,248,0.1)', padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(129,140,248,0.15)' }}>
+              <ArrowUpRight size={10} style={{ display: 'inline', marginTop: -2, marginRight: 2 }} />{profiles.length} users
+            </span>
+          </div>
+          <div style={{ width: '100%', height: 'clamp(200px, 30vw, 300px)', minHeight: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={userGrowthData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+              <AreaChart data={userGrowthData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.5}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0}/>
+                  <linearGradient id="gF" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#818cf8" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#818cf8" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
-                <XAxis dataKey="month" stroke="rgba(255,255,255,0.2)" fontSize={10} tickMargin={12} axisLine={false} tickLine={false} />
-                <YAxis stroke="rgba(255,255,255,0.2)" fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
-                <RechartsTooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                <Area type="monotone" dataKey="totalUsers" name="Total Users" stroke="#3b82f6" strokeWidth={4} fill="url(#colorUsers)" activeDot={{ r: 6, fill: '#3b82f6', stroke: '#0e0e14', strokeWidth: 3 }} animationDuration={1500} />
+                <CartesianGrid strokeDasharray="3 3" stroke={t.grid} vertical={false} />
+                <XAxis dataKey="month" stroke={t.axis} fontSize={10} tickMargin={8} axisLine={false} tickLine={false} />
+                <YAxis stroke={t.axis} fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
+                <RechartsTooltip content={<TT />} contentStyle={noTTBg} cursor={{ stroke: t.axis, strokeWidth: 1, strokeDasharray: '3 3' }} />
+                <Area type="monotone" dataKey="totalUsers" name="Total Users" stroke="#818cf8" strokeWidth={2.5} fill="url(#gF)" dot={{ r: 4, fill: '#818cf8', stroke: t.ds, strokeWidth: 2 }} activeDot={{ r: 6, fill: '#818cf8', stroke: t.ds, strokeWidth: 3 }} animationDuration={2000} />
+                <Line type="monotone" dataKey="newUsers" name="New Users" stroke="#34d399" strokeWidth={2} strokeDasharray="5 3" dot={{ r: 3, fill: '#34d399', stroke: t.ds, strokeWidth: 2 }} animationDuration={2000} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
+          <div className="flex items-center gap-4 mt-2 pt-2" style={{ borderTop: `1px solid ${t.border}` }}>
+            <div className="flex items-center gap-1.5"><span style={{ width: 12, height: 2, borderRadius: 2, background: '#818cf8' }} /><span style={{ fontSize: 10, color: t.tm }}>Total</span></div>
+            <div className="flex items-center gap-1.5"><span style={{ width: 12, height: 2, borderRadius: 2, background: '#34d399', opacity: 0.7 }} /><span style={{ fontSize: 10, color: t.tm }}>New</span></div>
+          </div>
         </motion.div>
 
-        {/* Roles Distribution (Pie) */}
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }} className="rounded-2xl p-4 sm:p-6 border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent flex flex-col min-h-0">
-          <h2 className="text-sm font-bold text-white mb-1 flex items-center gap-2"><Users size={16} className="text-emerald-400" /> Global User Distribution</h2>
-          
-          {/* Pie Chart — percentage radii scale with the container */}
-          <div className="w-full relative flex-1 min-h-[140px] max-h-[180px]">
+        {/* Donut */}
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ ...springIn, delay: 0.1 }} viewport={{ once: true }} className="lg:col-span-2 flex flex-col" style={cardLg}>
+          <div className="flex items-center gap-2.5 mb-3">
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(52,211,153,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Users size={14} className="text-emerald-400" />
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.tp }}>User Distribution</div>
+              <div style={{ fontSize: 10, color: t.tm }} className="hidden sm:block">Breakdown by role</div>
+            </div>
+          </div>
+          {/* Chart + center label share this exact container */}
+          <div style={{ position: 'relative', width: '100%', height: 'clamp(180px, 25vw, 210px)', minHeight: 180 }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie 
-                  data={roleDistribution} 
-                  dataKey="value" 
-                  nameKey="name" 
-                  cx="50%" cy="50%" 
-                  innerRadius="55%" outerRadius="78%" 
-                  paddingAngle={6}
-                  stroke="none"
-                  isAnimationActive={true}
-                  animationBegin={200}
-                  animationDuration={1500}
-                  animationEasing="ease-out"
-                >
-                  {roleDistribution.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} style={{ outline: 'none' }} />)}
+                <Pie data={roleDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius="60%" outerRadius="82%" paddingAngle={3} stroke="none" isAnimationActive animationBegin={200} animationDuration={1600}>
+                  {roleDistribution.map((entry, i) => <Cell key={i} fill={entry.color} style={{ outline: 'none' }} />)}
                 </Pie>
-                <RechartsTooltip content={<CustomTooltip />} />
+                <RechartsTooltip content={<TT />} contentStyle={noTTBg} />
               </PieChart>
             </ResponsiveContainer>
-            
-            {/* Center Label */}
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-               <p className="text-2xl sm:text-3xl font-black text-white leading-none">{profiles.length}</p>
-               <p className="text-[8px] sm:text-[9px] uppercase tracking-widest font-bold text-white/30 mt-0.5">Users</p>
-            </motion.div>
+            {/* Center text — absolute inset:0 + flex = always perfectly centered */}
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+              <span style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 900, color: t.tp, lineHeight: 1 }}><AnimatedNumber value={profiles.length} /></span>
+              <span style={{ fontSize: 'clamp(8px, 2vw, 9px)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: t.tm, marginTop: 2 }}>Users</span>
+            </div>
           </div>
-          
-          {/* Legend — standard flow, never overlaps */}
-          <div className="w-full grid grid-cols-2 gap-1.5 sm:gap-2 pt-3 sm:pt-4">
-            {roleDistribution.map((r, i) => (
-               <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.8 + (i * 0.1) }} key={r.name} className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.02] border border-white/5 p-1.5 sm:p-2 rounded-lg">
-                 <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: r.color, boxShadow: `0 0 10px ${r.color}80` }} />
-                 <div className="min-w-0">
-                   <p className="text-[9px] sm:text-[10px] uppercase font-bold text-white/40 leading-none mb-0.5 sm:mb-1 truncate">{r.name}</p>
-                   <p className="text-xs sm:text-sm font-black text-white leading-none">{r.value}</p>
-                 </div>
-               </motion.div>
+          <div className="grid grid-cols-2 gap-1.5 mt-auto pt-3 sm:gap-2">
+            {roleDistribution.map(r => (
+              <div key={r.name} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 6px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.subtle }} className="sm:gap-8 sm:px-2">
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: r.color, flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: t.tm, lineHeight: 1 }}>{r.name}</div>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: t.tp, lineHeight: 1, marginTop: 2 }}>{r.value}</div>
+                </div>
+              </div>
             ))}
           </div>
         </motion.div>
       </div>
 
-      {/* Secondary Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        
-        {/* Verification Status (Stacked Bar) */}
-        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="rounded-2xl p-6 border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
-          <h2 className="text-sm font-bold text-white mb-6 flex items-center gap-2"><Shield size={16} className="text-violet-400" /> Verifications by Type</h2>
-          <div className="h-64">
+      {/* ══ ROW 2: VERIFICATIONS + ATS ══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+
+        {/* Verifications by Type — 4 grouped bars: Verified, Pending, Rejected, Not Submitted */}
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={springIn} viewport={{ once: true }} style={cardLg}>
+          <div className="flex items-center gap-2.5 mb-1">
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(139,92,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Shield size={14} className="text-violet-400" />
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.tp }}>Verifications by Type</div>
+              <div style={{ fontSize: 10, color: t.tm }} className="hidden sm:block">Status per document type</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3 mb-2 ml-2 sm:ml-9 flex-wrap">
+            {[
+              { l: 'Verified', c: '#34d399' },
+              { l: 'Pending', c: '#fbbf24' },
+              { l: 'Rejected', c: '#f87171' },
+              { l: 'Not Submitted', c: '#64748b' },
+            ].map(x => (
+              <div key={x.l} className="flex items-center gap-1">
+                <span style={{ width: 6, height: 6, borderRadius: 3, background: x.c }} />
+                <span style={{ fontSize: 9, fontWeight: 600, color: t.tm, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{x.l}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ width: '100%', height: 'clamp(200px, 28vw, 260px)', minHeight: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={verificationStatusData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }} barSize={32}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
-                <XAxis dataKey="name" stroke="rgba(255,255,255,0.2)" fontSize={10} tickMargin={12} axisLine={false} tickLine={false} />
-                <YAxis stroke="rgba(255,255,255,0.2)" fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
-                <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '10px', opacity: 0.6 }} />
-                <Bar dataKey="verified" name="Verified" stackId="a" fill="#10b981" radius={[0, 0, 4, 4]} animationDuration={1000} />
-                <Bar dataKey="pending" name="Pending" stackId="a" fill="#f59e0b" animationDuration={1000} />
-                <Bar dataKey="rejected" name="Rejected" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} animationDuration={1000} />
+              <BarChart data={verificationStatusData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }} barCategoryGap="25%">
+                <CartesianGrid strokeDasharray="3 3" stroke={t.grid} vertical={false} />
+                <XAxis dataKey="name" stroke={t.axis} fontSize={10} tickMargin={8} axisLine={false} tickLine={false} tickFormatter={(v) => v.length > 8 ? v.substring(0,8)+'..' : v} />
+                <YAxis stroke={t.axis} fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
+                <RechartsTooltip content={<TT />} contentStyle={noTTBg} cursor={{ fill: t.cur }} />
+                <Bar dataKey="verified" name="Verified" fill="#34d399" radius={[4, 4, 0, 0]} animationDuration={1400} maxBarSize={24} />
+                <Bar dataKey="pending" name="Pending" fill="#fbbf24" radius={[4, 4, 0, 0]} animationDuration={1400} maxBarSize={24} />
+                <Bar dataKey="rejected" name="Rejected" fill="#f87171" radius={[4, 4, 0, 0]} animationDuration={1400} maxBarSize={24} />
+                <Bar dataKey="notSubmitted" name="Not Submitted" fill="#64748b" radius={[4, 4, 0, 0]} animationDuration={1400} maxBarSize={24} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </motion.div>
 
-        {/* ATS Distribution (Bar) */}
-        <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="rounded-2xl p-6 border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
-          <h2 className="text-sm font-bold text-white mb-6 flex items-center gap-2"><BarChart2 size={16} className="text-amber-400" /> ATS Score Distribution</h2>
-          <div className="h-64">
+        {/* ATS Score Distribution */}
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ ...springIn, delay: 0.08 }} viewport={{ once: true }} style={cardLg}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2.5">
+              <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(129,140,248,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <BarChart2 size={14} className="text-indigo-400" />
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: t.tp }}>ATS Score Distribution</div>
+                <div style={{ fontSize: 10, color: t.tm }} className="hidden sm:block">Resume quality ({validATS.length} students scored)</div>
+              </div>
+            </div>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#818cf8', background: 'rgba(129,140,248,0.1)', padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(129,140,248,0.15)' }}>Avg: {avgATS}</span>
+          </div>
+          <div style={{ width: '100%', height: 'clamp(200px, 28vw, 260px)', minHeight: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={atsDistribution} margin={{ top: 10, right: 10, left: -25, bottom: 0 }} barSize={40}>
+              <BarChart data={atsDist} margin={{ top: 5, right: 5, left: -25, bottom: 0 }} barCategoryGap="20%">
                 <defs>
-                  <linearGradient id="colorAts" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.9}/>
-                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.1}/>
+                  <linearGradient id="atsG" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#818cf8" stopOpacity={0.9} />
+                    <stop offset="100%" stopColor="#6366f1" stopOpacity={0.3} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
-                <XAxis dataKey="range" stroke="rgba(255,255,255,0.2)" fontSize={10} tickMargin={12} axisLine={false} tickLine={false} />
-                <YAxis stroke="rgba(255,255,255,0.2)" fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
-                <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                <Bar dataKey="count" name="Students" fill="url(#colorAts)" radius={[4, 4, 0, 0]} animationDuration={1000} />
+                <CartesianGrid strokeDasharray="3 3" stroke={t.grid} vertical={false} />
+                <XAxis dataKey="range" stroke={t.axis} fontSize={10} tickMargin={8} axisLine={false} tickLine={false} />
+                <YAxis stroke={t.axis} fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
+                <RechartsTooltip content={<TT />} contentStyle={noTTBg} cursor={{ fill: t.cur }} />
+                <Bar dataKey="count" name="Students" fill="url(#atsG)" radius={[6, 6, 0, 0]} animationDuration={1400} maxBarSize={48} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </motion.div>
-
       </div>
 
-      {/* Trust Score Distribution */}
-      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="rounded-2xl p-6 border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-sm font-bold text-white flex items-center gap-2"><Shield size={16} className="text-teal-400" /> Trust Score Distribution (All Students)</h2>
-          <span className="text-xs text-teal-300 bg-teal-500/10 px-3 py-1 rounded-lg border border-teal-500/20 font-bold uppercase tracking-widest">Avg Default: {avgTrustScore}%</span>
+      {/* ══ ROW 3: TRUST SCORE ══ */}
+      <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={springIn} viewport={{ once: true }} style={cardLg}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2.5">
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(34,211,238,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Shield size={14} className="text-cyan-400" />
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: t.tp }}>Trust Score Distribution</div>
+              <div style={{ fontSize: 10, color: t.tm }} className="hidden sm:block">Platform credibility across {computedStudents.length} students</div>
+            </div>
+          </div>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#22d3ee', background: 'rgba(34,211,238,0.1)', padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(34,211,238,0.15)' }}>
+            <GraduationCap size={10} style={{ display: 'inline', marginTop: -2, marginRight: 2 }} />Avg: {avgTrust}%
+          </span>
         </div>
-        <div className="h-56">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={trustScoreDistribution} margin={{ top: 10, right: 10, left: -25, bottom: 0 }} barSize={50}>
+        <div style={{ width: '100%', height: 'clamp(200px, 24vw, 240px)', minHeight: 200 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={trustDist} margin={{ top: 5, right: 5, left: -25, bottom: 0 }} barCategoryGap="20%">
               <defs>
-                <linearGradient id="colorTrust" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#14b8a6" stopOpacity={0.9}/>
-                  <stop offset="100%" stopColor="#14b8a6" stopOpacity={0.1}/>
+                <linearGradient id="tG" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.85} />
+                  <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.25} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
-              <XAxis dataKey="range" stroke="rgba(255,255,255,0.2)" fontSize={10} tickMargin={12} axisLine={false} tickLine={false} />
-              <YAxis stroke="rgba(255,255,255,0.2)" fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
-              <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-              <Bar dataKey="count" name="Students" fill="url(#colorTrust)" radius={[6, 6, 0, 0]} animationDuration={1000} />
+              <CartesianGrid strokeDasharray="3 3" stroke={t.grid} vertical={false} />
+              <XAxis dataKey="range" stroke={t.axis} fontSize={10} tickMargin={8} axisLine={false} tickLine={false} />
+              <YAxis stroke={t.axis} fontSize={10} axisLine={false} tickLine={false} allowDecimals={false} />
+              <RechartsTooltip content={<TT />} contentStyle={noTTBg} cursor={{ fill: t.cur }} />
+              <Bar dataKey="count" name="Students" fill="url(#tG)" radius={[6, 6, 0, 0]} animationDuration={1400} maxBarSize={56} />
             </BarChart>
           </ResponsiveContainer>
         </div>
