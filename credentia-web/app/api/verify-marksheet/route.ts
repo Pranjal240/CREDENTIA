@@ -4,11 +4,16 @@ import { analyzeMarksheet } from '@/lib/groq'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-async function extractPdfText(buffer: Buffer): Promise<string> {
-  const { extractText, getDocumentProxy } = await import('unpdf')
-  const pdf = await getDocumentProxy(new Uint8Array(buffer))
-  const { text } = await extractText(pdf, { mergePages: true })
-  return text
+async function tryExtractPdfText(buffer: Buffer): Promise<string | null> {
+  try {
+    const { extractText, getDocumentProxy } = await import('unpdf')
+    const pdf = await getDocumentProxy(new Uint8Array(buffer))
+    const { text } = await extractText(pdf, { mergePages: true })
+    return text && text.trim().length > 20 ? text : null
+  } catch (err) {
+    console.warn('[verify-marksheet] unpdf failed, using vision fallback:', (err as Error).message)
+    return null
+  }
 }
 
 export async function POST(request: Request) {
@@ -26,7 +31,11 @@ export async function POST(request: Request) {
     const lowerUrl = fileUrl.toLowerCase()
 
     try {
-      const response = await fetch(fileUrl)
+      const controller = new AbortController()
+      const fetchTimeout = setTimeout(() => controller.abort(), 15000)
+      const response = await fetch(fileUrl, { signal: controller.signal })
+      clearTimeout(fetchTimeout)
+
       if (!response.ok) throw new Error(`Failed to fetch file: HTTP ${response.status}`)
       const contentType = (response.headers.get('content-type') || '').toLowerCase()
       const isImageUrl = lowerUrl.includes('.png') || lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.webp') || contentType.startsWith('image/')
@@ -43,7 +52,16 @@ export async function POST(request: Request) {
       } else if (isPdfUrl) {
         const arrayBuffer = await response.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
-        content = await extractPdfText(buffer)
+        const extractedText = await tryExtractPdfText(buffer)
+
+        if (extractedText) {
+          content = extractedText
+          isImage = false
+        } else {
+          const base64 = buffer.toString('base64')
+          content = `data:application/pdf;base64,${base64}`
+          isImage = true
+        }
       } else {
         content = await response.text()
       }
@@ -55,12 +73,16 @@ export async function POST(request: Request) {
       )
     }
 
+    if (!content.trim()) {
+      return NextResponse.json(
+        { success: false, error: 'Document appears to be empty or unreadable.' },
+        { status: 400 }
+      )
+    }
+
     const analysis = await analyzeMarksheet(content, isImage, type)
 
-    // Status logic — be LENIENT for genuine documents:
-    // - verified=true + confidence ≥ 40 → ai_approved (most real docs pass this)
-    // - verified=true + confidence < 40 → needs_review (admin reviews edge cases)
-    // - verified=false → needs_review (NOT rejected — let admin decide, AI can be wrong)
+    // Status logic — be LENIENT for genuine documents
     const status = analysis.verified && (analysis.confidence || 0) >= 40
       ? 'ai_approved'
       : 'needs_review'
@@ -68,7 +90,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, analysis, fileUrl, status })
   } catch (error: any) {
     console.error('Marksheet verification error:', error)
-    // On AI failure, return needs_review so admin can handle it manually
     return NextResponse.json({
       success: true,
       analysis: { verified: false, confidence: 0, issues: ['AI analysis failed — sent for manual review'] },

@@ -2,13 +2,22 @@ import { NextResponse } from 'next/server'
 import { analyzeResume } from '@/lib/groq'
 
 export const runtime = 'nodejs'
-export const maxDuration = 60 // Allow up to 60s for PDF extraction + AI analysis
+export const maxDuration = 60
 
-async function extractPdfText(buffer: Buffer): Promise<string> {
-  const { extractText, getDocumentProxy } = await import('unpdf')
-  const pdf = await getDocumentProxy(new Uint8Array(buffer))
-  const { text } = await extractText(pdf, { mergePages: true })
-  return text
+/**
+ * Try extracting text from a PDF using unpdf.
+ * Returns null if it fails (WASM crash, worker missing, etc.)
+ */
+async function tryExtractPdfText(buffer: Buffer): Promise<string | null> {
+  try {
+    const { extractText, getDocumentProxy } = await import('unpdf')
+    const pdf = await getDocumentProxy(new Uint8Array(buffer))
+    const { text } = await extractText(pdf, { mergePages: true })
+    return text && text.trim().length > 20 ? text : null
+  } catch (err) {
+    console.warn('[analyze-resume] unpdf extraction failed, will use vision fallback:', (err as Error).message)
+    return null
+  }
 }
 
 export async function POST(request: Request) {
@@ -24,13 +33,18 @@ export async function POST(request: Request) {
     const lowerUrl = fileUrl.toLowerCase()
 
     try {
-      const response = await fetch(fileUrl, { signal: AbortSignal.timeout(15000) })
+      const controller = new AbortController()
+      const fetchTimeout = setTimeout(() => controller.abort(), 15000)
+      const response = await fetch(fileUrl, { signal: controller.signal })
+      clearTimeout(fetchTimeout)
+
       if (!response.ok) throw new Error(`Failed to fetch file: HTTP ${response.status}`)
       const contentType = (response.headers.get('content-type') || '').toLowerCase()
       const isImageUrl = lowerUrl.includes('.png') || lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.webp') || contentType.startsWith('image/')
       const isPdfUrl = lowerUrl.includes('.pdf') || contentType.includes('application/pdf')
 
       if (isImageUrl) {
+        // Images → send as base64 to vision model
         const arrayBuffer = await response.arrayBuffer()
         const base64 = Buffer.from(arrayBuffer).toString('base64')
         const mimeType = contentType.startsWith('image/') ? contentType.split(';')[0] :
@@ -39,9 +53,22 @@ export async function POST(request: Request) {
         content = `data:${mimeType};base64,${base64}`
         isImage = true
       } else if (isPdfUrl) {
+        // PDFs → try text extraction first, fall back to vision
         const arrayBuffer = await response.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
-        content = await extractPdfText(buffer)
+        const extractedText = await tryExtractPdfText(buffer)
+
+        if (extractedText) {
+          // Text extraction succeeded → use fast text model
+          content = extractedText
+          isImage = false
+        } else {
+          // Text extraction failed → convert to base64 and use vision model
+          console.log('[analyze-resume] Using vision fallback for PDF')
+          const base64 = buffer.toString('base64')
+          content = `data:application/pdf;base64,${base64}`
+          isImage = true
+        }
       } else {
         content = await response.text()
       }
@@ -61,14 +88,11 @@ export async function POST(request: Request) {
     }
 
     const analysis = await analyzeResume(content, isImage)
-
-    // Determine status
     const status = analysis.ats_score && analysis.ats_score > 0 ? 'ai_approved' : 'needs_review'
 
     return NextResponse.json({ success: true, analysis, fileUrl, status })
   } catch (error: any) {
     console.error('Resume analysis error:', error)
-    // On AI failure, return needs_review so user can still save
     return NextResponse.json({
       success: true,
       analysis: {
