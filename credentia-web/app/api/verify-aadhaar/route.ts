@@ -25,29 +25,25 @@ export async function POST(request: Request) {
     const lowerUrl = fileUrl.toLowerCase()
 
     try {
-      if (
-        lowerUrl.includes('.png') ||
-        lowerUrl.includes('.jpg') ||
-        lowerUrl.includes('.jpeg') ||
-        lowerUrl.includes('.webp')
-      ) {
-        const response = await fetch(fileUrl)
+      const response = await fetch(fileUrl)
+      if (!response.ok) throw new Error(`Failed to fetch file: HTTP ${response.status}`)
+      const contentType = (response.headers.get('content-type') || '').toLowerCase()
+      const isImageUrl = lowerUrl.includes('.png') || lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.webp') || contentType.startsWith('image/')
+      const isPdfUrl = lowerUrl.includes('.pdf') || contentType.includes('application/pdf')
+
+      if (isImageUrl) {
         const arrayBuffer = await response.arrayBuffer()
         const base64 = Buffer.from(arrayBuffer).toString('base64')
-        const mimeType = lowerUrl.endsWith('.png')
-          ? 'image/png'
-          : lowerUrl.endsWith('.webp')
-          ? 'image/webp'
-          : 'image/jpeg'
+        const mimeType = contentType.startsWith('image/') ? contentType.split(';')[0] :
+          lowerUrl.endsWith('.png') ? 'image/png' :
+          lowerUrl.endsWith('.webp') ? 'image/webp' : 'image/jpeg'
         content = `data:${mimeType};base64,${base64}`
         isImage = true
-      } else if (lowerUrl.includes('.pdf')) {
-        const response = await fetch(fileUrl)
+      } else if (isPdfUrl) {
         const arrayBuffer = await response.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
         content = await extractPdfText(buffer)
       } else {
-        const response = await fetch(fileUrl)
         content = await response.text()
       }
     } catch (err: any) {
@@ -60,13 +56,20 @@ export async function POST(request: Request) {
 
     const analysis = await analyzeAadhaar(content, isImage)
 
-    const status = analysis.verified ? 'ai_approved' : 'rejected'
+    // Be lenient — verified + decent confidence → ai_approved, otherwise needs_review
+    // Never outright reject since scanned Aadhaar images can trip up AI
+    const status = analysis.verified && (analysis.confidence || 0) >= 40
+      ? 'ai_approved'
+      : 'needs_review'
     return NextResponse.json({ success: true, analysis, fileUrl, status })
   } catch (error: any) {
     console.error('Aadhaar verification error:', error)
-    return NextResponse.json(
-      { success: false, error: error.message || 'Verification failed' },
-      { status: 500 }
-    )
+    // On AI failure, return needs_review so admin can handle it manually
+    return NextResponse.json({
+      success: true,
+      analysis: { verified: false, confidence: 0, issues: ['AI analysis failed — sent for manual review'] },
+      fileUrl: '',
+      status: 'needs_review'
+    })
   }
 }

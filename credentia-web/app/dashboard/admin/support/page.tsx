@@ -166,12 +166,20 @@ export default function AdminSupportPage() {
 
   const handleFileUpload = async (file: File) => {
     if (!selectedConv || !adminId) return
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File too large. Maximum 10MB.')
+      return
+    }
     setUploading(true)
     try {
       const formData = new FormData()
       formData.append('file', file)
       formData.append('folder', 'chat-attachments')
       const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: 'Upload failed' }))
+        throw new Error(errData.error || `Upload failed (HTTP ${res.status})`)
+      }
       const data = await res.json()
       if (data.success && data.url) {
         await fetch('/api/chat/send', {
@@ -189,11 +197,15 @@ export default function AdminSupportPage() {
             fileType: file.type,
           }),
         })
+      } else {
+        throw new Error(data.error || 'Upload did not return a URL')
       }
-    } catch (err) {
-      console.error(err)
+    } catch (err: any) {
+      console.error('Upload error:', err)
+      alert(`File upload failed: ${err.message || 'Unknown error'}. Please try again.`)
     } finally {
       setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 

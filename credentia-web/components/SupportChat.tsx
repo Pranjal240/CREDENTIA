@@ -191,14 +191,23 @@ export function SupportChat({ userId, userRole, userName, userEmail, externalOpe
       formData.append('file', file)
       formData.append('folder', 'chat-attachments')
       const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: 'Upload failed' }))
+        throw new Error(errData.error || `Upload failed (HTTP ${res.status})`)
+      }
       const data = await res.json()
       if (data.success && data.url) {
         await sendMessage(`📎 ${file.name}`, data.url, file.name, file.type)
+      } else {
+        throw new Error(data.error || 'Upload did not return a URL')
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Upload error:', err)
+      alert(`File upload failed: ${err.message || 'Unknown error'}. Please try again.`)
     } finally {
       setUploading(false)
+      // Reset file input so user can re-upload same file
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 

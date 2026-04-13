@@ -186,7 +186,7 @@ export default function DegreePage() {
         if (!verifyRes.ok) throw new Error(verifyData.error || 'Verification failed')
 
         const analysis = verifyData.analysis || verifyData
-        const saveStatus = analysis.verified ? 'ai_approved' : 'needs_review'
+        const saveStatus = verifyData.status || (analysis.verified ? 'ai_approved' : 'needs_review')
 
         // Auto-save to verifications
         await fetch('/api/save-verification', {

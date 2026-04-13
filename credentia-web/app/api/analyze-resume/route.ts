@@ -25,32 +25,25 @@ export async function POST(request: Request) {
     const lowerUrl = fileUrl.toLowerCase()
 
     try {
-      if (
-        lowerUrl.includes('.png') ||
-        lowerUrl.includes('.jpg') ||
-        lowerUrl.includes('.jpeg') ||
-        lowerUrl.includes('.webp')
-      ) {
-        const response = await fetch(fileUrl)
-        if (!response.ok) throw new Error('Failed to fetch image from storage')
+      const response = await fetch(fileUrl)
+      if (!response.ok) throw new Error('Failed to fetch file from storage')
+      const contentType = (response.headers.get('content-type') || '').toLowerCase()
+      const isImageUrl = lowerUrl.includes('.png') || lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.webp') || contentType.startsWith('image/')
+      const isPdfUrl = lowerUrl.includes('.pdf') || contentType.includes('application/pdf')
+
+      if (isImageUrl) {
         const arrayBuffer = await response.arrayBuffer()
         const base64 = Buffer.from(arrayBuffer).toString('base64')
-        const mimeType = lowerUrl.endsWith('.png')
-          ? 'image/png'
-          : lowerUrl.endsWith('.webp')
-          ? 'image/webp'
-          : 'image/jpeg'
+        const mimeType = contentType.startsWith('image/') ? contentType.split(';')[0] :
+          lowerUrl.endsWith('.png') ? 'image/png' :
+          lowerUrl.endsWith('.webp') ? 'image/webp' : 'image/jpeg'
         content = `data:${mimeType};base64,${base64}`
         isImage = true
-      } else if (lowerUrl.includes('.pdf')) {
-        const response = await fetch(fileUrl)
-        if (!response.ok) throw new Error('Failed to fetch PDF from storage')
+      } else if (isPdfUrl) {
         const arrayBuffer = await response.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
         content = await extractPdfText(buffer)
       } else {
-        const response = await fetch(fileUrl)
-        if (!response.ok) throw new Error('Failed to fetch file from storage')
         content = await response.text()
       }
     } catch (err: any) {
