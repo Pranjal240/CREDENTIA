@@ -49,11 +49,27 @@ export default function ResumePage() {
 
       setUploading(false); setAnalyzing(true)
 
-      const analyzeRes = await fetch('/api/analyze-resume', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileUrl: uploadData.url, studentId: userId }),
-      })
+      // 55s timeout — must be under Vercel's maxDuration (60s)
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 55000)
+
+      let analyzeRes: Response
+      try {
+        analyzeRes = await fetch('/api/analyze-resume', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileUrl: uploadData.url, studentId: userId }),
+          signal: controller.signal,
+        })
+      } catch (fetchErr: any) {
+        clearTimeout(timeout)
+        if (fetchErr.name === 'AbortError') {
+          throw new Error('Analysis is taking too long. Please try again with a smaller or clearer file.')
+        }
+        throw new Error('Network error — please check your internet connection and try again.')
+      }
+      clearTimeout(timeout)
+
       if (!analyzeRes.ok) {
         const errData = await analyzeRes.json().catch(() => ({}))
         throw new Error(errData.error || 'Analysis failed')
@@ -89,7 +105,13 @@ export default function ResumePage() {
         console.warn('Auto-save failed, user can still save manually:', autoSaveErr)
       }
     } catch (err: any) {
-      setError(err.message || 'Something went wrong')
+      const msg = err.message || 'Something went wrong'
+      // Map cryptic browser errors to user-friendly messages
+      setError(
+        msg === 'Failed to fetch'
+          ? 'Server is busy — please wait a moment and try again.'
+          : msg
+      )
       setUploading(false); setAnalyzing(false)
     }
   }

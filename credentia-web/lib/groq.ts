@@ -1,6 +1,9 @@
 import Groq from 'groq-sdk'
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+  timeout: 25000, // 25s timeout — must finish before Vercel's function timeout
+})
 
 function parseGroqJSON(content: string) {
   // First try direct parse
@@ -46,6 +49,7 @@ function buildMessages(systemPrompt: string, content: string, isImage: boolean =
 }
 
 async function callGroq(systemPrompt: string, content: string, isImage: boolean, maxTokens: number = 2000) {
+  // Use fast model for text, vision model for images
   const model = isImage ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'llama-3.3-70b-versatile'
 
   // CRITICAL: meta-llama/llama-4-scout-17b-16e-instruct does NOT support response_format json_object
@@ -61,8 +65,14 @@ async function callGroq(systemPrompt: string, content: string, isImage: boolean,
     requestParams.response_format = { type: 'json_object' }
   }
 
-  const result = await groq.chat.completions.create(requestParams)
-  return parseGroqJSON(result.choices[0].message.content || '')
+  try {
+    const result = await groq.chat.completions.create(requestParams)
+    return parseGroqJSON(result.choices[0].message.content || '')
+  } catch (err: any) {
+    console.error(`Groq API error (model=${model}):`, err.message || err)
+    // Return a minimal fallback so the caller doesn't crash
+    throw new Error(`AI analysis timed out or failed: ${err.message || 'unknown error'}`)
+  }
 }
 
 export async function analyzeResume(content: string, isImage: boolean = false) {
@@ -88,7 +98,7 @@ export async function analyzeResume(content: string, isImage: boolean = false) {
   "summary": "<2-3 sentence assessment>"
 }`
 
-  return callGroq(systemPrompt, content, isImage, 4000)
+  return callGroq(systemPrompt, content, isImage, 2000)
 }
 
 export async function analyzePoliceDoc(content: string, isImage: boolean = false) {
