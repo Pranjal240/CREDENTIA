@@ -150,8 +150,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             setProfile({ ...prof, display_name: entityName || prof.full_name })
             setRole(prof.role)
           } else {
-            // Profile fetch failed — use URL-inferred role as fallback
-            setRole(inferredRole)
+            // Profile missing — auto-provision via API (safety net for email/password users)
+            try {
+              const provisionRes = await fetch('/api/ensure-profile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: authUser.id, portal: inferredRole }),
+              })
+              const provisionData = await provisionRes.json()
+              if (provisionData.profile && isMounted) {
+                setProfile({ ...provisionData.profile, display_name: provisionData.profile.full_name })
+                setRole(provisionData.profile.role || inferredRole)
+              } else {
+                setRole(inferredRole)
+              }
+            } catch {
+              // Provisioning failed — use URL-inferred role as fallback
+              if (isMounted) setRole(inferredRole)
+            }
           }
         } catch {
           // Profile fetch network error — still proceed with inferred role

@@ -13,18 +13,71 @@ export async function POST(request: Request) {
       )
     }
 
-    // 1. Ensure `students` row exists
-    await supabaseAdmin.from('students').upsert(
-      { id: studentId },
-      { onConflict: 'id', ignoreDuplicates: true }
-    )
+    // 1. Ensure `profiles` row exists FIRST (students FK → profiles)
+    //    This is critical for new users who may have skipped the auth callback
+    {
+      const { data: existingProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('id', studentId)
+        .maybeSingle()
 
-    // 2. Confidence metric
+      if (!existingProfile) {
+        // Fetch email from auth.users
+        const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(studentId)
+        const { error: profileErr } = await supabaseAdmin.from('profiles').upsert({
+          id: studentId,
+          email: authUser?.email || '',
+          full_name: authUser?.user_metadata?.full_name || authUser?.user_metadata?.name || '',
+          role: 'student',
+          login_portal: 'student',
+          is_active: true,
+        }, { onConflict: 'id' })
+
+        if (profileErr) {
+          console.error('Failed to create profiles row:', profileErr)
+          return NextResponse.json(
+            { success: false, error: `Profile creation failed: ${profileErr.message}` },
+            { status: 500 }
+          )
+        }
+      }
+    }
+
+    // 2. Ensure `students` row exists (verifications FK → students)
+    {
+      const { data: existingStudent } = await supabaseAdmin
+        .from('students')
+        .select('id')
+        .eq('id', studentId)
+        .maybeSingle()
+
+      if (!existingStudent) {
+        const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(studentId)
+        const { error: studentErr } = await supabaseAdmin.from('students').upsert({
+          id: studentId,
+          name: authUser?.user_metadata?.full_name || authUser?.user_metadata?.name || '',
+          email: authUser?.email || '',
+          profile_is_public: true,
+          profile_views: 0,
+        }, { onConflict: 'id' })
+
+        if (studentErr) {
+          console.error('Failed to create students row:', studentErr)
+          return NextResponse.json(
+            { success: false, error: `Student record creation failed: ${studentErr.message}` },
+            { status: 500 }
+          )
+        }
+      }
+    }
+
+    // 3. Confidence metric
     const confidence = type === 'resume'
       ? (analysis.ats_score || 0)
       : (analysis.confidence || 0)
 
-    // 3. Upsert into verifications table
+    // 4. Upsert into verifications table
     const { data: existing } = await supabaseAdmin
       .from('verifications')
       .select('id')
@@ -33,7 +86,7 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (existing) {
-      await supabaseAdmin
+      const { error: updateErr } = await supabaseAdmin
         .from('verifications')
         .update({
           status,
@@ -43,8 +96,15 @@ export async function POST(request: Request) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', existing.id)
+      if (updateErr) {
+        console.error('Verification update error:', updateErr)
+        return NextResponse.json(
+          { success: false, error: `Verification update failed: ${updateErr.message}` },
+          { status: 500 }
+        )
+      }
     } else {
-      await supabaseAdmin.from('verifications').insert({
+      const { error: insertErr } = await supabaseAdmin.from('verifications').insert({
         student_id: studentId,
         type,
         status,
@@ -52,9 +112,16 @@ export async function POST(request: Request) {
         ai_confidence: confidence,
         document_url: fileUrl,
       })
+      if (insertErr) {
+        console.error('Verification insert error:', insertErr)
+        return NextResponse.json(
+          { success: false, error: `Verification insert failed: ${insertErr.message}` },
+          { status: 500 }
+        )
+      }
     }
 
-    // 4. Type-specific students table updates
+    // 5. Type-specific students table updates
     if (type === 'resume') {
       const upsertData: any = {
         id: studentId,
@@ -166,7 +233,7 @@ export async function POST(request: Request) {
     }
     // passport (other) — stored in verifications only, contributes to profile completion
 
-    // 5. Fetch all verifications for this student to recalculate scores
+    // 6. Fetch all verifications for this student to recalculate scores
     const { data: allVerifs } = await supabaseAdmin
       .from('verifications')
       .select('type, status')
@@ -178,7 +245,7 @@ export async function POST(request: Request) {
       .eq('id', studentId)
       .single()
 
-    // 6. Recalculate profile completion percentage + trust score
+    // 7. Recalculate profile completion percentage + trust score
     if (studentData) {
       // Profile completion: based on filled fields (60%) + core verifications (40%)
       const fields = [
@@ -215,7 +282,7 @@ export async function POST(request: Request) {
         .eq('id', studentId)
     }
 
-    // 7. Cache invalidation — cover all portals
+    // 8. Cache invalidation — cover all portals
     revalidatePath('/dashboard/student', 'layout')
     revalidatePath(`/dashboard/student/${type}`, 'page')
     revalidatePath('/dashboard/student/saved', 'page')
