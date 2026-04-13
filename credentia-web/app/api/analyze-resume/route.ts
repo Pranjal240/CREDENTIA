@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
 import { analyzeResume } from '@/lib/groq'
-import { supabaseAdmin } from '@/lib/supabase'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60 // Allow up to 60s for PDF extraction + AI analysis
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
   const { extractText, getDocumentProxy } = await import('unpdf')
@@ -25,8 +24,8 @@ export async function POST(request: Request) {
     const lowerUrl = fileUrl.toLowerCase()
 
     try {
-      const response = await fetch(fileUrl)
-      if (!response.ok) throw new Error('Failed to fetch file from storage')
+      const response = await fetch(fileUrl, { signal: AbortSignal.timeout(15000) })
+      if (!response.ok) throw new Error(`Failed to fetch file: HTTP ${response.status}`)
       const contentType = (response.headers.get('content-type') || '').toLowerCase()
       const isImageUrl = lowerUrl.includes('.png') || lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.webp') || contentType.startsWith('image/')
       const isPdfUrl = lowerUrl.includes('.pdf') || contentType.includes('application/pdf')
@@ -49,26 +48,42 @@ export async function POST(request: Request) {
     } catch (err: any) {
       console.error('File parsing error:', err)
       return NextResponse.json(
-        { success: false, error: 'Could not read document content: ' + err.message },
+        { success: false, error: 'Could not read document: ' + err.message },
         { status: 400 }
       )
     }
 
     if (!content.trim()) {
       return NextResponse.json(
-        { success: false, error: 'Document appears to be empty or unreadable' },
+        { success: false, error: 'Document appears to be empty or unreadable. Try uploading a clearer file.' },
         { status: 400 }
       )
     }
 
     const analysis = await analyzeResume(content, isImage)
 
-    return NextResponse.json({ success: true, analysis, fileUrl })
+    // Determine status
+    const status = analysis.ats_score && analysis.ats_score > 0 ? 'ai_approved' : 'needs_review'
+
+    return NextResponse.json({ success: true, analysis, fileUrl, status })
   } catch (error: any) {
     console.error('Resume analysis error:', error)
-    return NextResponse.json(
-      { success: false, error: error.message || 'Analysis failed' },
-      { status: 500 }
-    )
+    // On AI failure, return needs_review so user can still save
+    return NextResponse.json({
+      success: true,
+      analysis: {
+        ats_score: 0,
+        authenticity_score: 0,
+        summary: 'AI analysis encountered an error. The document has been saved for manual review.',
+        strengths: [],
+        improvements: ['Please re-upload if this persists'],
+        keywords_found: [],
+        keywords_missing: [],
+        top_skills: [],
+        issues: ['AI analysis failed — sent for manual review']
+      },
+      fileUrl: '',
+      status: 'needs_review'
+    })
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { analyzeMarksheet } from '@/lib/groq'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
   const { extractText, getDocumentProxy } = await import('unpdf')

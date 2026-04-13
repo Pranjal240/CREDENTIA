@@ -4,6 +4,7 @@ import { analyzeDegree } from '@/lib/groq'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
   const { extractText, getDocumentProxy } = await import('unpdf')
