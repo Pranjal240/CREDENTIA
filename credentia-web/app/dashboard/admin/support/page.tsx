@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   MessageCircle, Search, Send, Paperclip, Loader2,
   CheckCheck, Clock, FileText, Image as ImageIcon,
-  Headphones, Archive, CheckCircle2, User, X, ArrowLeft
+  Headphones, Archive, CheckCircle2, User, X, ArrowLeft,
+  Trash2, Plus, RotateCcw
 } from 'lucide-react'
 
 type Conversation = {
@@ -50,6 +51,7 @@ export default function AdminSupportPage() {
   const [search, setSearch] = useState('')
   const [uploading, setUploading] = useState(false)
   const [showMobileChat, setShowMobileChat] = useState(false)
+  const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('all')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -88,7 +90,6 @@ export default function AdminSupportPage() {
       body: JSON.stringify({ conversationId: conv.id, readerRole: 'admin' }),
     })
 
-    // Update local unread
     setConversations(prev =>
       prev.map(c => c.id === conv.id ? { ...c, unread_count: 0 } : c)
     )
@@ -96,7 +97,7 @@ export default function AdminSupportPage() {
     setTimeout(() => inputRef.current?.focus(), 300)
   }
 
-  // Real-time subscription for admin — listen to ALL support messages
+  // Real-time subscription for admin
   useEffect(() => {
     const channel = supabase
       .channel('admin-support')
@@ -106,13 +107,11 @@ export default function AdminSupportPage() {
         table: 'support_messages',
       }, (payload: any) => {
         const newMsg = payload.new as Message
-        // If viewing this conversation, add message
         if (selectedConv && newMsg.conversation_id === selectedConv.id) {
           setMessages(prev => {
             if (prev.some(m => m.id === newMsg.id)) return prev
             return [...prev, newMsg]
           })
-          // Mark as read
           if (newMsg.sender_role !== 'admin') {
             fetch('/api/chat/messages', {
               method: 'POST',
@@ -121,7 +120,6 @@ export default function AdminSupportPage() {
             })
           }
         }
-        // Refresh conversations list
         if (adminId) loadConversations(adminId)
       })
       .on('postgres_changes', {
@@ -166,10 +164,7 @@ export default function AdminSupportPage() {
 
   const handleFileUpload = async (file: File) => {
     if (!selectedConv || !adminId) return
-    if (file.size > 10 * 1024 * 1024) {
-      alert('File too large. Maximum 10MB.')
-      return
-    }
+    if (file.size > 10 * 1024 * 1024) { alert('File too large. Maximum 10MB.'); return }
     setUploading(true)
     try {
       const formData = new FormData()
@@ -186,15 +181,10 @@ export default function AdminSupportPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            userId: adminId,
-            userRole: 'admin',
-            userName: 'Support Agent',
-            userEmail: '',
+            userId: adminId, userRole: 'admin', userName: 'Support Agent', userEmail: '',
             content: `📎 ${file.name}`,
             conversationId: selectedConv.id,
-            fileUrl: data.url,
-            fileName: file.name,
-            fileType: file.type,
+            fileUrl: data.url, fileName: file.name, fileType: file.type,
           }),
         })
       } else {
@@ -210,25 +200,42 @@ export default function AdminSupportPage() {
   }
 
   const updateConversationStatus = async (convId: string, status: string) => {
-    // Just update the status directly without sending a chat message
     await fetch('/api/chat/conversations', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        conversationId: convId,
-        status: status,
-      }),
+      body: JSON.stringify({ conversationId: convId, status }),
     })
     setConversations(prev =>
       prev.map(c => c.id === convId ? { ...c, status } : c)
     )
+    if (selectedConv?.id === convId) {
+      setSelectedConv(prev => prev ? { ...prev, status } : null)
+    }
+  }
+
+  const deleteConversation = async (convId: string) => {
+    if (!confirm('Delete this conversation permanently? All messages will be lost.')) return
+    try {
+      const res = await fetch('/api/chat/conversations', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: convId }),
+      })
+      if (res.ok) {
+        setConversations(prev => prev.filter(c => c.id !== convId))
+        if (selectedConv?.id === convId) {
+          setSelectedConv(null)
+          setMessages([])
+          setShowMobileChat(false)
+        }
+      }
+    } catch (err) {
+      console.error('Delete error:', err)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
   }
 
   const formatTime = (dateStr: string) => new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -252,9 +259,14 @@ export default function AdminSupportPage() {
     return `${Math.floor(h / 24)}d ago`
   }
 
-  const filteredConvs = conversations.filter(c =>
-    c.status !== 'archived' && (!search || (c.user_name + c.user_email + c.subject).toLowerCase().includes(search.toLowerCase()))
-  )
+  // Filter conversations
+  const filteredConvs = conversations.filter(c => {
+    if (filter === 'open' && c.status !== 'open') return false
+    if (filter === 'resolved' && c.status !== 'resolved') return false
+    if (c.status === 'archived' && filter === 'all') return false
+    if (search && !(c.user_name + c.user_email + c.subject).toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
 
   const totalUnread = conversations.reduce((acc, c) => acc + c.unread_count, 0)
 
@@ -276,21 +288,21 @@ export default function AdminSupportPage() {
     <div className="h-[calc(100vh-80px)] flex rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
 
       {/* ── Left Panel: Conversations List ── */}
-      <div className={`w-full md:w-[360px] flex-shrink-0 flex flex-col ${showMobileChat ? 'hidden md:flex' : 'flex'}`} style={{ borderRight: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className={`w-full md:w-[340px] lg:w-[380px] flex-shrink-0 flex flex-col ${showMobileChat ? 'hidden md:flex' : 'flex'}`} style={{ borderRight: '1px solid rgba(255,255,255,0.06)' }}>
         {/* Header */}
-        <div className="px-5 py-4 flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="px-4 py-3.5 flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)' }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)' }}>
               <Headphones size={18} className="text-white" />
             </div>
-            <div>
-              <h1 className="font-heading text-lg font-bold text-white">Support Inbox</h1>
+            <div className="flex-1 min-w-0">
+              <h1 className="font-heading text-base sm:text-lg font-bold text-white">Support Inbox</h1>
               <p className="text-[10px] text-white/30 uppercase tracking-wider">
                 {totalUnread > 0 ? `${totalUnread} unread` : 'All caught up'} • {conversations.length} conversations
               </p>
             </div>
           </div>
-          <div className="relative">
+          <div className="relative mb-2.5">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25" />
             <input
               value={search}
@@ -299,10 +311,27 @@ export default function AdminSupportPage() {
               className="w-full h-9 pl-9 pr-4 rounded-xl text-xs bg-white/5 border border-white/8 text-white placeholder-white/20 focus:outline-none focus:border-blue-500/40"
             />
           </div>
+          {/* Filter tabs */}
+          <div className="flex gap-1.5">
+            {(['all', 'open', 'resolved'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className="px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all"
+                style={{
+                  background: filter === f ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.03)',
+                  color: filter === f ? '#60a5fa' : 'rgba(255,255,255,0.3)',
+                  border: `1px solid ${filter === f ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.04)'}`,
+                }}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Conversations */}
-        <div className="flex-1 overflow-y-auto scrollbar-thin">
+        {/* Conversations List */}
+        <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.08) transparent' } as any}>
           {loading ? (
             <div className="flex items-center justify-center h-32">
               <Loader2 size={20} className="animate-spin text-blue-400" />
@@ -310,53 +339,61 @@ export default function AdminSupportPage() {
           ) : filteredConvs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 gap-2 text-center px-6">
               <MessageCircle size={24} className="text-white/10" />
-              <p className="text-xs text-white/25">No conversations yet</p>
+              <p className="text-xs text-white/25">No conversations found</p>
             </div>
           ) : (
             filteredConvs.map((conv) => {
               const role = roleColors[conv.user_role] || { bg: 'rgba(100,116,139,0.1)', text: '#64748b', label: conv.user_role }
               const isSelected = selectedConv?.id === conv.id
               return (
-                <motion.button
-                  key={conv.id}
-                  onClick={() => selectConversation(conv)}
-                  className="w-full text-left px-5 py-3.5 transition-all hover:bg-white/[0.03]"
-                  style={{
-                    background: isSelected ? 'rgba(59,130,246,0.06)' : 'transparent',
-                    borderBottom: '1px solid rgba(255,255,255,0.03)',
-                    borderLeft: isSelected ? '3px solid #3b82f6' : '3px solid transparent',
-                  }}
-                  whileHover={{ x: 2 }}
-                >
-                  <div className="flex items-start gap-3">
-                    {/* Avatar */}
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold" style={{ background: role.bg, color: role.text }}>
-                      {(conv.user_name || 'U')[0].toUpperCase()}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-white/90 truncate">{conv.user_name || 'User'}</span>
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider flex-shrink-0" style={{ background: role.bg, color: role.text }}>
-                          {role.label}
-                        </span>
+                <div key={conv.id} className="relative group">
+                  <motion.button
+                    onClick={() => selectConversation(conv)}
+                    className="w-full text-left px-4 py-3 transition-all hover:bg-white/[0.03]"
+                    style={{
+                      background: isSelected ? 'rgba(59,130,246,0.06)' : 'transparent',
+                      borderBottom: '1px solid rgba(255,255,255,0.03)',
+                      borderLeft: isSelected ? '3px solid #3b82f6' : '3px solid transparent',
+                    }}
+                    whileHover={{ x: 2 }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold" style={{ background: role.bg, color: role.text }}>
+                        {(conv.user_name || 'U')[0].toUpperCase()}
                       </div>
-                      <p className="text-xs text-white/35 truncate mt-0.5">{conv.last_message_preview || conv.subject || 'No messages'}</p>
-                    </div>
 
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      <span className="text-[9px] text-white/20">{relativeTime(conv.last_message_at)}</span>
-                      {conv.unread_count > 0 && (
-                        <span className="w-5 h-5 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center">
-                          {conv.unread_count}
-                        </span>
-                      )}
-                      {conv.status === 'resolved' && (
-                        <CheckCircle2 size={12} className="text-emerald-400" />
-                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-white/90 truncate">{conv.user_name || 'User'}</span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider flex-shrink-0" style={{ background: role.bg, color: role.text }}>
+                            {role.label}
+                          </span>
+                        </div>
+                        <p className="text-xs text-white/35 truncate mt-0.5">{conv.last_message_preview || conv.subject || 'No messages'}</p>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className="text-[9px] text-white/20">{relativeTime(conv.last_message_at)}</span>
+                        {conv.unread_count > 0 && (
+                          <span className="w-5 h-5 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center">
+                            {conv.unread_count}
+                          </span>
+                        )}
+                        {conv.status === 'resolved' && (
+                          <CheckCircle2 size={12} className="text-emerald-400" />
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </motion.button>
+                  </motion.button>
+                  {/* Delete button on hover */}
+                  <button
+                    onClick={() => deleteConversation(conv.id)}
+                    className="absolute right-2 top-2 p-1.5 rounded-lg bg-red-500/10 text-red-400/60 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20 hover:text-red-400"
+                    title="Delete conversation"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
               )
             })
           )}
@@ -364,40 +401,56 @@ export default function AdminSupportPage() {
       </div>
 
       {/* ── Right Panel: Chat View ── */}
-      <div className={`flex-1 flex flex-col ${!showMobileChat ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`flex-1 flex flex-col min-w-0 ${!showMobileChat ? 'hidden md:flex' : 'flex'}`}>
         {selectedConv ? (
           <>
             {/* Chat Header */}
-            <div className="px-5 py-3.5 flex items-center gap-3 flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
+            <div className="px-3 sm:px-5 py-3 flex items-center gap-2 sm:gap-3 flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
               <button
                 onClick={() => setShowMobileChat(false)}
-                className="md:hidden p-1.5 rounded-lg hover:bg-white/5 text-white/40"
+                className="md:hidden p-1.5 rounded-lg hover:bg-white/5 text-white/40 flex-shrink-0"
               >
                 <ArrowLeft size={18} />
               </button>
-              <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold" style={{
+              <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{
                 background: (roleColors[selectedConv.user_role] || {}).bg || 'rgba(100,116,139,0.1)',
                 color: (roleColors[selectedConv.user_role] || {}).text || '#64748b',
               }}>
                 {(selectedConv.user_name || 'U')[0].toUpperCase()}
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-white">{selectedConv.user_name || 'User'}</p>
-                <p className="text-[10px] text-white/30">{selectedConv.user_email} • {(roleColors[selectedConv.user_role] || {}).label || selectedConv.user_role}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white truncate">{selectedConv.user_name || 'User'}</p>
+                <p className="text-[10px] text-white/30 truncate">{selectedConv.user_email} • {(roleColors[selectedConv.user_role] || {}).label || selectedConv.user_role}</p>
               </div>
-              <div className="flex items-center gap-2">
-                {selectedConv.status !== 'resolved' && (
+              <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+                {selectedConv.status !== 'resolved' ? (
                   <button
                     onClick={() => updateConversationStatus(selectedConv.id, 'resolved')}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider text-emerald-400 transition-colors hover:bg-emerald-500/10"
+                    className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-400 transition-colors hover:bg-emerald-500/10"
                     style={{ border: '1px solid rgba(16,185,129,0.2)' }}
                   >
-                    <CheckCircle2 size={12} /> Resolve
+                    <CheckCircle2 size={12} /> <span className="hidden sm:inline">Resolve</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => updateConversationStatus(selectedConv.id, 'open')}
+                    className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-blue-400 transition-colors hover:bg-blue-500/10"
+                    style={{ border: '1px solid rgba(59,130,246,0.2)' }}
+                  >
+                    <RotateCcw size={12} /> <span className="hidden sm:inline">Reopen</span>
                   </button>
                 )}
                 <button
+                  onClick={() => deleteConversation(selectedConv.id)}
+                  className="p-1.5 rounded-lg text-red-400/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  title="Delete conversation"
+                >
+                  <Trash2 size={16} />
+                </button>
+                <button
                   onClick={() => updateConversationStatus(selectedConv.id, 'archived')}
                   className="p-1.5 rounded-lg text-white/20 hover:text-white/40 hover:bg-white/5 transition-colors"
+                  title="Archive"
                 >
                   <Archive size={16} />
                 </button>
@@ -405,10 +458,14 @@ export default function AdminSupportPage() {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-1 scrollbar-thin">
+            <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-4 space-y-1" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.08) transparent' } as any}>
               {loadingMsgs ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 size={24} className="animate-spin text-blue-400" />
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-xs text-white/20">No messages in this conversation</p>
                 </div>
               ) : (
                 groupedMessages.map((group, gi) => (
@@ -428,7 +485,7 @@ export default function AdminSupportPage() {
                           className={`flex mb-2 ${isAdmin ? 'justify-end' : 'justify-start'}`}
                         >
                           <div
-                            className="max-w-[70%] rounded-2xl px-4 py-2.5"
+                            className="max-w-[85%] sm:max-w-[70%] rounded-2xl px-3 sm:px-4 py-2.5"
                             style={{
                               background: isAdmin
                                 ? 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(16,185,129,0.08))'
@@ -459,8 +516,8 @@ export default function AdminSupportPage() {
                                 style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
                               >
                                 {msg.file_type?.startsWith('image/')
-                                  ? <ImageIcon size={14} className="text-blue-400" />
-                                  : <FileText size={14} className="text-blue-400" />}
+                                  ? <ImageIcon size={14} className="text-blue-400 flex-shrink-0" />
+                                  : <FileText size={14} className="text-blue-400 flex-shrink-0" />}
                                 <span className="text-[11px] text-blue-300 truncate">{msg.file_name || 'File'}</span>
                               </a>
                             )}
@@ -480,12 +537,12 @@ export default function AdminSupportPage() {
             </div>
 
             {/* Reply Input */}
-            <div className="px-5 py-3.5 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
+            <div className="px-3 sm:px-5 py-3 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
-                  className="p-2.5 rounded-xl text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors"
+                  className="p-2 sm:p-2.5 rounded-xl text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors flex-shrink-0"
                 >
                   {uploading ? <Loader2 size={18} className="animate-spin" /> : <Paperclip size={18} />}
                 </button>
@@ -497,14 +554,14 @@ export default function AdminSupportPage() {
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="Reply to message..."
-                  className="flex-1 h-11 px-4 rounded-xl text-sm bg-white/5 border border-white/8 text-white placeholder-white/20 focus:outline-none focus:border-emerald-500/40"
+                  className="flex-1 min-w-0 h-10 sm:h-11 px-3 sm:px-4 rounded-xl text-sm bg-white/5 border border-white/8 text-white placeholder-white/20 focus:outline-none focus:border-emerald-500/40"
                   disabled={sending}
                 />
 
                 <motion.button
                   onClick={sendMessage}
                   disabled={!input.trim() || sending}
-                  className="px-5 h-11 rounded-xl text-sm font-bold flex items-center gap-2 transition-all disabled:opacity-20"
+                  className="h-10 sm:h-11 px-3 sm:px-5 rounded-xl text-sm font-bold flex items-center gap-1.5 transition-all disabled:opacity-20 flex-shrink-0"
                   style={{
                     background: input.trim() ? 'linear-gradient(135deg, #10b981, #059669)' : 'rgba(255,255,255,0.05)',
                     color: input.trim() ? 'white' : 'rgba(255,255,255,0.2)',
@@ -513,7 +570,7 @@ export default function AdminSupportPage() {
                   whileTap={input.trim() ? { scale: 0.96 } : {}}
                 >
                   {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                  Send
+                  <span className="hidden sm:inline">Send</span>
                 </motion.button>
               </div>
             </div>

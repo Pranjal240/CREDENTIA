@@ -82,3 +82,34 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
+
+// DELETE a conversation and all its messages
+export async function DELETE(req: Request) {
+  try {
+    const { conversationId } = await req.json()
+    if (!conversationId) {
+      return NextResponse.json({ error: 'Missing conversationId' }, { status: 400 })
+    }
+
+    // Delete messages first (FK constraint)
+    const { error: msgErr } = await supabaseAdmin
+      .from('support_messages')
+      .delete()
+      .eq('conversation_id', conversationId)
+
+    if (msgErr) throw msgErr
+
+    // Delete the conversation
+    const { error: convErr } = await supabaseAdmin
+      .from('support_conversations')
+      .delete()
+      .eq('id', conversationId)
+
+    if (convErr) throw convErr
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error('Delete conversation error:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}

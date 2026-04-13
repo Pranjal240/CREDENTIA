@@ -81,6 +81,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [loading, setLoading] = useState(true)
   const [isDesktop, setIsDesktop] = useState(true)
   const [supportChatOpen, setSupportChatOpen] = useState(false)
+  const [supportUnread, setSupportUnread] = useState(0)
+  const [adminSupportUnread, setAdminSupportUnread] = useState(0)
 
   // Avoid hydration mismatch for theme toggle
   useEffect(() => { setMounted(true) }, [])
@@ -204,6 +206,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Close mobile menu on route change
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
+  // Fetch admin support unread count
+  useEffect(() => {
+    if (role !== 'admin' || !user?.id) return
+    const fetchAdminUnread = async () => {
+      try {
+        const res = await fetch(`/api/chat/conversations?userId=${user.id}&role=admin`)
+        const data = await res.json()
+        if (data.conversations) {
+          const count = data.conversations.reduce((acc: number, c: any) => acc + (c.unread_count || 0), 0)
+          setAdminSupportUnread(count)
+        }
+      } catch { /* silent */ }
+    }
+    fetchAdminUnread()
+    // Poll every 30s for admin
+    const interval = setInterval(fetchAdminUnread, 30000)
+    // Real-time subscription for instant updates
+    const channel = supabase.channel('admin-sidebar-unread')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages' }, () => { fetchAdminUnread() })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'support_messages' }, () => { fetchAdminUnread() })
+      .subscribe()
+    return () => { clearInterval(interval); supabase.removeChannel(channel) }
+  }, [role, user?.id])
+
   const handleLogout = async () => {
     // Sign out then redirect to the user's specific portal login page.
     // This ensures they land back at the correct portal, not a generic page.
@@ -304,11 +330,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       style={{ boxShadow: '0 0 12px rgba(59,130,246,0.6)' }}
                     />
                   )}
-                  <link.icon
-                    size={18}
-                    className="flex-shrink-0"
-                    style={{ color: supportChatOpen ? '#60a5fa' : undefined, transition: 'color 0.15s ease' }}
-                  />
+                  <div className="relative flex-shrink-0">
+                    <link.icon
+                      size={18}
+                      style={{ color: supportChatOpen ? '#60a5fa' : undefined, transition: 'color 0.15s ease' }}
+                    />
+                    {supportUnread > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center px-0.5" style={{ boxShadow: '0 2px 6px rgba(239,68,68,0.5)' }}>
+                        {supportUnread > 9 ? '9+' : supportUnread}
+                      </span>
+                    )}
+                  </div>
                   <span
                     className="overflow-hidden"
                     style={{
@@ -335,18 +367,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 }}
                 title={collapsed ? link.label : undefined}
               >
-                {/* Active indicator bar */}
                 {active && (
                   <span
                     className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-blue-500"
                     style={{ boxShadow: '0 0 12px rgba(59,130,246,0.6)' }}
                   />
                 )}
-                <link.icon
-                  size={18}
-                  className="flex-shrink-0"
-                  style={{ color: active ? '#60a5fa' : undefined, transition: 'color 0.15s ease' }}
-                />
+                <div className="relative flex-shrink-0">
+                  <link.icon
+                    size={18}
+                    style={{ color: active ? '#60a5fa' : undefined, transition: 'color 0.15s ease' }}
+                  />
+                  {link.href === '/dashboard/admin/support' && adminSupportUnread > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center px-0.5" style={{ boxShadow: '0 2px 6px rgba(239,68,68,0.5)' }}>
+                      {adminSupportUnread > 9 ? '9+' : adminSupportUnread}
+                    </span>
+                  )}
+                </div>
                 <span
                   className="overflow-hidden"
                   style={{
@@ -560,8 +597,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         {supportChatOpen && (
                           <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-blue-500" />
                         )}
-                        <link.icon size={18} style={{ color: supportChatOpen ? '#60a5fa' : undefined }} />
+                        <div className="relative">
+                          <link.icon size={18} style={{ color: supportChatOpen ? '#60a5fa' : undefined }} />
+                          {supportUnread > 0 && (
+                            <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center px-0.5" style={{ boxShadow: '0 2px 6px rgba(239,68,68,0.5)' }}>
+                              {supportUnread > 9 ? '9+' : supportUnread}
+                            </span>
+                          )}
+                        </div>
                         {link.label}
+                        {supportUnread > 0 && (
+                          <span className="ml-auto min-w-[20px] h-[20px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                            {supportUnread}
+                          </span>
+                        )}
                       </button>
                     )
                   }
@@ -579,8 +628,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       {active && (
                         <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-blue-500" />
                       )}
-                      <link.icon size={18} style={{ color: active ? '#60a5fa' : undefined }} />
+                      <div className="relative">
+                        <link.icon size={18} style={{ color: active ? '#60a5fa' : undefined }} />
+                        {link.href === '/dashboard/admin/support' && adminSupportUnread > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center px-0.5" style={{ boxShadow: '0 2px 6px rgba(239,68,68,0.5)' }}>
+                            {adminSupportUnread > 9 ? '9+' : adminSupportUnread}
+                          </span>
+                        )}
+                      </div>
                       {link.label}
+                      {link.href === '/dashboard/admin/support' && adminSupportUnread > 0 && (
+                        <span className="ml-auto min-w-[20px] h-[20px] rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                          {adminSupportUnread}
+                        </span>
+                      )}
                     </Link>
                   )
                 })}
@@ -651,6 +712,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           userEmail={profile.email || user.email || ''}
           externalOpen={supportChatOpen}
           onOpenChange={setSupportChatOpen}
+          onUnreadChange={setSupportUnread}
         />
       )}
     </div>
