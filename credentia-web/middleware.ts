@@ -55,38 +55,29 @@ export async function middleware(request: NextRequest) {
       }
     )
 
-    const { data: { user }, error } = await supabase.auth.getUser()
+    // Use getSession() instead of getUser() to avoid Supabase rate limits on prefetches
+    const { data: { session }, error } = await supabase.auth.getSession()
 
-    if (error || !user) {
+    if (error || !session?.user) {
       // Detect which portal from the URL so we can redirect to the right login
       const portalMatch = pathname.match(/^\/dashboard\/(\w+)/)
       const portal = portalMatch ? portalMatch[1] : 'student'
-      return NextResponse.redirect(new URL(`/login/${portal}`, request.url))
+      
+      const loginUrl = new URL(`/login/${portal}?error=session_expired`, request.url)
+      const redirectResp = NextResponse.redirect(loginUrl)
+      
+      // Clear auth cookies to prevent redirect loops
+      request.cookies.getAll().forEach(cookie => {
+        if (cookie.name.startsWith('sb-') || cookie.name.includes('supabase')) {
+          redirectResp.cookies.delete(cookie.name)
+        }
+      })
+      return redirectResp
     }
 
-    // Check profile exists and is active
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, is_active')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (!profile || profile.is_active === false) {
-      return NextResponse.redirect(new URL('/login/student', request.url))
-    }
-
-    // Enforce role-based dashboard routing
-    const DASHBOARD_ROUTES: Record<string, string> = {
-      student: '/dashboard/student',
-      university: '/dashboard/university',
-      company: '/dashboard/company',
-      admin: '/dashboard/admin',
-    }
-
-    const correctPath = DASHBOARD_ROUTES[profile.role]
-    if (correctPath && !pathname.startsWith(correctPath)) {
-      return NextResponse.redirect(new URL(correctPath, request.url))
-    }
+    // Role-based routing is handled dynamically within the Server Components
+    // Removing the redundant middleware profile fetch here completely eliminates 
+    // the prefetch overload crashes.
 
     return response
   }

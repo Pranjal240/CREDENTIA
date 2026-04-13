@@ -12,8 +12,9 @@ export default async function AdminDashboard() {
     { cookies: { get(name: string) { return cookieStore.get(name)?.value } } }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user
+  if (!user) redirect('/login/admin')
 
   // Check admin role
   const { data: profile } = await supabaseAdmin.from('profiles').select('role').eq('id', user.id).single()

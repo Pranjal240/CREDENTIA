@@ -44,16 +44,9 @@ export default function CompanyDashboard() {
       if (!session) return
       setUserId(session.user.id)
 
-      // Fetch students with profile_is_public = true
-      // Use student's own name/email as primary (populated on registration)
-      // Fall back to profiles join for older records
-      const { data, error } = await supabase
-        .from('students')
-        .select('*, profiles(email, full_name), verifications(*)')
-        .eq('profile_is_public', true)
-        .order('ats_score', { ascending: false })
-
-      if (error) console.error('[Company] students query error:', error.message)
+      // Use the new API route to reliably bypass RLS and fetch public students
+      const res = await fetch('/api/company/students')
+      const { students: data } = await res.json()
 
       const mappedStudents = (data || []).map((s: any) => {
         const resumeVerif = s.verifications?.find((v: any) => v.type === 'resume')
@@ -69,7 +62,7 @@ export default function CompanyDashboard() {
           ats_score: aiResult.ats_score || s.ats_score || 0,
           course: degreeResult.course || aiResult.course || s.course || '',
           branch: degreeResult.branch || aiResult.branch || s.branch || '',
-          cgpa: degreeResult.grade_cgpa || aiResult.cgpa || s.cgpa || '',
+          cgpa: s.cgpa || degreeResult.grade_cgpa || aiResult.cgpa || '',
           graduation_year: degreeResult.year_of_passing || aiResult.graduation_year || s.graduation_year || '',
           city: aiResult.city || s.city || '',
           state: aiResult.state || s.state || '',
@@ -77,6 +70,8 @@ export default function CompanyDashboard() {
           police_verified: s.verifications?.some((v: any) => v.type === 'police' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
           aadhaar_verified: s.verifications?.some((v: any) => v.type === 'aadhaar' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
           verified_docs_count: (s.verifications || []).filter((v: any) => ['verified', 'ai_approved', 'admin_verified'].includes(v.status)).length,
+          percentage_10th: s.percentage_10th || null,
+          percentage_12th: s.percentage_12th || null,
         }
       })
 
@@ -86,6 +81,36 @@ export default function CompanyDashboard() {
       setLoading(false)
     }
     load()
+  }, [])
+
+  // Real-time subscription for student data changes (CGPA/percentages updated by admin/university)
+  useEffect(() => {
+    const channel = supabase.channel('company_students_rt')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'students' }, (payload: any) => {
+        const updated = payload.new
+        setStudents(prev => prev.map(s => s.id === updated.id ? {
+          ...s,
+          name: updated.name ?? s.name,
+          course: updated.course ?? s.course,
+          branch: updated.branch ?? s.branch,
+          cgpa: updated.cgpa ?? s.cgpa,
+          percentage_10th: updated.percentage_10th ?? s.percentage_10th,
+          percentage_12th: updated.percentage_12th ?? s.percentage_12th,
+          trust_score: updated.trust_score ?? s.trust_score,
+          ats_score: updated.ats_score ?? s.ats_score,
+          graduation_year: updated.graduation_year ?? s.graduation_year,
+        } : s))
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload: any) => {
+        const updated = payload.new
+        // Sync profile name changes (e.g. student renamed via admin)
+        setStudents(prev => prev.map(s => s.id === updated.id ? {
+          ...s,
+          name: updated.full_name ?? s.name,
+        } : s))
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   const courses = useMemo(() => Array.from(new Set(students.map(s => s.course).filter(Boolean))), [students])
@@ -529,6 +554,8 @@ export default function CompanyDashboard() {
                 { l: 'Course', v: selectedStudent.course },
                 { l: 'Branch', v: selectedStudent.branch },
                 { l: 'CGPA', v: selectedStudent.cgpa },
+                { l: '10th %', v: selectedStudent.percentage_10th ? `${selectedStudent.percentage_10th}%` : null },
+                { l: '12th %', v: selectedStudent.percentage_12th ? `${selectedStudent.percentage_12th}%` : null },
                 { l: 'Year', v: selectedStudent.graduation_year },
                 { l: 'City', v: selectedStudent.city },
                 { l: 'State', v: selectedStudent.state },

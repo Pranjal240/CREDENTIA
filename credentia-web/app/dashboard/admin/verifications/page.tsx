@@ -4,13 +4,17 @@ import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { motion } from 'framer-motion'
 import { Shield, Search, FileText, CreditCard, GraduationCap, CheckCircle2, Clock, AlertCircle, X, ExternalLink, ChevronLeft, ChevronRight, BookOpen, Paperclip, BarChart3 } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
-export default function AdminVerifications() {
+function AdminVerificationsContent() {
+  const searchParams = useSearchParams()
+  const initialType = searchParams.get('type') || 'all'
   const [verifications, setVerifications] = useState<any[]>([])
   const [profiles, setProfiles] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterType, setFilterType] = useState('all')
+  const [filterType, setFilterType] = useState(initialType)
   const [filterStatus, setFilterStatus] = useState('all')
   const [page, setPage] = useState(1)
   const [perPage] = useState(20)
@@ -247,5 +251,13 @@ export default function AdminVerifications() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function AdminVerifications() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" /></div>}>
+      <AdminVerificationsContent />
+    </Suspense>
   )
 }

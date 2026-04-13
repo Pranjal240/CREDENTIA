@@ -241,17 +241,204 @@ export default function SavedVerificationsPage() {
             {selectedV.ai_result && (
               <div>
                 <h4 className="text-xs font-bold text-white/50 uppercase tracking-wider mb-3">Analysis Report</h4>
-                <div className="rounded-xl bg-white/[0.02] border border-white/5 p-4 space-y-3">
-                  {Object.entries(selectedV.ai_result).map(([key, value]) => {
-                    if (value === null || value === undefined) return null
-                    if (Array.isArray(value)) return (
-                      <div key={key}><p className="text-[10px] text-white/25 uppercase tracking-wider mb-1">{key.replace(/_/g, ' ')}</p><div className="flex flex-wrap gap-1.5">{(value as string[]).map((item, i) => <span key={i} className="px-2 py-0.5 rounded text-[11px] bg-white/5 text-white/60 border border-white/5">{String(item)}</span>)}</div></div>
-                    )
-                    if (typeof value === 'object') return null
+                <div className="rounded-xl bg-white/[0.02] border border-white/5 p-5 space-y-5">
+                  {(() => {
+                    const r = selectedV.ai_result
+                    const vType = selectedV.type
+
+                    // ── Resume ──
+                    if (vType === 'resume') {
+                      return (
+                        <>
+                          {/* ATS Score Hero */}
+                          {r.ats_score !== undefined && (
+                            <div className="flex items-center gap-5 pb-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                              <div className="relative w-20 h-20 flex-shrink-0">
+                                <svg className="w-20 h-20 -rotate-90"><circle cx="40" cy="40" r="34" stroke="rgba(255,255,255,0.06)" strokeWidth="5" fill="none" /><circle cx="40" cy="40" r="34" stroke={Number(r.ats_score) >= 70 ? '#22c55e' : Number(r.ats_score) >= 50 ? '#f59e0b' : '#ef4444'} strokeWidth="5" fill="none" strokeDasharray={`${2*Math.PI*34}`} strokeDashoffset={`${2*Math.PI*34*(1-Number(r.ats_score||0)/100)}`} strokeLinecap="round" /></svg>
+                                <span className="absolute inset-0 flex items-center justify-center font-bold text-xl text-white">{r.ats_score}</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-white mb-1">ATS Compatibility Score</p>
+                                <p className="text-xs text-white/35 leading-relaxed">{r.summary || 'Your resume has been analyzed for ATS compatibility.'}</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Info Grid  */}
+                          {(r.student_name || r.phone_number || r.cgpa || r.branch || r.course || r.city) && (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                              {[
+                                { l: 'Name', v: r.student_name },
+                                { l: 'Phone', v: r.phone_number },
+                                { l: 'CGPA', v: r.cgpa },
+                                { l: 'Branch', v: r.branch },
+                                { l: 'Course', v: r.course },
+                                { l: 'City', v: r.city },
+                              ].filter(x => x.v).map((x, i) => (
+                                <div key={i} className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                                  <p className="text-[9px] text-white/25 uppercase tracking-wider mb-1">{x.l}</p>
+                                  <p className="text-sm text-white/80 font-medium truncate">{x.v}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Strengths */}
+                          {r.strengths?.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-2">✅ Strengths</p>
+                              <div className="flex flex-wrap gap-2">
+                                {r.strengths.map((s: string, i: number) => (
+                                  <span key={i} className="px-3 py-1.5 rounded-lg text-xs bg-emerald-500/8 text-emerald-300/90 border border-emerald-500/15">{s}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Top Skills */}
+                          {r.top_skills?.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-2">🎯 Top Skills</p>
+                              <div className="flex flex-wrap gap-2">
+                                {r.top_skills.map((s: string, i: number) => (
+                                  <span key={i} className="px-3 py-1.5 rounded-lg text-xs bg-blue-500/8 text-blue-300/90 border border-blue-500/15 font-medium">{s}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Improvements */}
+                          {r.improvements?.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider mb-2">💡 Improvements</p>
+                              <div className="flex flex-wrap gap-2">
+                                {r.improvements.map((s: string, i: number) => (
+                                  <span key={i} className="px-3 py-1.5 rounded-lg text-xs bg-amber-500/8 text-amber-300/90 border border-amber-500/15">{s}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Keywords */}
+                          {r.keywords_found?.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wider mb-2">🔑 Keywords Found</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {r.keywords_found.map((k: string, i: number) => (
+                                  <span key={i} className="px-2.5 py-1 rounded-md text-[11px] bg-violet-500/8 text-violet-300/80 border border-violet-500/10">{k}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )
+                    }
+
+                    // ── Degree ──
+                    if (vType === 'degree') {
+                      return (
+                        <>
+                          <div className="flex items-center gap-2 pb-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            {r.verified ? <CheckCircle2 size={18} className="text-emerald-400" /> : <AlertCircle size={18} className="text-amber-400" />}
+                            <span className="text-sm font-semibold text-white">{r.verified ? 'Degree Verified' : 'Pending Verification'}</span>
+                            {r.confidence && <span className="text-xs text-white/30 ml-auto">{r.confidence}% confidence</span>}
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {[
+                              { l: 'University', v: r.university_name },
+                              { l: 'Degree', v: r.degree },
+                              { l: 'Course', v: r.course },
+                              { l: 'Year of Passing', v: r.year_of_passing },
+                              { l: 'CGPA / Grade', v: r.grade_cgpa },
+                              { l: 'Roll Number', v: r.roll_number },
+                            ].filter(x => x.v).map((x, i) => (
+                              <div key={i} className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                                <p className="text-[9px] text-white/25 uppercase tracking-wider mb-1">{x.l}</p>
+                                <p className="text-sm text-white/80 font-medium">{x.v}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )
+                    }
+
+                    // ── Police ──
+                    if (vType === 'police') {
+                      return (
+                        <>
+                          <div className="flex items-center gap-2 pb-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            {r.is_police_certificate ? <CheckCircle2 size={18} className="text-emerald-400" /> : <AlertCircle size={18} className="text-amber-400" />}
+                            <span className="text-sm font-semibold text-white">{r.is_police_certificate ? 'Valid Police Certificate' : 'Not Recognized'}</span>
+                            {r.confidence && <span className="text-xs text-white/30 ml-auto">{r.confidence}% confidence</span>}
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {[
+                              { l: 'Certificate #', v: r.certificate_number },
+                              { l: 'Authority', v: r.issuing_authority },
+                              { l: 'Applicant', v: r.applicant_name },
+                              { l: 'District', v: r.district },
+                              { l: 'State', v: r.state },
+                              { l: 'Issue Date', v: r.issue_date },
+                            ].filter(x => x.v).map((x, i) => (
+                              <div key={i} className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                                <p className="text-[9px] text-white/25 uppercase tracking-wider mb-1">{x.l}</p>
+                                <p className="text-sm text-white/80 font-medium">{x.v}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )
+                    }
+
+                    // ── Aadhaar ──
+                    if (vType === 'aadhaar') {
+                      return (
+                        <>
+                          <div className="flex items-center gap-2 pb-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            {r.verified ? <CheckCircle2 size={18} className="text-emerald-400" /> : <AlertCircle size={18} className="text-amber-400" />}
+                            <span className="text-sm font-semibold text-white">{r.verified ? 'Aadhaar Verified' : 'Pending Verification'}</span>
+                            {r.confidence && <span className="text-xs text-white/30 ml-auto">{r.confidence}% confidence</span>}
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {[
+                              { l: 'Name', v: r.name },
+                              { l: 'Date of Birth', v: r.dob },
+                              { l: 'Gender', v: r.gender },
+                              { l: 'State', v: r.state },
+                              { l: 'Aadhaar', v: r.aadhaar_last4 ? `XXXX-XXXX-${r.aadhaar_last4}` : null },
+                            ].filter(x => x.v).map((x, i) => (
+                              <div key={i} className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                                <p className="text-[9px] text-white/25 uppercase tracking-wider mb-1">{x.l}</p>
+                                <p className="text-sm text-white/80 font-medium">{x.v}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )
+                    }
+
+                    // ── Fallback: generic display for marksheets/other ──
                     return (
-                      <div key={key} className="flex items-center justify-between"><p className="text-xs text-white/40">{key.replace(/_/g, ' ')}</p><p className="text-sm text-white/80 font-medium">{String(value)}</p></div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {Object.entries(r).filter(([, val]) => val !== null && val !== undefined && typeof val !== 'object').map(([key, value]) => (
+                          <div key={key} className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                            <p className="text-[9px] text-white/25 uppercase tracking-wider mb-1">{key.replace(/_/g, ' ')}</p>
+                            <p className="text-sm text-white/80 font-medium break-words">{String(value)}</p>
+                          </div>
+                        ))}
+                        {Object.entries(r).filter(([, val]) => Array.isArray(val)).map(([key, value]) => (
+                          <div key={key} className="col-span-full">
+                            <p className="text-[9px] text-white/25 uppercase tracking-wider mb-2">{key.replace(/_/g, ' ')}</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {(value as string[]).map((item, i) => (
+                                <span key={i} className="px-2.5 py-1 rounded-md text-[11px] bg-white/5 text-white/60 border border-white/5">{String(item)}</span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )
-                  })}
+                  })()}
                 </div>
               </div>
             )}

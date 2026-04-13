@@ -9,6 +9,7 @@ export default function UniversityAnalytics() {
   const [students, setStudents] = useState<any[]>([])
   const [verifications, setVerifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [isVerified, setIsVerified] = useState<boolean | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'roster'>('overview')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedStudent, setSelectedStudent] = useState<any>(null)
@@ -16,48 +17,57 @@ export default function UniversityAnalytics() {
   useEffect(() => {
     let mounted = true
     const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session || !mounted) return
-      const { data: stuData } = await supabase.from('students').select('*').eq('university_id', session.user.id)
-      const list = stuData || []
-      
-      const ids = list.map(s => s.id)
-      let verifs: any[] = []
-      if (ids.length > 0) {
-        const { data: vData } = await supabase.from('verifications').select('*').in('student_id', ids).order('updated_at', { ascending: false })
-        verifs = vData || []
-      }
+      try {
+        const res = await fetch('/api/university/analytics')
+        if (!res.ok) throw new Error('Failed to load analytics')
+        const data = await res.json()
 
-      const mapped = list.map(s => {
-        const myVerifs = verifs.filter(v => v.student_id === s.id)
-        const resumeVerif = myVerifs.find(v => v.type === 'resume')
-        const degreeVerif = myVerifs.find(v => v.type === 'degree')
-        const aiResult = resumeVerif?.ai_result || {}
-        const degreeResult = degreeVerif?.ai_result || {}
-
-        return {
-          ...s,
-          verifications: myVerifs,
-          ats_score: aiResult.ats_score || s.ats_score || 0,
-          course: degreeResult.course || aiResult.course || s.course || '',
-          branch: degreeResult.branch || aiResult.branch || s.branch || '',
-          cgpa: degreeResult.grade_cgpa || aiResult.cgpa || s.cgpa || '',
-          graduation_year: degreeResult.year_of_passing || aiResult.graduation_year || s.graduation_year || '',
-          degree_verified: myVerifs.some(v => v.type === 'degree' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          police_verified: myVerifs.some(v => v.type === 'police' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          aadhaar_verified: myVerifs.some(v => v.type === 'aadhaar' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          resume_verified: myVerifs.some(v => v.type === 'resume' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          marksheet10_verified: myVerifs.some(v => v.type === 'marksheet_10th' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          marksheet12_verified: myVerifs.some(v => v.type === 'marksheet_12th' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          passport_verified: myVerifs.some(v => v.type === 'passport' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          trust_score: s.trust_score || 0,
+        if (mounted) {
+          setIsVerified(data.is_verified ?? false)
         }
-      })
+        
+        if (!data.is_verified) {
+          if (mounted) setLoading(false)
+          return
+        }
 
-      if (mounted) {
-        setStudents(mapped)
-        setVerifications(verifs)
-        setLoading(false)
+        const list = data.students || []
+        const verifs = data.verifications || []
+
+        const mapped = list.map((s: any) => {
+          const myVerifs = verifs.filter((v: any) => v.student_id === s.id)
+          const resumeVerif = myVerifs.find((v: any) => v.type === 'resume')
+          const degreeVerif = myVerifs.find((v: any) => v.type === 'degree')
+          const aiResult = resumeVerif?.ai_result || {}
+          const degreeResult = degreeVerif?.ai_result || {}
+
+          return {
+            ...s,
+            verifications: myVerifs,
+            ats_score: aiResult.ats_score || s.ats_score || 0,
+            course: degreeResult.course || aiResult.course || s.course || '',
+            branch: degreeResult.branch || aiResult.branch || s.branch || '',
+            cgpa: degreeResult.grade_cgpa || aiResult.cgpa || s.cgpa || '',
+            graduation_year: degreeResult.year_of_passing || aiResult.graduation_year || s.graduation_year || '',
+            degree_verified: myVerifs.some((v: any) => v.type === 'degree' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+            police_verified: myVerifs.some((v: any) => v.type === 'police' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+            aadhaar_verified: myVerifs.some((v: any) => v.type === 'aadhaar' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+            resume_verified: myVerifs.some((v: any) => v.type === 'resume' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+            marksheet10_verified: myVerifs.some((v: any) => v.type === 'marksheet_10th' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+            marksheet12_verified: myVerifs.some((v: any) => v.type === 'marksheet_12th' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+            passport_verified: myVerifs.some((v: any) => v.type === 'passport' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+            trust_score: s.trust_score || 0,
+          }
+        })
+
+        if (mounted) {
+          setStudents(mapped)
+          setVerifications(verifs)
+          setLoading(false)
+        }
+      } catch (err) {
+        console.error(err)
+        if (mounted) setLoading(false)
       }
     }
     load()
@@ -155,6 +165,25 @@ export default function UniversityAnalytics() {
         <div className="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
         <span className="text-xs text-text-muted tracking-wider">Loading Analytics...</span>
       </div>
+    </div>
+  )
+
+  if (isVerified === false) return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+        className="max-w-md w-full text-center p-8 rounded-2xl border border-orange-500/20 bg-orange-500/5"
+      >
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-orange-500/10 flex items-center justify-center text-orange-400 mb-4">
+          <AlertCircle size={32} />
+        </div>
+        <h2 className="font-heading text-xl font-bold text-text-primary mb-2">Analytics Locked</h2>
+        <p className="text-sm text-text-muted leading-relaxed mb-6">
+          Your university account is pending admin verification. Analytics will become available once your institution is approved by the Credentia admin team.
+        </p>
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-500/10 text-orange-400 text-xs font-bold">
+          <Clock size={14} className="animate-pulse" /> Verification In Progress
+        </div>
+      </motion.div>
     </div>
   )
 

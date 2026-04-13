@@ -88,12 +88,30 @@ export async function GET(request: Request) {
     finalRole = safePortal
   }
 
-  // Upsert profile
+  // Fetch existing role-specific record to prevent overwriting manual settings
+  let existingRoleData: any = null
+  if (!isFirstLogin) {
+    if (finalRole === 'student') {
+      const { data } = await supabaseAdmin.from('students').select('name').eq('id', user.id).maybeSingle()
+      existingRoleData = data
+    } else if (finalRole === 'university') {
+      const { data } = await supabaseAdmin.from('universities').select('university_name').eq('id', user.id).maybeSingle()
+      existingRoleData = data
+    } else if (finalRole === 'company') {
+      const { data } = await supabaseAdmin.from('companies').select('company_name').eq('id', user.id).maybeSingle()
+      existingRoleData = data
+    }
+  }
+
+  // Determine final name
+  const finalName = profile?.full_name ? profile.full_name : (user.user_metadata?.full_name || user.user_metadata?.name || '')
+
+  // Upsert profile without wiping existing name if already present
   await supabaseAdmin.from('profiles').upsert({
     id: user.id,
     email: user.email,
-    full_name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? profile?.full_name ?? '',
-    avatar_url: user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? profile?.avatar_url ?? '',
+    full_name: finalName,
+    avatar_url: profile?.avatar_url || user.user_metadata?.avatar_url || user.user_metadata?.picture || '',
     role: finalRole,
     login_portal: profile?.login_portal || safePortal,
     last_login_at: new Date().toISOString(),
@@ -101,25 +119,26 @@ export async function GET(request: Request) {
     is_active: true,
   }, { onConflict: 'id' })
 
-  // Upsert role-specific table
+  // Upsert role-specific table safely
   try {
     if (finalRole === 'student') {
       await supabaseAdmin.from('students').upsert({
         id: user.id,
-        name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? '',
+        name: existingRoleData?.name ? existingRoleData.name : finalName,
         email: user.email ?? '',
         profile_is_public: true,
-        profile_views: 0,
+        // Only set profile_views if the record doesn't exist to avoid resetting it
+        ...(existingRoleData ? {} : { profile_views: 0 }),
       }, { onConflict: 'id' })
     } else if (finalRole === 'university') {
       await supabaseAdmin.from('universities').upsert({
         id: user.id,
-        university_name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? '',
+        university_name: existingRoleData?.university_name ? existingRoleData.university_name : finalName,
       }, { onConflict: 'id' })
     } else if (finalRole === 'company') {
       await supabaseAdmin.from('companies').upsert({
         id: user.id,
-        company_name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? '',
+        company_name: existingRoleData?.company_name ? existingRoleData.company_name : finalName,
       }, { onConflict: 'id' })
     }
   } catch (e) {

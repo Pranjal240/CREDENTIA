@@ -17,6 +17,9 @@ export const supabase = url && anon
 export const supabaseAdmin = url && service
   ? createClient(url, service, {
       auth: { autoRefreshToken: false, persistSession: false },
+      global: {
+        fetch: (fetchUrl, options) => fetch(fetchUrl, { ...options, cache: 'no-store' }),
+      },
     })
   : createClient('https://placeholder.supabase.co', 'placeholder', {
       auth: { persistSession: false },

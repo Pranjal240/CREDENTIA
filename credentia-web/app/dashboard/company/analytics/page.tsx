@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { motion } from 'framer-motion'
 import { BarChart3, Users, Shield, GraduationCap, TrendingUp, CreditCard, CheckCircle2, Sparkles, BookmarkCheck, ArrowUpRight, Search, FileText, ChevronRight, X, LayoutTemplate, BookOpen, Paperclip } from 'lucide-react'
+import { ProfileAvatar } from '@/components/ProfileAvatar'
 
 
 
@@ -18,14 +19,13 @@ export default function CompanyAnalytics() {
   useEffect(() => {
     let mounted = true
     const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user
       if (!user || !mounted) { setLoading(false); return }
 
-      // Fetch students with verifications joined (same as company main page)
-      const { data: stuData } = await supabase
-        .from('students')
-        .select('*, verifications(*)')
-        .eq('profile_is_public', true)
+      // Fetch students via API to bypass RLS restrictions accurately
+      const res = await fetch('/api/company/students')
+      const { students: stuData } = await res.json()
 
       // Map students with extracted real ATS scores
       const mapped = (stuData || []).map((s: any) => {
@@ -36,6 +36,9 @@ export default function CompanyAnalytics() {
 
         return {
           ...s,
+          name: s.name || s.profiles?.full_name || '',
+          email: s.profiles?.email || '',
+          profile: s.profiles,
           ats_score: aiResult.ats_score || s.ats_score || 0,
           course: degreeResult.course || aiResult.course || s.course || '',
           cgpa: degreeResult.grade_cgpa || aiResult.cgpa || s.cgpa || '',
@@ -47,6 +50,9 @@ export default function CompanyAnalytics() {
           marksheet12_verified: s.verifications?.some((v: any) => v.type === 'marksheet_12th' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
           passport_verified: s.verifications?.some((v: any) => v.type === 'passport' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
           trust_score: s.trust_score || 0,
+          strengths: aiResult.strengths || [],
+          top_skills: aiResult.top_skills || [],
+          improvements: aiResult.improvements || [],
         }
       })
 
@@ -414,9 +420,7 @@ export default function CompanyAnalytics() {
             <button onClick={() => setSelectedStudent(null)} className="absolute top-4 right-4 text-text-muted hover:text-text-primary"><X size={20} /></button>
             
             <div className="flex items-center gap-4 mb-6">
-              <div className="w-14 h-14 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center flex-shrink-0 text-xl font-bold">
-                {selectedStudent.name?.charAt(0) || 'U'}
-              </div>
+              <ProfileAvatar profile={selectedStudent.profile} userId={selectedStudent.id} size="lg" />
               <div>
                 <h3 className="text-xl font-bold text-text-primary">{selectedStudent.name}</h3>
                 <p className="text-sm text-text-muted">{selectedStudent.email}</p>
@@ -443,6 +447,33 @@ export default function CompanyAnalytics() {
                 <div><span className="text-text-muted block text-xs">City</span><span className="text-text-primary">{selectedStudent.city || 'N/A'}</span></div>
               </div>
             </div>
+
+            {/* Strengths & Skills */}
+            {(selectedStudent.strengths?.length > 0 || selectedStudent.top_skills?.length > 0) && (
+              <div className="space-y-4 mb-6">
+                <hr className="border-border" />
+                {selectedStudent.strengths?.length > 0 && (
+                  <div>
+                    <h5 className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-2 flex items-center gap-1.5"><CheckCircle2 size={12} /> Key Strengths</h5>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedStudent.strengths.map((s: string, idx: number) => (
+                        <span key={idx} className="px-2 py-1 rounded text-[10px] uppercase font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">{s}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selectedStudent.top_skills?.length > 0 && (
+                  <div className="mt-4">
+                    <h5 className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-2 flex items-center gap-1.5"><Sparkles size={12} /> Top Skills</h5>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedStudent.top_skills.map((s: string, idx: number) => (
+                        <span key={idx} className="px-2 py-1 rounded text-[10px] uppercase font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">{s}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-4 mt-6">
               <h4 className="font-heading font-semibold text-text-primary border-b border-border pb-2">Verifications</h4>

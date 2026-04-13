@@ -82,31 +82,31 @@ export default async function VerifyPage({ params }: { params: { token: string }
         ? `${student.course || degreeV?.ai_result?.course || ''} — CGPA ${student.cgpa || degreeV?.ai_result?.grade_cgpa || 'N/A'}`
         : getStatusLabel(degreeV),
     },
-    ...(tenthV ? [{
+    {
       icon: BookOpen,
       label: '10th Marksheet',
       verified: isVerified(tenthV),
       pending: isPending(tenthV),
       detail: isVerified(tenthV)
         ? `${tenthV.ai_result?.board_name || 'Board'} — ${tenthV.ai_result?.percentage || tenthV.ai_result?.grade || 'Verified'}`
-        : getStatusLabel(tenthV),
-    }] : []),
-    ...(twelfthV ? [{
+        : getStatusLabel(tenthV, 'Not submitted'),
+    },
+    {
       icon: FileText,
       label: '12th Marksheet',
       verified: isVerified(twelfthV),
       pending: isPending(twelfthV),
       detail: isVerified(twelfthV)
         ? `${twelfthV.ai_result?.board_name || 'Board'} — ${twelfthV.ai_result?.percentage || twelfthV.ai_result?.grade || 'Verified'}`
-        : getStatusLabel(twelfthV),
-    }] : []),
-    ...(otherV ? [{
+        : getStatusLabel(twelfthV, 'Not submitted'),
+    },
+    {
       icon: Paperclip,
       label: 'Additional Credential',
       verified: isVerified(otherV),
       pending: isPending(otherV),
-      detail: getStatusLabel(otherV),
-    }] : []),
+      detail: getStatusLabel(otherV, 'Not submitted'),
+    },
   ]
 
   const verifiedCount = items.filter(i => i.verified).length

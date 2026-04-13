@@ -6,6 +6,7 @@ import {
   GraduationCap, Users, CheckCircle2, Shield, Home, Building, Download,
   Search, Filter, ChevronDown, ChevronUp, SortAsc, SortDesc, X, CreditCard,
   TrendingUp, ChevronLeft, ChevronRight, BookOpen, Paperclip, FileText,
+  Edit2, Save, Loader2,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -21,15 +22,27 @@ export default function UniversityClient({ students: initialStudents }: Props) {
   const [loadingInsights, setLoadingInsights] = useState(false)
   const [aiInsights, setAiInsights] = useState<string | null>(null)
   const [showInsightsModal, setShowInsightsModal] = useState(false)
+  const [editingCgpa, setEditingCgpa] = useState(false)
+  const [editCgpaValue, setEditCgpaValue] = useState('')
+  const [savingCgpa, setSavingCgpa] = useState(false)
+  const [universityId, setUniversityId] = useState('')
+
+  // Get university ID
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setUniversityId(session.user.id)
+    })
+  }, [])
 
   // Keep students synced with server data
   useEffect(() => { setStudents(initialStudents) }, [initialStudents])
 
-  // Realtime subscription — auto-refresh when students or verifications change
+  // Realtime subscription — auto-refresh when students, verifications, or profiles change
   useEffect(() => {
     const channel = supabase.channel('uni_registry_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => router.refresh())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'verifications' }, () => router.refresh())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, () => router.refresh())
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [router])
@@ -374,6 +387,8 @@ export default function UniversityClient({ students: initialStudents }: Props) {
               {[
                 { l: 'Course', v: selectedStudent.course }, { l: 'Branch', v: selectedStudent.branch },
                 { l: 'Year', v: selectedStudent.graduation_year }, { l: 'Roll No.', v: selectedStudent.roll_number },
+                { l: '10th %', v: selectedStudent.percentage_10th ? `${selectedStudent.percentage_10th}%` : null },
+                { l: '12th %', v: selectedStudent.percentage_12th ? `${selectedStudent.percentage_12th}%` : null },
                 { l: 'City', v: selectedStudent.city }, { l: 'State', v: selectedStudent.state },
               ].map((item, i) => (
                 <div key={i} className="p-3 rounded-xl bg-white/[0.03] border border-white/5 hover:bg-white/[0.05] transition-colors">
@@ -381,6 +396,63 @@ export default function UniversityClient({ students: initialStudents }: Props) {
                   <p className="text-sm text-white/90 font-medium">{item.v || '—'}</p>
                 </div>
               ))}
+            </div>
+
+            {/* Editable CGPA Section */}
+            <div className="mb-6 p-4 rounded-xl border border-indigo-500/15 bg-indigo-500/5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[9px] text-white/40 uppercase tracking-wider font-bold">CGPA (Editable)</p>
+                  {editingCgpa ? (
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        type="text"
+                        value={editCgpaValue}
+                        onChange={e => setEditCgpaValue(e.target.value)}
+                        className="w-24 h-8 px-2 rounded-lg text-sm bg-white/5 border border-indigo-500/30 text-white focus:outline-none focus:border-indigo-400"
+                        placeholder="e.g. 8.5"
+                        autoFocus
+                      />
+                      <button
+                        onClick={async () => {
+                          setSavingCgpa(true)
+                          try {
+                            const res = await fetch('/api/university/update-student-cgpa', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ universityId, studentId: selectedStudent.id, cgpa: editCgpaValue }),
+                            })
+                            if (res.ok) {
+                              setSelectedStudent({ ...selectedStudent, cgpa: editCgpaValue })
+                              setStudents(prev => prev.map(s => s.id === selectedStudent.id ? { ...s, cgpa: editCgpaValue } : s))
+                              setEditingCgpa(false)
+                            }
+                          } catch {}
+                          setSavingCgpa(false)
+                        }}
+                        disabled={savingCgpa}
+                        className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 disabled:opacity-50"
+                      >
+                        {savingCgpa ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                      </button>
+                      <button onClick={() => setEditingCgpa(false)} className="p-1.5 rounded-lg hover:bg-white/5 text-white/30">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-lg font-bold text-white mt-0.5">{selectedStudent.cgpa || '—'}</p>
+                  )}
+                </div>
+                {!editingCgpa && (
+                  <button
+                    onClick={() => { setEditCgpaValue(selectedStudent.cgpa?.toString() || ''); setEditingCgpa(true) }}
+                    className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                )}
+              </div>
+              <p className="text-[9px] text-indigo-400/50 mt-2">✏️ Universities can edit CGPA for linked students</p>
             </div>
 
             <h4 className="text-xs font-bold text-white/40 uppercase tracking-wider mb-3">Verification Status <span className="text-emerald-400/60 ml-2">{selectedStudent.verified_docs_count || 0} docs verified</span></h4>

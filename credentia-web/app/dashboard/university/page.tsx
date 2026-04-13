@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { redirect } from 'next/navigation'
 import UniversityClient from './UniversityClient'
+import PendingApproval from './PendingApproval'
 
 export default async function UniversityDashboard() {
   // ── 1. Authenticate via server-side cookie session ─────────────────────────
@@ -13,7 +14,8 @@ export default async function UniversityDashboard() {
     { cookies: { get(name: string) { return cookieStore.get(name)?.value } } }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user
   if (!user) redirect('/login/university')
 
   // ── 2. Verify university role via admin client (bypasses RLS) ──────────────
@@ -31,7 +33,28 @@ export default async function UniversityDashboard() {
 
   if (profile?.role !== 'university') redirect('/dashboard/student')
 
-  // ── 3. Fetch students linked to this university ────────────────────────────
+  // ── 3. Check University Verification Status ────────────────────────────────
+  const { data: uniData } = await adminClient
+    .from('universities')
+    .select('is_verified')
+    .eq('id', user.id)
+    .single()
+
+  // Block access if no university row exists OR if is_verified is not true
+  if (!uniData || uniData.is_verified !== true) {
+    // Ensure a row exists so it shows up in admin panel for approval
+    if (!uniData) {
+      const { data: prof } = await adminClient.from('profiles').select('full_name').eq('id', user.id).single()
+      await adminClient.from('universities').upsert({
+        id: user.id,
+        is_verified: false,
+        university_name: prof?.full_name || 'Unnamed University',
+      })
+    }
+    return <PendingApproval />
+  }
+
+  // ── 4. Fetch students linked to this university ────────────────────────────
   const { data: rawStudents, error } = await adminClient
     .from('students')
     .select('*, profiles(email, full_name), verifications(*)')
@@ -42,7 +65,7 @@ export default async function UniversityDashboard() {
     console.error('[University Dashboard] Error fetching students:', error.message)
   }
 
-  // ── 4. Map raw data into display-ready objects ─────────────────────────────
+  // ── 5. Map raw data into display-ready objects ─────────────────────────────
   const students = (rawStudents || []).map((s: any) => {
     const resumeVerif = s.verifications?.find((v: any) => v.type === 'resume')
     const degreeVerif = s.verifications?.find((v: any) => v.type === 'degree')
@@ -62,10 +85,12 @@ export default async function UniversityDashboard() {
       trust_score: s.trust_score || 0,
       course: degreeResult.course || aiResult.course || s.course || '',
       branch: degreeResult.branch || aiResult.branch || s.branch || '',
-      cgpa: degreeResult.grade_cgpa || aiResult.cgpa || s.cgpa || '',
+      cgpa: s.cgpa || degreeResult.grade_cgpa || aiResult.cgpa || '',
       graduation_year: degreeResult.year_of_passing || aiResult.graduation_year || s.graduation_year || '',
       city: aiResult.city || s.city || '',
       state: aiResult.state || s.state || '',
+      percentage_10th: s.percentage_10th || null,
+      percentage_12th: s.percentage_12th || null,
       degree_verified: s.verifications?.some((v: any) => v.type === 'degree' && verifiedStatuses.includes(v.status)) ?? false,
       police_verified: s.verifications?.some((v: any) => v.type === 'police' && verifiedStatuses.includes(v.status)) ?? false,
       aadhaar_verified: s.verifications?.some((v: any) => v.type === 'aadhaar' && verifiedStatuses.includes(v.status)) ?? false,

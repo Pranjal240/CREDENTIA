@@ -9,7 +9,7 @@ import { X } from 'lucide-react'
 const team = [
   {
     name: 'Pranjal Mishra',
-    role: 'Founder & Developer',
+    role: 'Founder & Senior Developer',
     img: '/team/pranjal.png',
     bio: 'Visionary entrepreneur dedicated to building India\'s trust infrastructure for the next generation. Leading the charge to eliminate hiring fraud and empower students with verifiable credentials.',
     linkedin: '#',
@@ -25,7 +25,7 @@ const team = [
   },
   {
     name: 'Nihal Kumar',
-    role: 'Founder & Developer',
+    role: 'Founder & Manager',
     img: '/team/NIHAL Kumar.png',
     bio: 'Architecting scalable AI-powered verification systems using cutting-edge technologies. Expert in building secure, high-throughput platforms that handle millions of document verifications.',
     linkedin: '#',
@@ -33,11 +33,19 @@ const team = [
   },
   {
     name: 'Pragya Mishra',
-    role: 'Founder & Head of Operations',
+    role: 'CEO',
     img: '/team/Pragya Mishra.png',
-    bio: 'Ensuring seamless verification workflows and exceptional user experiences. Managing end-to-end operations from university onboarding to enterprise client success.',
+    bio: 'Steering the strategic vision and growth of Credentia as Chief Executive Officer. Driving partnerships across India\'s education and corporate ecosystem while ensuring the platform delivers unmatched trust and transparency at scale.',
     linkedin: '#',
     objectPosition: 'object-[55%_20%]',
+  },
+  {
+    name: 'Sourav Yadav',
+    role: 'Founder & Developer',
+    img: '/team/sourav.png',
+    bio: 'Building robust full-stack solutions that power the Credentia platform. Passionate about scalable backend architecture, seamless API integrations, and crafting delightful developer experiences.',
+    linkedin: '#',
+    objectPosition: 'object-top',
   },
 ]
 
@@ -61,7 +69,8 @@ export default function Team() {
           <p style={{ color: 'rgb(var(--text-secondary))' }} className="text-lg">The people building India&apos;s most trusted credential platform</p>
         </motion.div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
+        {/* All 5 founders in one unified row */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-6 md:gap-5 justify-items-center">
           {team.map((member, i) => (
             <motion.div
               key={i}
@@ -69,9 +78,9 @@ export default function Team() {
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.5, delay: i * 0.1 }}
               onClick={() => setSelected(i)}
-              className="text-center cursor-pointer group"
+              className="text-center cursor-pointer group w-full"
             >
-              <div className="relative w-28 h-28 md:w-36 md:h-36 mx-auto mb-4">
+              <div className="relative w-24 h-24 md:w-32 md:h-32 mx-auto mb-4">
                 {/* Glow ring */}
                 <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-blue-500 via-teal-400 to-indigo-500 opacity-60 group-hover:opacity-100 blur-sm transition-opacity duration-500" />
                 {/* Border ring */}
@@ -85,8 +94,8 @@ export default function Team() {
                   </div>
                 </div>
               </div>
-              <h3 className="font-heading text-sm md:text-base font-bold group-hover:text-blue-400 transition-colors" style={{ color: 'rgb(var(--text-primary))' }}>{member.name}</h3>
-              <p className="text-xs md:text-sm mt-0.5" style={{ color: 'rgb(var(--text-muted))' }}>{member.role}</p>
+              <h3 className="font-heading text-xs md:text-sm font-bold group-hover:text-blue-400 transition-colors leading-tight" style={{ color: 'rgb(var(--text-primary))' }}>{member.name}</h3>
+              <p className="text-[10px] md:text-xs mt-0.5" style={{ color: 'rgb(var(--text-muted))' }}>{member.role}</p>
             </motion.div>
           ))}
         </div>

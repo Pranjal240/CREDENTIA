@@ -5,23 +5,34 @@ import { supabase } from '@/lib/supabase'
 import { motion } from 'framer-motion'
 import { Settings, AlertCircle, Briefcase, Loader2, CheckCircle2 } from 'lucide-react'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
+import { useRouter } from 'next/navigation'
 
 export default function CompanySettings() {
+  const router = useRouter()
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({ company_name: '' })
+  const [form, setForm] = useState({ company_name: '', phone: '', description: '', industry: '', website: '' })
 
   useEffect(() => {
     const load = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
       
-      const { data: prof } = await supabase.from('profiles').select('*').eq('id', session.user.id).single()
+      const [{ data: prof }, { data: comp }] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', session.user.id).single(),
+        supabase.from('companies').select('*').eq('id', session.user.id).single(),
+      ])
       setProfile(prof)
-      setForm({ company_name: prof?.full_name || '' })
+      setForm({ 
+        company_name: comp?.company_name || prof?.full_name || '',
+        phone: prof?.phone || '',
+        description: comp?.description || '',
+        industry: comp?.industry || '',
+        website: comp?.website || ''
+      })
       setLoading(false)
     }
     load()
@@ -33,14 +44,20 @@ export default function CompanySettings() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Unauthenticated')
         
-      const { error: err } = await supabase.from('profiles').update({
-        full_name: form.company_name,
-        updated_at: new Date().toISOString()
-      }).eq('id', session.user.id)
+      const res = await fetch('/api/company/update-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form)
+      })
 
-      if (err) throw err
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'Failed to save settings')
+
+      // Update local profile state so sidebar reflects the new name immediately
+      setProfile((prev: any) => prev ? { ...prev, full_name: form.company_name } : prev)
       
       setSaved(true)
+      router.refresh()
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {
       setError(err.message)
@@ -82,6 +99,42 @@ export default function CompanySettings() {
               onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))} 
               placeholder="Your company name" 
               className="w-full h-11 px-4 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/15 focus:outline-none focus:border-emerald-500/50 transition-colors" 
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-white/30 uppercase tracking-wider font-medium mb-1 block">Phone Number</label>
+            <input 
+              value={form.phone} 
+              onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} 
+              placeholder="e.g. 9876543210" 
+              className="w-full h-11 px-4 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/15 focus:outline-none focus:border-emerald-500/50 transition-colors" 
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-white/30 uppercase tracking-wider font-medium mb-1 block">Industry</label>
+            <input 
+              value={form.industry} 
+              onChange={e => setForm(f => ({ ...f, industry: e.target.value }))} 
+              placeholder="e.g. Technology, Healthcare" 
+              className="w-full h-11 px-4 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/15 focus:outline-none focus:border-emerald-500/50 transition-colors" 
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-white/30 uppercase tracking-wider font-medium mb-1 block">Website</label>
+            <input 
+              value={form.website} 
+              onChange={e => setForm(f => ({ ...f, website: e.target.value }))} 
+              placeholder="https://example.com" 
+              className="w-full h-11 px-4 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/15 focus:outline-none focus:border-emerald-500/50 transition-colors" 
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-white/30 uppercase tracking-wider font-medium mb-1 block">Company Description</label>
+            <textarea 
+              value={form.description} 
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))} 
+              placeholder="Brief description of your company..." 
+              className="w-full h-32 p-4 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/15 focus:outline-none focus:border-emerald-500/50 transition-colors resize-none" 
             />
           </div>
           <div>

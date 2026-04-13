@@ -2,8 +2,9 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Users, Shield, CheckCircle2, AlertCircle, Clock, Search, Filter, ChevronDown, ChevronUp, Eye, X, TrendingUp, FileText, CreditCard, GraduationCap, ToggleLeft, ToggleRight, Building, Briefcase, ExternalLink, BarChart3, Edit2, Save } from 'lucide-react'
+import { Users, Shield, CheckCircle2, AlertCircle, Clock, Search, Filter, ChevronDown, ChevronUp, Eye, X, TrendingUp, FileText, CreditCard, GraduationCap, ToggleLeft, ToggleRight, Building, Briefcase, ExternalLink, BarChart3, Edit2, Save, Sparkles } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 
 type Props = {
@@ -24,7 +25,7 @@ export default function AdminClient({ profiles, students, verifications, recentA
   const [localVerifications, setLocalVerifications] = useState(verifications)
   const [activeTab, setActiveTab] = useState<'overview' | 'students' | 'queue'>('overview')
   const [isEditingStudent, setIsEditingStudent] = useState(false)
-  const [editForm, setEditForm] = useState({ name: '', course: '' })
+  const [editForm, setEditForm] = useState({ name: '', course: '', cgpa: '', percentage_10th: '', percentage_12th: '' })
   const router = useRouter()
 
   useEffect(() => {
@@ -43,7 +44,13 @@ export default function AdminClient({ profiles, students, verifications, recentA
 
   const openStudentModal = (student: any) => {
     setSelectedStudent(student)
-    setEditForm({ name: student.fullName || '', course: student.course || '' })
+    setEditForm({
+      name: student.fullName || '',
+      course: student.course || '',
+      cgpa: student.cgpa?.toString() || '',
+      percentage_10th: student.percentage_10th?.toString() || '',
+      percentage_12th: student.percentage_12th?.toString() || '',
+    })
     setIsEditingStudent(false)
   }
 
@@ -54,12 +61,25 @@ export default function AdminClient({ profiles, students, verifications, recentA
       const res = await fetch('/api/admin/update-student', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: selectedStudent.id, name: editForm.name, course: editForm.course, adminId: currentUserId })
+        body: JSON.stringify({
+          id: selectedStudent.id,
+          name: editForm.name,
+          course: editForm.course,
+          cgpa: editForm.cgpa || null,
+          percentage_10th: editForm.percentage_10th ? parseFloat(editForm.percentage_10th) : null,
+          percentage_12th: editForm.percentage_12th ? parseFloat(editForm.percentage_12th) : null,
+          adminId: currentUserId
+        })
       })
       if (res.ok) {
-        setLocalStudents(prev => prev.map(s => s.id === selectedStudent.id ? { ...s, name: editForm.name, course: editForm.course } : s))
-        // also update the modal's selectedStudent to reflect changes
-        setSelectedStudent({ ...selectedStudent, fullName: editForm.name, name: editForm.name, course: editForm.course })
+        setLocalStudents(prev => prev.map(s => s.id === selectedStudent.id ? {
+          ...s, name: editForm.name, course: editForm.course,
+          cgpa: editForm.cgpa, percentage_10th: editForm.percentage_10th, percentage_12th: editForm.percentage_12th
+        } : s))
+        setSelectedStudent({
+          ...selectedStudent, fullName: editForm.name, name: editForm.name, course: editForm.course,
+          cgpa: editForm.cgpa, percentage_10th: editForm.percentage_10th, percentage_12th: editForm.percentage_12th
+        })
         setIsEditingStudent(false)
       }
     } catch {}
@@ -114,13 +134,18 @@ export default function AdminClient({ profiles, students, verifications, recentA
         ats_score: aiResult.ats_score || s.ats_score || 0,
         course: degreeResult.course || aiResult.course || s.course || '',
         branch: degreeResult.branch || aiResult.branch || s.branch || '',
-        cgpa: degreeResult.grade_cgpa || aiResult.cgpa || s.cgpa || '',
+        cgpa: s.cgpa || degreeResult.grade_cgpa || aiResult.cgpa || '',
         graduation_year: degreeResult.year_of_passing || aiResult.graduation_year || s.graduation_year || '',
         city: aiResult.city || s.city || '',
         state: aiResult.state || s.state || '',
         degree_verified: vList.some((v: any) => v.type === 'degree' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
         police_verified: vList.some((v: any) => v.type === 'police' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
         aadhaar_verified: vList.some((v: any) => v.type === 'aadhaar' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
+        percentage_10th: s.percentage_10th || null,
+        percentage_12th: s.percentage_12th || null,
+        strengths: aiResult.strengths || [],
+        top_skills: aiResult.top_skills || [],
+        improvements: aiResult.improvements || [],
       }
     })
   }, [localStudents, profiles, localVerifications])
@@ -240,12 +265,15 @@ export default function AdminClient({ profiles, students, verifications, recentA
                 const icons: Record<string, any> = { resume: FileText, police: Shield, aadhaar: CreditCard, degree: GraduationCap }
                 const Icon = icons[type]
                 return (
-                  <div key={type} className="p-4 rounded-xl bg-white/[0.03] border border-white/5">
-                    <Icon size={18} className="text-blue-400 mb-2" />
+                  <Link href={`/dashboard/admin/verifications?type=${type}`} key={type} className="block p-4 rounded-xl bg-white/[0.03] border border-white/5 hover:bg-white/[0.06] hover:border-white/20 transition-all cursor-pointer group">
+                    <div className="flex items-center justify-between pointer-events-none">
+                       <Icon size={18} className="text-blue-400 mb-2 group-hover:scale-110 transition-transform" />
+                       <ExternalLink size={14} className="text-white/20 group-hover:text-white/50 transition-colors mb-2" />
+                    </div>
                     <p className="text-sm font-medium text-white capitalize">{type}</p>
                     <p className="text-xs text-white/30 mt-1">{approved}/{typeV.length} verified</p>
                     <div className="h-1.5 w-full bg-white/5 rounded-full mt-2"><div className="h-full bg-gradient-to-r from-blue-500 to-emerald-400 rounded-full" style={{ width: `${typeV.length ? (approved / typeV.length) * 100 : 0}%` }} /></div>
-                  </div>
+                  </Link>
                 )
               })}
             </div>
@@ -427,6 +455,39 @@ export default function AdminClient({ profiles, students, verifications, recentA
                         className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-white text-sm focus:outline-none focus:border-blue-500 w-full"
                         placeholder="Course/Specialization"
                       />
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-[8px] text-white/25 uppercase tracking-wider block mb-0.5">CGPA</label>
+                          <input 
+                            type="text" 
+                            value={editForm.cgpa} 
+                            onChange={e => setEditForm(prev => ({ ...prev, cgpa: e.target.value }))}
+                            className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-white text-sm focus:outline-none focus:border-blue-500 w-full"
+                            placeholder="8.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[8px] text-white/25 uppercase tracking-wider block mb-0.5">10th %</label>
+                          <input 
+                            type="number" step="0.01"
+                            value={editForm.percentage_10th} 
+                            onChange={e => setEditForm(prev => ({ ...prev, percentage_10th: e.target.value }))}
+                            className="bg-white/5 border border-amber-500/20 rounded-md px-2 py-1 text-amber-200 text-sm focus:outline-none focus:border-amber-500 w-full"
+                            placeholder="85.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[8px] text-white/25 uppercase tracking-wider block mb-0.5">12th %</label>
+                          <input 
+                            type="number" step="0.01"
+                            value={editForm.percentage_12th} 
+                            onChange={e => setEditForm(prev => ({ ...prev, percentage_12th: e.target.value }))}
+                            className="bg-white/5 border border-amber-500/20 rounded-md px-2 py-1 text-amber-200 text-sm focus:outline-none focus:border-amber-500 w-full"
+                            placeholder="88.0"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[9px] text-amber-400/60 flex items-center gap-1">⚠️ 10th/12th % can only be edited by Admin</p>
                     </div>
                   ) : (
                     <>
@@ -454,6 +515,8 @@ export default function AdminClient({ profiles, students, verifications, recentA
               {[
                 { l: 'Course', v: selectedStudent.course },
                 { l: 'CGPA', v: selectedStudent.cgpa },
+                { l: '10th %', v: selectedStudent.percentage_10th ? `${selectedStudent.percentage_10th}%` : null },
+                { l: '12th %', v: selectedStudent.percentage_12th ? `${selectedStudent.percentage_12th}%` : null },
                 { l: 'ATS Score', v: selectedStudent.ats_score ? `${selectedStudent.ats_score}/100` : null },
                 { l: 'Trust Score', v: selectedStudent.trust_score !== undefined ? `${selectedStudent.trust_score}%` : null },
                 { l: 'Year', v: selectedStudent.graduation_year },
@@ -466,6 +529,43 @@ export default function AdminClient({ profiles, students, verifications, recentA
                 </div>
               ))}
             </div>
+
+            {/* AI Extracted Skills & Strengths */}
+            {(selectedStudent.strengths?.length > 0 || selectedStudent.top_skills?.length > 0 || selectedStudent.improvements?.length > 0) && (
+              <div className="space-y-4 mb-6">
+                <hr className="border-white/5" />
+                {selectedStudent.strengths?.length > 0 && (
+                  <div>
+                    <h5 className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5"><CheckCircle2 size={12} /> Strengths</h5>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedStudent.strengths.map((s: string, idx: number) => (
+                        <span key={idx} className="px-2 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px]">{s}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selectedStudent.top_skills?.length > 0 && (
+                  <div>
+                    <h5 className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-2 flex items-center gap-1.5"><Sparkles size={12} /> Top Skills</h5>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedStudent.top_skills.map((s: string, idx: number) => (
+                        <span key={idx} className="px-2 py-1 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[10px]">{s}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selectedStudent.improvements?.length > 0 && (
+                  <div>
+                    <h5 className="text-[10px] font-bold text-amber-400 uppercase tracking-wider mb-2 flex items-center gap-1.5"><AlertCircle size={12} /> Areas for Improvement</h5>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedStudent.improvements.map((s: string, idx: number) => (
+                        <span key={idx} className="px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[10px]">{s}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <h4 className="text-xs font-bold text-white/40 uppercase tracking-wider mb-3">Verifications Control</h4>
             <div className="space-y-3">

@@ -59,10 +59,35 @@ export default function ResumePage() {
         throw new Error(errData.error || 'Analysis failed')
       }
       const analysisData = await analyzeRes.json()
-      setResult(analysisData.analysis || analysisData)
-      setFileUrl(analysisData.fileUrl || uploadData.url)
-      setSaveStatus(analysisData.status || (analysisData.analysis?.ats_score ? 'ai_approved' : 'rejected'))
+      const analysisResult = analysisData.analysis || analysisData
+      const finalFileUrl = analysisData.fileUrl || uploadData.url
+      const finalStatus = analysisData.status || (analysisResult?.ats_score ? 'ai_approved' : 'rejected')
+      setResult(analysisResult)
+      setFileUrl(finalFileUrl)
+      setSaveStatus(finalStatus)
       setAnalyzing(false)
+
+      // Auto-save to database immediately so CGPA/ATS propagate across all portals
+      try {
+        const saveRes = await fetch('/api/save-verification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentId: userId,
+            type: 'resume',
+            analysis: analysisResult,
+            fileUrl: finalFileUrl,
+            status: finalStatus
+          })
+        })
+        const saveData = await saveRes.json()
+        if (saveRes.ok && saveData.success) {
+          setSaved(true)
+          router.refresh()
+        }
+      } catch (autoSaveErr) {
+        console.warn('Auto-save failed, user can still save manually:', autoSaveErr)
+      }
     } catch (err: any) {
       setError(err.message || 'Something went wrong')
       setUploading(false); setAnalyzing(false)

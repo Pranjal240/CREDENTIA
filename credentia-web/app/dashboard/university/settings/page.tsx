@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Settings, Building, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
+import { useRouter } from 'next/navigation'
 
 export default function UniversitySettings() {
+  const router = useRouter()
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -18,9 +20,12 @@ export default function UniversitySettings() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
       
-      const { data: prof } = await supabase.from('profiles').select('*').eq('id', session.user.id).single()
+      const [{ data: prof }, { data: uni }] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', session.user.id).single(),
+        supabase.from('universities').select('*').eq('id', session.user.id).single()
+      ])
       setProfile(prof)
-      setForm({ university_name: prof?.full_name || '' })
+      setForm({ university_name: uni?.university_name || prof?.full_name || '' })
       setLoading(false)
     }
     load()
@@ -29,17 +34,20 @@ export default function UniversitySettings() {
   const handleSave = async () => {
     setSaving(true); setError(''); setSaved(false)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) throw new Error('Unauthenticated')
-        
-      const { error: err } = await supabase.from('profiles').update({
-        full_name: form.university_name,
-        updated_at: new Date().toISOString()
-      }).eq('id', session.user.id)
+      const res = await fetch('/api/university/update-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ university_name: form.university_name })
+      })
 
-      if (err) throw err
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'Failed to save settings')
+
+      // Update local profile state so sidebar reflects the new name immediately
+      setProfile((prev: any) => prev ? { ...prev, display_name: form.university_name } : prev)
       
       setSaved(true)
+      router.refresh()
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {
       setError(err.message)

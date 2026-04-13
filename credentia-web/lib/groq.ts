@@ -76,6 +76,7 @@ export async function analyzeResume(content: string, isImage: boolean = false) {
   "state": "<state from resume or null>",
   "course": "<degree program e.g. B.Tech, MBA, BCA or null>",
   "branch": "<specialization e.g. Computer Science, Mechanical or null>",
+  "cgpa": "<CGPA/GPA value as string if mentioned anywhere in resume, e.g. '7.54', '8.2' or null>",
   "graduation_year": <graduation year as number or null>,
   "keywords_found": ["skill1","skill2"],
   "keywords_missing": ["missing1","missing2"],

@@ -55,14 +55,14 @@ export default async function Home({
   )
 
   try {
-    const { data: { user } } =
-      await supabase.auth.getUser()
+    const { data: { session } } =
+      await supabase.auth.getSession()
 
-    if (user?.id) {
+    if (session?.user?.id) {
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', user.id)
+        .eq('id', session.user.id)
         .single()
 
       if (profile?.role && ROLE_REDIRECT[profile.role]) {

@@ -59,14 +59,32 @@ export async function POST(request: Request) {
       const upsertData: any = {
         id: studentId,
         resume_url: fileUrl,
-        ats_score: analysis.ats_score || 0,
         updated_at: new Date().toISOString(),
+      }
+      // Only set ats_score if it's a valid non-zero number
+      if (analysis.ats_score && analysis.ats_score > 0) {
+        upsertData.ats_score = analysis.ats_score
       }
       if (analysis.student_name) upsertData.name = analysis.student_name
       if (analysis.city) upsertData.city = analysis.city
       if (analysis.state) upsertData.state = analysis.state
       if (analysis.course) upsertData.course = analysis.course
       if (analysis.branch) upsertData.branch = analysis.branch
+      // Always update CGPA from AI — latest extraction wins
+      let finalCgpaStr = analysis.cgpa;
+      if (!finalCgpaStr && analysis.summary) {
+        const match = analysis.summary.match(/cgpa\s*(?:of|is|:)?\s*([0-9.]+)/i);
+        if (match) finalCgpaStr = match[1];
+      }
+      // Force update the analysis object so that verifications.ai_result correctly holds the extracted value
+      if (finalCgpaStr) analysis.cgpa = finalCgpaStr;
+
+      if (finalCgpaStr) {
+        const cgpaVal = parseFloat(String(finalCgpaStr).replace(/[^0-9.]/g, ''))
+        if (!isNaN(cgpaVal) && cgpaVal > 0) {
+          upsertData.cgpa = cgpaVal
+        }
+      }
       if (analysis.graduation_year) {
         upsertData.graduation_year = typeof analysis.graduation_year === 'number'
           ? analysis.graduation_year
@@ -105,11 +123,17 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' })
     } else if (type === 'degree') {
+      // Parse CGPA from degree — could be "7.54", "8.2 CGPA", etc.
+      let cgpaVal = null
+      if (analysis.grade_cgpa) {
+        const parsed = parseFloat(String(analysis.grade_cgpa).replace(/[^0-9.]/g, ''))
+        if (!isNaN(parsed) && parsed > 0) cgpaVal = parsed
+      }
       await supabaseAdmin.from('students').upsert({
         id: studentId,
         degree_verified: ['ai_approved', 'admin_verified', 'verified'].includes(status),
         course: analysis.course || analysis.degree || null,
-        cgpa: analysis.grade_cgpa || null,
+        cgpa: cgpaVal,
         graduation_year: analysis.year_of_passing ? parseInt(analysis.year_of_passing) || null : null,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' })
@@ -119,9 +143,28 @@ export async function POST(request: Request) {
         police_verified: ['ai_approved', 'admin_verified', 'verified'].includes(status),
         updated_at: new Date().toISOString(),
       }, { onConflict: 'id' })
+    } else if (type === 'marksheet_10th') {
+      // AI-extracted 10th percentage — sync to students table for cross-portal visibility
+      const pct = analysis.percentage ? parseFloat(analysis.percentage.replace('%', '')) : null
+      if (pct !== null && !isNaN(pct)) {
+        await supabaseAdmin.from('students').upsert({
+          id: studentId,
+          percentage_10th: pct,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' })
+      }
+    } else if (type === 'marksheet_12th') {
+      // AI-extracted 12th percentage — sync to students table for cross-portal visibility
+      const pct = analysis.percentage ? parseFloat(analysis.percentage.replace('%', '')) : null
+      if (pct !== null && !isNaN(pct)) {
+        await supabaseAdmin.from('students').upsert({
+          id: studentId,
+          percentage_12th: pct,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' })
+      }
     }
-    // For marksheet_10th, marksheet_12th, passport (other) — no specific student column updates
-    // but they are stored in verifications and contribute to profile completion
+    // passport (other) — stored in verifications only, contributes to profile completion
 
     // 5. Fetch all verifications for this student to recalculate scores
     const { data: allVerifs } = await supabaseAdmin

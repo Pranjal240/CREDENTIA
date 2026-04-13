@@ -101,26 +101,47 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
   // IMPORTANT: Never sign out here! The auth callback just set session cookies.
   // Signing out would destroy the session and cause a redirect loop.
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) { setSessionReady(true); return }
+    let cancelled = false
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      if (profile?.role) {
-        // User has a profile — send them to their dashboard
-        // (even if they're on the "wrong" login portal, just redirect)
-        router.replace(`/dashboard/${profile.role}`)
+    const checkSession = async () => {
+      // Force clear stale sessions if server rejected it
+      if (errorParam === 'session_expired') {
+        await supabase.auth.signOut()
+        if (!cancelled) setSessionReady(true)
         return
       }
 
-      // No profile yet — let them stay on login page
-      setSessionReady(true)
-    })
-  }, [portal, router])
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
+        if (cancelled) return
+        if (!session?.user) { setSessionReady(true); return }
+
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .maybeSingle()
+
+          if (cancelled) return
+
+          if (profile?.role) {
+            // User has a profile — send them to their dashboard
+            router.replace(`/dashboard/${profile.role}`)
+            return
+          }
+        } catch {
+          // If profile fetch fails, just show login
+        }
+
+        // No profile yet — let them stay on login page
+        if (!cancelled) setSessionReady(true)
+      }).catch(() => {
+        if (!cancelled) setSessionReady(true)
+      })
+    }
+    checkSession()
+    return () => { cancelled = true }
+  }, [portal, router, errorParam])
 
   const errorContent = getErrorContent(errorParam, correctParam) ??
                        (runtimeError ? { icon: <XCircle size={16} />, message: runtimeError, action: null } : null)
@@ -443,17 +464,15 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
           )}
         </div>
 
-        {/* Back link (not shown on admin) */}
-        {portal !== 'admin' && (
-          <Link
-            href="/login"
-            className="flex items-center gap-2 mt-6 text-sm transition-colors"
-            style={{ color: 'rgba(255,255,255,0.3)' }}
-          >
-            <ArrowLeft size={14} />
-            Back to portal selection
-          </Link>
-        )}
+        {/* Back link — shown on all portals */}
+        <Link
+          href="/login"
+          className="flex items-center gap-2 mt-6 text-sm transition-colors"
+          style={{ color: 'rgba(255,255,255,0.3)' }}
+        >
+          <ArrowLeft size={14} />
+          Back to portal selection
+        </Link>
 
         <p className="text-center text-xs mt-6" style={{ color: 'rgba(255,255,255,0.18)' }}>
           By continuing, you agree to Credentia&apos;s{' '}

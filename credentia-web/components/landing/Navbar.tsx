@@ -31,12 +31,12 @@ export default function Navbar() {
 
   // Fetch user role from the DB profile (not the JWT — JWT metadata is unreliable)
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.user) return
       supabase
         .from('profiles')
         .select('role')
-        .eq('id', user.id)
+        .eq('id', session.user.id)
         .single()
         .then(({ data: profile }) => {
           if (profile?.role) {

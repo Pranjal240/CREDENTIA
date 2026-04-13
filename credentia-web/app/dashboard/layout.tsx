@@ -11,9 +11,10 @@ import {
   LayoutDashboard, FileText, Shield, CreditCard, GraduationCap, Link2,
   ChevronLeft, ChevronRight, LogOut, Menu, X, Home, Users, Settings,
   BookmarkCheck, BarChart3, ClipboardList, Building2, Briefcase,
-  ScrollText, Search, Sun, Moon
+  ScrollText, Search, Sun, Moon, Headphones
 } from 'lucide-react'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
+import { SupportChat } from '@/components/SupportChat'
 
 const sidebarLinks: Record<string, { label: string; icon: any; href: string }[]> = {
   student: [
@@ -23,22 +24,27 @@ const sidebarLinks: Record<string, { label: string; icon: any; href: string }[]>
     { label: 'Police', icon: Shield, href: '/dashboard/student/police' },
     { label: 'Aadhaar', icon: CreditCard, href: '/dashboard/student/aadhaar' },
     { label: 'Degree', icon: GraduationCap, href: '/dashboard/student/degree' },
+    { label: 'Company Apply', icon: Briefcase, href: '/dashboard/student/apply' },
     { label: 'My Verifications', icon: BookmarkCheck, href: '/dashboard/student/saved' },
     { label: 'My Link', icon: Link2, href: '/dashboard/student/my-link' },
     { label: 'Settings', icon: Settings, href: '/dashboard/student/settings' },
+    { label: 'Support', icon: Headphones, href: '#support' },
     { label: 'Home', icon: Home, href: '/' },
   ],
   company: [
     { label: 'Talent Search', icon: Search, href: '/dashboard/company' },
+    { label: 'Applicants', icon: Users, href: '/dashboard/company/applicants' },
     { label: 'Saved Candidates', icon: BookmarkCheck, href: '/dashboard/company/saved' },
     { label: 'Analytics', icon: BarChart3, href: '/dashboard/company/analytics' },
     { label: 'Settings', icon: Settings, href: '/dashboard/company/settings' },
+    { label: 'Support', icon: Headphones, href: '#support' },
     { label: 'Home', icon: Home, href: '/' },
   ],
   university: [
     { label: 'Student Registry', icon: Users, href: '/dashboard/university' },
     { label: 'Analytics', icon: BarChart3, href: '/dashboard/university/analytics' },
     { label: 'Settings', icon: Settings, href: '/dashboard/university/settings' },
+    { label: 'Support', icon: Headphones, href: '#support' },
     { label: 'Home', icon: Home, href: '/' },
   ],
   admin: [
@@ -49,6 +55,7 @@ const sidebarLinks: Record<string, { label: string; icon: any; href: string }[]>
     { label: 'Audit Logs', icon: ScrollText, href: '/dashboard/admin/audit' },
     { label: 'Universities', icon: Building2, href: '/dashboard/admin/outreach' },
     { label: 'Companies', icon: Briefcase, href: '/dashboard/admin/companies' },
+    { label: 'Support Inbox', icon: Headphones, href: '/dashboard/admin/support' },
     { label: 'Settings', icon: Settings, href: '/dashboard/admin/settings' },
     { label: 'Home', icon: Home, href: '/' },
   ],
@@ -73,6 +80,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [isDesktop, setIsDesktop] = useState(true)
+  const [supportChatOpen, setSupportChatOpen] = useState(false)
 
   // Avoid hydration mismatch for theme toggle
   useEffect(() => { setMounted(true) }, [])
@@ -90,17 +98,108 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => mq.removeEventListener('change', handler)
   }, [])
 
+  // Infer role from pathname as an immediate fallback — avoids wrong sidebar during load
+  const inferredRole = (() => {
+    if (pathname.startsWith('/dashboard/admin')) return 'admin'
+    if (pathname.startsWith('/dashboard/university')) return 'university'
+    if (pathname.startsWith('/dashboard/company')) return 'company'
+    return 'student'
+  })()
+
   useEffect(() => {
+    let isMounted = true
     const init = async () => {
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      if (!authUser) { router.push('/login/student'); return }
-      setUser(authUser)
-      const { data: prof } = await supabase.from('profiles').select('*').eq('id', authUser.id).single()
-      if (prof) { setProfile(prof); setRole(prof.role) }
-      setLoading(false)
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          // No session at all — must redirect to login
+          router.push(`/login/${inferredRole}`)
+          return
+        }
+
+        const authUser = session.user
+        if (!isMounted) return
+        setUser(authUser)
+
+        // Fetch profile — but a failure here should NOT kick the user out.
+        // The user is authenticated; we just couldn't load extra profile data.
+        try {
+          const { data: prof, error: profError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', authUser.id)
+            .single()
+
+          if (!isMounted) return
+
+          if (prof && !profError) {
+            let entityName = null
+            if (prof.role === 'company') {
+              const { data: c } = await supabase.from('companies').select('company_name').eq('id', authUser.id).single()
+              entityName = c?.company_name
+            } else if (prof.role === 'university') {
+              const { data: u } = await supabase.from('universities').select('university_name').eq('id', authUser.id).single()
+              entityName = u?.university_name
+            } else if (prof.role === 'student') {
+              const { data: s } = await supabase.from('students').select('name').eq('id', authUser.id).single()
+              entityName = s?.name
+            }
+            // Inject display_name directly into the profile object
+            setProfile({ ...prof, display_name: entityName || prof.full_name })
+            setRole(prof.role)
+          } else {
+            // Profile fetch failed — use URL-inferred role as fallback
+            setRole(inferredRole)
+          }
+        } catch {
+          // Profile fetch network error — still proceed with inferred role
+          if (isMounted) setRole(inferredRole)
+        }
+
+        if (isMounted) setLoading(false)
+      } catch (err) {
+        console.error('[Dashboard Layout] Auth init error:', err)
+        if (isMounted) {
+          // Even on error, use URL-inferred role and show the dashboard.
+          // Only redirect if the error is specifically about missing session.
+          setRole(inferredRole)
+          setLoading(false)
+        }
+      }
     }
+
     init()
-  }, [router])
+
+    return () => {
+      isMounted = false
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-fetch profile and entity data in real-time
+  useEffect(() => {
+    if (!user?.id) return
+    
+    // Subscribe to profile updates (e.g. avatar changes)
+    const profChannel = supabase.channel('sidebar_profile_sync')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, (payload: any) => {
+        if (payload.new) setProfile((prev: any) => prev ? { ...prev, ...payload.new, display_name: prev.display_name || payload.new.full_name } : payload.new)
+      })
+      .subscribe()
+      
+    // Subscribe to specific role tables for name updates
+    const getTableName = () => role === 'company' ? 'companies' : role === 'university' ? 'universities' : 'students'
+    const nameField = role === 'company' ? 'company_name' : role === 'university' ? 'university_name' : 'name'
+    
+    const roleChannel = supabase.channel('sidebar_entity_sync')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: getTableName(), filter: `id=eq.${user.id}` }, (payload: any) => {
+        if (payload.new && payload.new[nameField]) {
+          setProfile((prev: any) => prev ? { ...prev, display_name: payload.new[nameField] } : null)
+        }
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(profChannel); supabase.removeChannel(roleChannel) }
+  }, [user?.id, role])
 
   // Close mobile menu on route change
   useEffect(() => { setMobileOpen(false) }, [pathname])
@@ -184,6 +283,45 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               link.href !== '/dashboard/admin' &&
               pathname.startsWith(link.href)
             const active = isExact || isPrefix
+            const isSupportLink = link.href === '#support'
+
+            if (isSupportLink) {
+              return (
+                <button
+                  key={link.href + link.label}
+                  onClick={() => setSupportChatOpen(prev => !prev)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium group relative overflow-hidden whitespace-nowrap"
+                  style={{
+                    color: supportChatOpen ? 'rgb(var(--text-primary))' : 'rgb(var(--text-muted))',
+                    background: supportChatOpen ? 'rgba(var(--accent-rgb), 0.15)' : 'transparent',
+                    transition: 'background 0.15s ease, color 0.15s ease',
+                  }}
+                  title={collapsed ? link.label : undefined}
+                >
+                  {supportChatOpen && (
+                    <span
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-blue-500"
+                      style={{ boxShadow: '0 0 12px rgba(59,130,246,0.6)' }}
+                    />
+                  )}
+                  <link.icon
+                    size={18}
+                    className="flex-shrink-0"
+                    style={{ color: supportChatOpen ? '#60a5fa' : undefined, transition: 'color 0.15s ease' }}
+                  />
+                  <span
+                    className="overflow-hidden"
+                    style={{
+                      opacity: collapsed ? 0 : 1,
+                      maxWidth: collapsed ? 0 : 180,
+                      transition: 'opacity 0.2s ease, max-width 0.3s cubic-bezier(0.4,0,0.2,1)',
+                    }}
+                  >
+                    {link.label}
+                  </span>
+                </button>
+              )
+            }
 
             return (
               <Link
@@ -197,7 +335,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 }}
                 title={collapsed ? link.label : undefined}
               >
-                {/* Active indicator bar — simple CSS, NOT layoutId (which causes reflows) */}
+                {/* Active indicator bar */}
                 {active && (
                   <span
                     className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-blue-500"
@@ -243,7 +381,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               />
               <div className="min-w-0">
                 <p className="text-[11px] text-text-muted uppercase tracking-wider font-medium">Signed in as</p>
-                <p className="text-xs text-text-primary font-medium truncate mt-0.5">{profile.full_name || user?.email?.split('@')[0]}</p>
+                <p className="font-medium text-text-primary text-xs truncate w-full">{profile?.display_name || profile?.full_name || user?.email?.split('@')[0]}</p>
               </div>
             </div>
           )}
@@ -390,7 +528,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 />
                 <div className="min-w-0">
                   <p className="text-[10px] text-text-muted uppercase tracking-wider">Signed in as</p>
-                  <p className="text-xs text-text-primary font-medium mt-0.5 truncate">{profile?.full_name || user?.email?.split('@')[0] || 'User'}</p>
+                  <p className="text-xs text-text-primary font-medium mt-0.5 truncate">{profile?.display_name || profile?.full_name || user?.email?.split('@')[0] || 'User'}</p>
                   <span
                     className="mt-1.5 inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
                     style={{ background: rc.bg, color: rc.text, border: `1px solid ${rc.border}` }}
@@ -403,6 +541,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto scrollbar-thin">
                 {links.map((link) => {
                   const active = pathname === link.href
+                  const isSupportLink = link.href === '#support'
+
+                  if (isSupportLink) {
+                    return (
+                      <button
+                        key={link.href + link.label}
+                        onClick={() => {
+                          setSupportChatOpen(prev => !prev)
+                          setMobileOpen(false)
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors relative"
+                        style={{
+                          color: supportChatOpen ? 'rgb(var(--text-primary))' : 'rgb(var(--text-muted))',
+                          background: supportChatOpen ? 'rgba(var(--accent-rgb), 0.15)' : 'transparent',
+                        }}
+                      >
+                        {supportChatOpen && (
+                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-blue-500" />
+                        )}
+                        <link.icon size={18} style={{ color: supportChatOpen ? '#60a5fa' : undefined }} />
+                        {link.label}
+                      </button>
+                    )
+                  }
+
                   return (
                     <Link
                       key={link.href + link.label}
@@ -478,6 +641,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </main>
+
+      {/* Support Chat Widget — visible on all portals except admin */}
+      {role !== 'admin' && user && profile && (
+        <SupportChat
+          userId={user.id}
+          userRole={role}
+          userName={profile.full_name || user.email?.split('@')[0] || 'User'}
+          userEmail={profile.email || user.email || ''}
+          externalOpen={supportChatOpen}
+          onOpenChange={setSupportChatOpen}
+        />
+      )}
     </div>
   )
 }

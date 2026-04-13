@@ -6,13 +6,13 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const supabase = createSupabaseServerClient()
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
     
-    if (!session) {
+    if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const uid = session.user.id
+    const uid = user.id
 
     // Verify it's a university
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', uid).single()

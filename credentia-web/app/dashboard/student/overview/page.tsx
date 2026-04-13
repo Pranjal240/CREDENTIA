@@ -27,16 +27,24 @@ export default async function StudentOverview() {
     { cookies: { get(name: string) { return cookieStore.get(name)?.value } } }
   )
 
-  const { data: { user }, error } = await supabase.auth.getUser()
+  const { data: { session }, error } = await supabase.auth.getSession()
+  const user = session?.user
 
   if (!user || error) {
-    redirect('/login')
+    redirect('/login/student')
   }
 
-  // Fetch Student Data
+  // Fetch Student Data (column is 'name', not 'full_name')
   const { data: student } = await supabaseAdmin
     .from('students')
-    .select('full_name, ats_score')
+    .select('name, ats_score, cgpa, percentage_10th, percentage_12th, trust_score, course, branch, graduation_year')
+    .eq('id', user.id)
+    .single()
+
+  // Also get the profile name as a fallback
+  const { data: profileData } = await supabaseAdmin
+    .from('profiles')
+    .select('full_name')
     .eq('id', user.id)
     .single()
 
@@ -49,7 +57,7 @@ export default async function StudentOverview() {
   const vList: Verification[] = verifications || []
 
   // Check verification counts
-  const requiredDocs = ['resume', 'police', 'aadhaar', 'degree']
+  const requiredDocs = ['resume', 'police', 'aadhaar', 'degree', 'marksheet_10th', 'marksheet_12th', 'passport']
   let verifiedCount = 0
 
   requiredDocs.forEach(type => {
@@ -59,7 +67,9 @@ export default async function StudentOverview() {
     }
   })
 
-  const completionPercentage = Math.round((verifiedCount / 4) * 100)
+  // Set maximum bounds to 100
+  const rawPercentage = Math.round((verifiedCount / 7) * 100)
+  const completionPercentage = Math.min(100, Math.max(0, rawPercentage))
 
   // Document Config
   const documents = [
@@ -67,6 +77,9 @@ export default async function StudentOverview() {
     { type: 'police', label: 'Police Check', desc: 'Secure verification via AI', icon: Shield, href: '/dashboard/student/police' },
     { type: 'aadhaar', label: 'Aadhaar Card', desc: 'Fast identity clearance', icon: CreditCard, href: '/dashboard/student/aadhaar' },
     { type: 'degree', label: 'Degree Pass', desc: 'University records check', icon: GraduationCap, href: '/dashboard/student/degree' },
+    { type: 'marksheet_10th', label: '10th Marksheet', desc: 'High school records check', icon: FileText, href: '/dashboard/student/saved' },
+    { type: 'marksheet_12th', label: '12th Marksheet', desc: 'Senior secondary records check', icon: FileText, href: '/dashboard/student/saved' },
+    { type: 'passport', label: 'Other Credentials', desc: 'Certificates and diplomas', icon: FileText, href: '/dashboard/student/saved' },
   ]
 
   const getBadgeInfo = (status: string | undefined) => {
@@ -99,7 +112,7 @@ export default async function StudentOverview() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <h1 className="font-heading text-3xl font-bold text-white tracking-tight">
-            Hi, {student?.full_name?.split(' ')[0] || 'Student'} 👋
+            Hi, {(student?.name || profileData?.full_name || 'Student').split(' ')[0]} 👋
           </h1>
           <p className="text-white/50 mt-2 text-lg">Here is your verification progress overview.</p>
         </div>
@@ -118,6 +131,25 @@ export default async function StudentOverview() {
           </div>
         </div>
       </div>
+
+      {/* Academic Overview Cards */}
+      {(student?.cgpa || student?.percentage_10th || student?.percentage_12th || student?.trust_score) && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
+          {[
+            { label: 'CGPA', value: student?.cgpa ? String(student.cgpa) : null, color: '#3b82f6', icon: '🎓' },
+            { label: '10th %', value: student?.percentage_10th ? `${student.percentage_10th}%` : null, color: '#f59e0b', icon: '📊' },
+            { label: '12th %', value: student?.percentage_12th ? `${student.percentage_12th}%` : null, color: '#8b5cf6', icon: '📈' },
+            { label: 'Trust Score', value: student?.trust_score ? `${student.trust_score}%` : null, color: '#10b981', icon: '🛡️' },
+          ].filter(d => d.value).map((d, i) => (
+            <div key={i} className="relative overflow-hidden bg-[#0A0F1C] border border-white/5 rounded-2xl p-5 group hover:border-white/10 transition-all duration-300">
+              <div className="absolute top-0 right-0 w-20 h-20 opacity-5" style={{ background: `radial-gradient(circle, ${d.color}, transparent)` }} />
+              <span className="text-2xl mb-2 block">{d.icon}</span>
+              <p className="text-[10px] text-white/30 uppercase tracking-wider font-semibold mb-1">{d.label}</p>
+              <p className="text-2xl font-bold text-white">{d.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">

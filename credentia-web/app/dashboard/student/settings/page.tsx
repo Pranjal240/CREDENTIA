@@ -8,10 +8,13 @@ import {
   Building, Search, MapPin, X, ExternalLink, GraduationCap, Plus
 } from 'lucide-react'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
+import { useRouter } from 'next/navigation'
 
 export default function StudentSettingsPage() {
+  const router = useRouter()
   const [userId, setUserId] = useState('')
   const [profile, setProfile] = useState<any>(null)
+  const [studentData, setStudentData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -24,7 +27,7 @@ export default function StudentSettingsPage() {
   const [savingExternal, setSavingExternal] = useState(false)
 
   const [form, setForm] = useState({
-    name: '', course: '', branch: '', graduation_year: '', cgpa: '',
+    name: '', phone: '', course: '', branch: '', graduation_year: '', cgpa: '',
     city: '', state: '', profile_is_public: true, university_id: '',
   })
 
@@ -34,23 +37,48 @@ export default function StudentSettingsPage() {
       if (!session) return
       setUserId(session.user.id)
 
-      const [{ data: prof }, { data: stu }, { data: unis }] = await Promise.all([
+      const [{ data: prof }, { data: stu }, { data: unis }, { data: verifs }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', session.user.id).single(),
         supabase.from('students').select('*').eq('id', session.user.id).single(),
-        // RLS is now fixed — this will return universities
-        supabase.from('profiles').select('id, full_name, email').eq('role', 'university').order('full_name'),
+        supabase.from('profiles').select('id, full_name').eq('role', 'university').order('full_name'),
+        supabase.from('verifications').select('type, ai_result').eq('student_id', session.user.id).order('updated_at', { ascending: false }),
       ])
 
       setProfile(prof)
+      setStudentData(stu)
       setUniversities(unis || [])
+
+      // --- Auto-fill from AI verification results for any empty fields ---
+      // Priority: student table data > resume AI data > degree AI data
+      let aiCourse = '', aiBranch = '', aiGradYear = '', aiCgpa = '', aiCity = '', aiState = ''
+      if (verifs && verifs.length > 0) {
+        for (const v of verifs) {
+          const ai = v.ai_result as any
+          if (!ai) continue
+          if (v.type === 'resume') {
+            if (ai.course && !aiCourse) aiCourse = ai.course
+            if (ai.branch && !aiBranch) aiBranch = ai.branch
+            if (ai.graduation_year && !aiGradYear) aiGradYear = String(ai.graduation_year)
+            if (ai.cgpa && !aiCgpa) aiCgpa = String(ai.cgpa)
+            if (ai.city && !aiCity) aiCity = ai.city
+            if (ai.state && !aiState) aiState = ai.state
+          } else if (v.type === 'degree') {
+            if ((ai.course || ai.degree) && !aiCourse) aiCourse = ai.course || ai.degree
+            if (ai.grade_cgpa && !aiCgpa) aiCgpa = String(ai.grade_cgpa).replace(/[^0-9.]/g, '')
+            if (ai.year_of_passing && !aiGradYear) aiGradYear = String(ai.year_of_passing)
+          }
+        }
+      }
+
       setForm({
         name: stu?.name || prof?.full_name || '',
-        course: stu?.course || '',
-        branch: stu?.branch || '',
-        graduation_year: stu?.graduation_year?.toString() || '',
-        cgpa: stu?.cgpa?.toString() || '',
-        city: stu?.city || '',
-        state: stu?.state || '',
+        phone: prof?.phone || '',
+        course: stu?.course || aiCourse || '',
+        branch: stu?.branch || aiBranch || '',
+        graduation_year: stu?.graduation_year?.toString() || aiGradYear || '',
+        cgpa: stu?.cgpa?.toString() || aiCgpa || '',
+        city: stu?.city || aiCity || '',
+        state: stu?.state || aiState || '',
         profile_is_public: stu?.profile_is_public ?? true,
         university_id: stu?.university_id || prof?.linked_university_id || '',
       })
@@ -75,6 +103,7 @@ export default function StudentSettingsPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to save')
       setSaved(true)
+      router.refresh()
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {
       setError(err.message)
@@ -156,6 +185,7 @@ export default function StudentSettingsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[
             { label: 'Full Name', key: 'name', type: 'text', placeholder: 'Your full name' },
+            { label: 'Phone Number', key: 'phone', type: 'text', placeholder: 'e.g. 9876543210' },
             { label: 'Course', key: 'course', type: 'text', placeholder: 'e.g. B.Tech' },
             { label: 'Branch / Specialization', key: 'branch', type: 'text', placeholder: 'e.g. Computer Science' },
             { label: 'Graduation Year', key: 'graduation_year', type: 'number', placeholder: 'e.g. 2025' },
@@ -174,6 +204,28 @@ export default function StudentSettingsPage() {
               />
             </div>
           ))}
+        </div>
+
+        {/* Read-only Percentages */}
+        <div className="mt-5 pt-5" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <h3 className="text-[10px] text-amber-400/60 uppercase tracking-wider font-bold mb-3 flex items-center gap-1.5">
+            🔒 AI-Extracted Percentages <span className="text-white/20">(Admin-only edit)</span>
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-[10px] text-white/30 uppercase tracking-wider font-medium mb-1.5 block">10th Percentage</label>
+              <div className="w-full h-11 px-4 rounded-xl text-sm bg-white/[0.02] border border-amber-500/10 text-white/50 flex items-center cursor-not-allowed">
+                {studentData?.percentage_10th ? `${studentData.percentage_10th}%` : 'Not extracted yet'}
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] text-white/30 uppercase tracking-wider font-medium mb-1.5 block">12th Percentage</label>
+              <div className="w-full h-11 px-4 rounded-xl text-sm bg-white/[0.02] border border-amber-500/10 text-white/50 flex items-center cursor-not-allowed">
+                {studentData?.percentage_12th ? `${studentData.percentage_12th}%` : 'Not extracted yet'}
+              </div>
+            </div>
+          </div>
+          <p className="text-[10px] text-white/20 mt-2">These values are automatically extracted from your uploaded marksheets and can only be modified by an admin.</p>
         </div>
       </div>
 
@@ -354,7 +406,6 @@ export default function StudentSettingsPage() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-white/90 truncate">{u.full_name || 'Unnamed University'}</p>
-                              <p className="text-xs text-white/30 truncate">{u.email}</p>
                             </div>
                             <div className="flex items-center gap-1.5 flex-shrink-0">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />

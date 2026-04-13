@@ -22,7 +22,7 @@ export default function StudentDashboard() {
       const uid = session.user.id
       setUserId(uid)
       const [{ data: s }, { data: v }, { data: docs }] = await Promise.all([
-        supabase.from('students').select('*, profiles(email, linked_university_id)').eq('id', uid).single(),
+        supabase.from('students').select('*, profiles(linked_university_id)').eq('id', uid).single(),
         supabase.from('verifications').select('*').eq('student_id', uid).order('updated_at', { ascending: false }),
         supabase.from('documents').select('id', { count: 'exact', head: true }).eq('user_id', uid),
       ])
@@ -52,7 +52,7 @@ export default function StudentDashboard() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'students' }, () => {
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (!session) return
-          supabase.from('students').select('*, profiles(email, linked_university_id)').eq('id', session.user.id).single()
+          supabase.from('students').select('*, profiles(linked_university_id)').eq('id', session.user.id).single()
             .then(({ data: s }) => { if (s) setStudent(s) })
         })
       })
@@ -72,9 +72,10 @@ export default function StudentDashboard() {
 
   const getVerification = (type: string) => verifications.find(x => x.type === type)
 
-  const verifiedCount = verifications.filter(v => ['ai_approved', 'admin_verified', 'verified'].includes(v.status)).length
+  const verifiedCount = verifications.filter(v => ['ai_approved', 'admin_verified', 'verified'].includes(v.status) && ['resume', 'police', 'aadhaar', 'degree', 'marksheet_10th', 'marksheet_12th', 'passport'].includes(v.type)).length
   const totalDocs = verifications.length
   const trustScore = student?.trust_score ?? 0
+  const completionPercentage = Math.min(100, Math.max(0, Math.round((verifiedCount / 7) * 100)))
 
   const tasks = [
     { type: 'resume', label: 'Resume Analysis', desc: 'Get your ATS score with AI-powered analysis', icon: FileText, href: '/dashboard/student/resume', accent: '#3b82f6', gradient: 'from-blue-600/20 to-blue-400/5' },
@@ -95,6 +96,50 @@ export default function StudentDashboard() {
   }
 
   const renderAnalysisDetail = (type: string, v: any) => {
+    // 1) Handle Degree unconditionally so badges ALWAYS show up
+    if (type === 'degree') {
+      const getVStatus = (t: string) => {
+        const doc = verifications.find(x => x.type === t)
+        if (!doc) return 'Missing'
+        if (['verified', 'ai_approved', 'admin_verified'].includes(doc.status)) return 'Verified'
+        return 'Pending'
+      }
+      
+      const r = v?.ai_result
+      const hasData = v && r
+
+      return (
+        <div className="space-y-3">
+          {hasData ? (
+            <>
+              <div className="flex items-center gap-2">{r.verified ? <CheckCircle2 size={16} className="text-green-400" /> : <AlertCircle size={16} className="text-red-400" />}<span className="text-sm font-medium text-white/80">{r.verified ? 'Degree Verified' : 'Inconclusive'}</span><span className="text-xs text-white/30 ml-auto">Confidence: {r.confidence || v.ai_confidence}%</span></div>
+              <div className="grid grid-cols-2 gap-3 text-xs mb-4">
+                {[{ l: 'University', v: r.university_name }, { l: 'Degree', v: r.degree }, { l: 'Course', v: r.course }, { l: 'Year', v: r.year_of_passing }, { l: 'CGPA/Grade', v: r.grade_cgpa }, { l: 'Roll No.', v: r.roll_number }].filter(x => x.v).map((x, i) => <div key={i}><p className="text-white/25 uppercase tracking-wider text-[9px] mb-0.5">{x.l}</p><p className="text-white/70 font-medium">{typeof x.v === 'object' ? JSON.stringify(x.v) : String(x.v)}</p></div>)}
+              </div>
+            </>
+          ) : (
+             <p className="text-sm text-white/30 mb-2 mt-1">No University Degree uploaded yet.</p>
+          )}
+          
+          <div className="pt-2 border-t border-white/5">
+            <p className="text-[10px] text-white/30 uppercase tracking-wider mb-2">Linked Credentials Status</p>
+            <div className="flex flex-wrap gap-2">
+              {[{k: 'marksheet_10th', l: '10th'}, {k:'marksheet_12th', l: '12th'}, {k:'passport', l: 'Other'}].map(c => {
+                const st = getVStatus(c.k)
+                return (
+                  <span key={c.k} className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${st === 'Verified' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : st === 'Missing' ? 'bg-white/5 text-white/30 border border-white/10' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
+                    {c.l}: {st}
+                  </span>
+                )
+              })}
+            </div>
+            <p className="text-[10px] text-white/40 mt-3 flex items-center gap-1.5"><AlertCircle size={10} className="text-amber-400"/> Click below to upload & check status of all credentials.</p>
+          </div>
+        </div>
+      )
+    }
+
+    // 2) For others, break early if no result
     if (!v || !v.ai_result) return <p className="text-sm text-white/30">No analysis data available yet.</p>
     const r = v.ai_result
 
@@ -108,13 +153,13 @@ export default function StudentDashboard() {
             </div>
             <div><p className="text-sm text-white/80 font-medium">ATS Score</p><p className="text-xs text-white/30">{r.summary || 'Resume analyzed successfully'}</p></div>
           </div>
-          {r.strengths?.length > 0 && (
+          {Array.isArray(r.strengths) && r.strengths.length > 0 && (
             <div><p className="text-xs font-bold text-green-400 mb-1">✅ Strengths</p><ul className="space-y-1">{r.strengths.slice(0,3).map((s: string, i: number) => <li key={i} className="text-xs text-white/50 flex gap-2"><CheckCircle2 size={12} className="mt-0.5 text-green-400 shrink-0" />{s}</li>)}</ul></div>
           )}
-          {r.improvements?.length > 0 && (
+          {Array.isArray(r.improvements) && r.improvements.length > 0 && (
             <div><p className="text-xs font-bold text-amber-400 mb-1">💡 Improvements</p><ul className="space-y-1">{r.improvements.slice(0,3).map((s: string, i: number) => <li key={i} className="text-xs text-white/50 flex gap-2"><AlertCircle size={12} className="mt-0.5 text-amber-400 shrink-0" />{s}</li>)}</ul></div>
           )}
-          {r.keywords_found?.length > 0 && (
+          {Array.isArray(r.keywords_found) && r.keywords_found.length > 0 && (
             <div><p className="text-xs font-bold text-blue-400 mb-1">🔑 Keywords</p><div className="flex flex-wrap gap-1.5">{r.keywords_found.slice(0,8).map((k: string, i: number) => <span key={i} className="px-2 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-300">{k}</span>)}</div></div>
           )}
         </div>
@@ -125,7 +170,7 @@ export default function StudentDashboard() {
         <div className="space-y-3">
           <div className="flex items-center gap-2">{r.is_police_certificate ? <CheckCircle2 size={16} className="text-green-400" /> : <AlertCircle size={16} className="text-red-400" />}<span className="text-sm font-medium text-white/80">{r.is_police_certificate ? 'Valid Certificate' : 'Not Recognized'}</span><span className="text-xs text-white/30 ml-auto">Confidence: {r.confidence || v.ai_confidence}%</span></div>
           <div className="grid grid-cols-2 gap-3 text-xs">
-            {[{ l: 'Certificate #', v: r.certificate_number }, { l: 'Authority', v: r.issuing_authority }, { l: 'District', v: r.district }, { l: 'State', v: r.state }, { l: 'Issued', v: r.issue_date }, { l: 'Name', v: r.applicant_name }].filter(x => x.v).map((x, i) => <div key={i}><p className="text-white/25 uppercase tracking-wider text-[9px] mb-0.5">{x.l}</p><p className="text-white/70 font-medium">{x.v}</p></div>)}
+            {[{ l: 'Certificate #', v: r.certificate_number }, { l: 'Authority', v: r.issuing_authority }, { l: 'District', v: r.district }, { l: 'State', v: r.state }, { l: 'Issued', v: r.issue_date }, { l: 'Name', v: r.applicant_name }].filter(x => x.v).map((x, i) => <div key={i}><p className="text-white/25 uppercase tracking-wider text-[9px] mb-0.5">{x.l}</p><p className="text-white/70 font-medium">{String(x.v)}</p></div>)}
           </div>
         </div>
       )
@@ -135,21 +180,12 @@ export default function StudentDashboard() {
         <div className="space-y-3">
           <div className="flex items-center gap-2">{r.verified ? <CheckCircle2 size={16} className="text-green-400" /> : <AlertCircle size={16} className="text-red-400" />}<span className="text-sm font-medium text-white/80">{r.verified ? 'Aadhaar Verified' : 'Inconclusive'}</span><span className="text-xs text-white/30 ml-auto">Confidence: {r.confidence || v.ai_confidence}%</span></div>
           <div className="grid grid-cols-2 gap-3 text-xs">
-            {[{ l: 'Name', v: r.name }, { l: 'DOB', v: r.dob }, { l: 'Gender', v: r.gender }, { l: 'State', v: r.state }, { l: 'Aadhaar', v: r.aadhaar_last4 ? `XXXX-XXXX-${r.aadhaar_last4}` : null }].filter(x => x.v).map((x, i) => <div key={i}><p className="text-white/25 uppercase tracking-wider text-[9px] mb-0.5">{x.l}</p><p className="text-white/70 font-medium">{x.v}</p></div>)}
+            {[{ l: 'Name', v: r.name }, { l: 'DOB', v: r.dob }, { l: 'Gender', v: r.gender }, { l: 'State', v: r.state }, { l: 'Aadhaar', v: r.aadhaar_last4 ? `XXXX-XXXX-${r.aadhaar_last4}` : null }].filter(x => x.v).map((x, i) => <div key={i}><p className="text-white/25 uppercase tracking-wider text-[9px] mb-0.5">{x.l}</p><p className="text-white/70 font-medium">{typeof x.v === 'object' ? JSON.stringify(x.v) : String(x.v)}</p></div>)}
           </div>
         </div>
       )
     }
-    if (type === 'degree') {
-      return (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">{r.verified ? <CheckCircle2 size={16} className="text-green-400" /> : <AlertCircle size={16} className="text-red-400" />}<span className="text-sm font-medium text-white/80">{r.verified ? 'Degree Verified' : 'Inconclusive'}</span><span className="text-xs text-white/30 ml-auto">Confidence: {r.confidence || v.ai_confidence}%</span></div>
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            {[{ l: 'University', v: r.university_name }, { l: 'Degree', v: r.degree }, { l: 'Course', v: r.course }, { l: 'Year', v: r.year_of_passing }, { l: 'CGPA/Grade', v: r.grade_cgpa }, { l: 'Roll No.', v: r.roll_number }].filter(x => x.v).map((x, i) => <div key={i}><p className="text-white/25 uppercase tracking-wider text-[9px] mb-0.5">{x.l}</p><p className="text-white/70 font-medium">{x.v}</p></div>)}
-          </div>
-        </div>
-      )
-    }
+
     return null
   }
 
@@ -165,12 +201,12 @@ export default function StudentDashboard() {
         <div className="bg-white/[0.03] border border-white/10 rounded-xl p-4 w-full sm:w-72">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-white/50">Profile Completion</span>
-            <span className="text-xs font-bold text-emerald-400">{trustScore}%</span>
+            <span className="text-xs font-bold text-emerald-400">{completionPercentage}%</span>
           </div>
           <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
-            <motion.div initial={{ width: 0 }} animate={{ width: `${trustScore}%` }} transition={{ duration: 1, ease: 'easeOut' }} className="h-full bg-gradient-to-r from-blue-500 to-emerald-400 rounded-full" />
+            <motion.div initial={{ width: 0 }} animate={{ width: `${completionPercentage}%` }} transition={{ duration: 1, ease: 'easeOut' }} className="h-full bg-gradient-to-r from-blue-500 to-emerald-400 rounded-full" />
           </div>
-          <p className="text-[10px] text-white/25 mt-1.5">{verifiedCount} document{verifiedCount !== 1 ? 's' : ''} verified{totalDocs > verifiedCount ? ` · ${totalDocs - verifiedCount} pending` : ''}</p>
+          <p className="text-[10px] text-white/25 mt-1.5">{verifiedCount} of 7 documents verified</p>
         </div>
       </div>
 
@@ -301,8 +337,10 @@ export default function StudentDashboard() {
                     >
                       <div className="px-4 pb-4 space-y-3" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                         <div className="pt-4">
-                          {v ? renderAnalysisDetail(task.type, v) : (
-                            <p className="text-sm text-white/30">No verification data yet. Upload your document to get started.</p>
+                          {task.type === 'degree' ? renderAnalysisDetail(task.type, v) : (
+                            v ? renderAnalysisDetail(task.type, v) : (
+                              <p className="text-sm text-white/30">No verification data yet. Upload your document to get started.</p>
+                            )
                           )}
                         </div>
                         <div className="flex flex-wrap gap-2 pt-2">
@@ -315,7 +353,7 @@ export default function StudentDashboard() {
                             </a>
                           )}
                           {v && (
-                            <span className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[10px] text-white/25 border border-white/5">
+                            <span suppressHydrationWarning className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[10px] text-white/25 border border-white/5">
                               <Clock size={10} /> {v.updated_at ? new Date(v.updated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                             </span>
                           )}
