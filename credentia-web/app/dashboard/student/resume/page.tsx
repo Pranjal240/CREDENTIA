@@ -43,41 +43,77 @@ export default function ResumePage() {
       const formData = new FormData()
       formData.append('file', file)
       formData.append('folder', 'resumes')
-      const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
-      const uploadData = await uploadRes.json()
-      if (!uploadRes.ok || !uploadData.success) throw new Error(uploadData.error || 'Upload failed')
+
+      // --- Upload step (with retry) ---
+      let uploadData: any = null
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
+          uploadData = await uploadRes.json()
+          if (!uploadRes.ok || !uploadData.success) throw new Error(uploadData.error || 'Upload failed')
+          break // Success — exit retry loop
+        } catch (uploadErr: any) {
+          if (attempt < 2 && (uploadErr.message === 'Failed to fetch' || uploadErr.message === 'Load failed')) {
+            console.warn(`[Resume] Upload attempt ${attempt} failed, retrying in 2s...`)
+            await new Promise(r => setTimeout(r, 2000))
+            continue
+          }
+          throw uploadErr
+        }
+      }
+      if (!uploadData?.success) throw new Error('Upload failed after retries')
 
       setUploading(false); setAnalyzing(true)
 
-      // 55s timeout — must be under Vercel's maxDuration (60s)
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 55000)
+      // --- Analyze step (with retry) ---
+      const MAX_RETRIES = 2
+      let analysisResult: any = null
+      let finalFileUrl = ''
+      let finalStatus = ''
+      let lastError: any = null
 
-      let analyzeRes: Response
-      try {
-        analyzeRes = await fetch('/api/analyze-resume', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileUrl: uploadData.url, studentId: userId }),
-          signal: controller.signal,
-        })
-      } catch (fetchErr: any) {
-        clearTimeout(timeout)
-        if (fetchErr.name === 'AbortError') {
-          throw new Error('Analysis is taking too long. Please try again with a smaller or clearer file.')
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const controller = new AbortController()
+          const timeout = setTimeout(() => controller.abort(), 55000)
+
+          const analyzeRes = await fetch('/api/analyze-resume', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileUrl: uploadData.url, studentId: userId }),
+            signal: controller.signal,
+          })
+          clearTimeout(timeout)
+
+          if (!analyzeRes.ok) {
+            const errData = await analyzeRes.json().catch(() => ({}))
+            throw new Error(errData.error || 'Analysis failed')
+          }
+
+          const analysisData = await analyzeRes.json()
+          analysisResult = analysisData.analysis || analysisData
+          finalFileUrl = analysisData.fileUrl || uploadData.url
+          finalStatus = analysisData.status || (analysisResult?.ats_score ? 'ai_approved' : 'rejected')
+          lastError = null
+          break // Success
+        } catch (err: any) {
+          lastError = err
+          if (err.name === 'AbortError') {
+            throw new Error('Analysis is taking too long. Please try again with a smaller or clearer file.')
+          }
+          // Retry on network/crash errors
+          if (attempt < MAX_RETRIES && (err.message === 'Failed to fetch' || err.message === 'Load failed')) {
+            console.warn(`[Resume] Analyze attempt ${attempt} failed, retrying in 2s...`)
+            await new Promise(r => setTimeout(r, 2000))
+            continue
+          }
         }
-        throw new Error('Network error — please check your internet connection and try again.')
       }
-      clearTimeout(timeout)
 
-      if (!analyzeRes.ok) {
-        const errData = await analyzeRes.json().catch(() => ({}))
-        throw new Error(errData.error || 'Analysis failed')
+      if (lastError) {
+        throw lastError
       }
-      const analysisData = await analyzeRes.json()
-      const analysisResult = analysisData.analysis || analysisData
-      const finalFileUrl = analysisData.fileUrl || uploadData.url
-      const finalStatus = analysisData.status || (analysisResult?.ats_score ? 'ai_approved' : 'rejected')
+
       setResult(analysisResult)
       setFileUrl(finalFileUrl)
       setSaveStatus(finalStatus)
@@ -88,10 +124,9 @@ export default function ResumePage() {
       // to persist changes (name, CGPA, skills, etc.) to the database.
     } catch (err: any) {
       const msg = err.message || 'Something went wrong'
-      // Map cryptic browser errors to user-friendly messages
       setError(
-        msg === 'Failed to fetch'
-          ? 'Server is busy — please wait a moment and try again.'
+        msg === 'Failed to fetch' || msg === 'Load failed'
+          ? 'Server is temporarily unavailable — please try again in a few seconds.'
           : msg
       )
       setUploading(false); setAnalyzing(false)

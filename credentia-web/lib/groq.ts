@@ -48,6 +48,65 @@ function buildMessages(systemPrompt: string, content: string, isImage: boolean =
   ]
 }
 
+/**
+ * Call Gemini as a fallback when Groq is rate-limited.
+ * Uses the REST API directly — no SDK needed.
+ */
+async function callGemini(systemPrompt: string, content: string, isImage: boolean, maxTokens: number): Promise<any> {
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) throw new Error('GEMINI_API_KEY not configured')
+
+  const model = 'gemini-2.0-flash'
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+
+  // Build parts for the request
+  const parts: any[] = [
+    { text: systemPrompt + '\n\nAnalyze the following and return ONLY a valid JSON object:' }
+  ]
+
+  if (isImage && content.startsWith('data:')) {
+    // Extract base64 data and mime type
+    const match = content.match(/^data:([^;]+);base64,(.+)$/)
+    if (match) {
+      parts.push({
+        inline_data: {
+          mime_type: match[1],
+          data: match[2].substring(0, 2_000_000) // Cap at ~1.5MB for safety
+        }
+      })
+    } else {
+      parts.push({ text: content.substring(0, 8000) })
+    }
+  } else {
+    parts.push({ text: content.substring(0, 8000) })
+  }
+
+  const body = {
+    contents: [{ parts }],
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: maxTokens,
+      responseMimeType: 'application/json',
+    }
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30000),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '')
+    throw new Error(`Gemini API error ${res.status}: ${errText.substring(0, 200)}`)
+  }
+
+  const data = await res.json()
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+  return parseGroqJSON(text)
+}
+
 async function callGroq(systemPrompt: string, content: string, isImage: boolean, maxTokens: number = 2000) {
   // Use fast model for text, vision model for images
   const model = isImage ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'llama-3.3-70b-versatile'
@@ -65,12 +124,40 @@ async function callGroq(systemPrompt: string, content: string, isImage: boolean,
     requestParams.response_format = { type: 'json_object' }
   }
 
+  // Try Groq first, fall back to Gemini on rate limit (429) or transient errors
   try {
     const result = await groq.chat.completions.create(requestParams)
     return parseGroqJSON(result.choices[0].message.content || '')
   } catch (err: any) {
-    console.error(`Groq API error (model=${model}):`, err.message || err)
-    // Return a minimal fallback so the caller doesn't crash
+    const isRateLimit = err.status === 429 || err.message?.includes('429') || err.message?.includes('rate')
+    const isServerError = err.status >= 500
+    const isTimeout = err.message?.includes('timeout') || err.message?.includes('ETIMEDOUT')
+
+    console.error(`Groq API error (model=${model}, status=${err.status}):`, err.message || err)
+
+    // If Gemini fallback is available, use it for rate-limit and server errors
+    if ((isRateLimit || isServerError || isTimeout) && process.env.GEMINI_API_KEY) {
+      console.log('[AI] Groq rate-limited/failed, falling back to Gemini...')
+      try {
+        return await callGemini(systemPrompt, content, isImage, maxTokens)
+      } catch (geminiErr: any) {
+        console.error('[AI] Gemini fallback also failed:', geminiErr.message)
+        // Fall through to throw the original Groq error
+      }
+    }
+
+    // If rate limited with no fallback, wait and retry once
+    if (isRateLimit && !process.env.GEMINI_API_KEY) {
+      console.log('[AI] Rate limited, waiting 3s and retrying Groq...')
+      await new Promise(r => setTimeout(r, 3000))
+      try {
+        const retryResult = await groq.chat.completions.create(requestParams)
+        return parseGroqJSON(retryResult.choices[0].message.content || '')
+      } catch (retryErr: any) {
+        console.error('[AI] Groq retry also failed:', retryErr.message)
+      }
+    }
+
     throw new Error(`AI analysis timed out or failed: ${err.message || 'unknown error'}`)
   }
 }

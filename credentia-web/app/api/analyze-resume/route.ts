@@ -7,13 +7,20 @@ export const maxDuration = 60
 /**
  * Try extracting text from a PDF using unpdf.
  * Returns null if it fails (WASM crash, worker missing, etc.)
+ * Wrapped in Promise.race with 5s timeout for safety.
  */
 async function tryExtractPdfText(buffer: Buffer): Promise<string | null> {
   try {
-    const { extractText, getDocumentProxy } = await import('unpdf')
-    const pdf = await getDocumentProxy(new Uint8Array(buffer))
-    const { text } = await extractText(pdf, { mergePages: true })
-    return text && text.trim().length > 20 ? text : null
+    const result = await Promise.race([
+      (async () => {
+        const { extractText, getDocumentProxy } = await import('unpdf')
+        const pdf = await getDocumentProxy(new Uint8Array(buffer))
+        const { text } = await extractText(pdf, { mergePages: true })
+        return text && text.trim().length > 20 ? text : null
+      })(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000))
+    ])
+    return result
   } catch (err) {
     console.warn('[analyze-resume] unpdf extraction failed, will use vision fallback:', (err as Error).message)
     return null
@@ -53,13 +60,13 @@ export async function POST(request: Request) {
         content = `data:${mimeType};base64,${base64}`
         isImage = true
       } else if (isPdfUrl) {
-        // PDFs → try text extraction first, fall back to vision
+        // PDFs → try fast text extraction first, fall back to vision
         const arrayBuffer = await response.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
         const extractedText = await tryExtractPdfText(buffer)
 
         if (extractedText) {
-          // Text extraction succeeded → use fast text model
+          // Text extraction succeeded → use fast text model (saves API quota)
           content = extractedText
           isImage = false
         } else {
@@ -75,7 +82,7 @@ export async function POST(request: Request) {
     } catch (err: any) {
       console.error('File parsing error:', err)
       return NextResponse.json(
-        { success: false, error: 'Could not read document: ' + err.message },
+        { success: false, error: 'Could not read document: ' + (err.message || 'unknown error') },
         { status: 400 }
       )
     }
