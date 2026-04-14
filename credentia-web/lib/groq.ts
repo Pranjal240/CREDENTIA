@@ -2,10 +2,10 @@ import Groq from 'groq-sdk'
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
-  timeout: 25000, // 25s timeout — must finish before Vercel's function timeout
+  timeout: 20000, // 20s timeout
 })
 
-function parseGroqJSON(content: string) {
+function parseAIJSON(content: string) {
   // First try direct parse
   try {
     return JSON.parse(content || '{}')
@@ -24,12 +24,12 @@ function parseGroqJSON(content: string) {
       } catch {}
     }
 
-    console.error('Groq JSON Parse Error. Raw content:', content)
-    throw new Error('Failed to parse Groq response as JSON.')
+    console.error('AI JSON Parse Error. Raw content:', content)
+    throw new Error('Failed to parse AI response as JSON.')
   }
 }
 
-function buildMessages(systemPrompt: string, content: string, isImage: boolean = false): any[] {
+function buildGroqMessages(systemPrompt: string, content: string, isImage: boolean = false): any[] {
   if (isImage) {
     return [
       { role: 'system', content: systemPrompt },
@@ -49,9 +49,13 @@ function buildMessages(systemPrompt: string, content: string, isImage: boolean =
 }
 
 /**
- * Call Gemini as a fallback when Groq is rate-limited.
- * Uses the REST API directly — no SDK needed.
- * Produces identical JSON output to Groq using the same system prompts.
+ * PRIMARY PROVIDER: Google Gemini (gemini-2.0-flash)
+ * 
+ * Gemini is the primary provider because:
+ * - Much higher rate limits than Groq free tier (1500 RPD vs ~30 RPM)
+ * - Native vision support for PDFs and images
+ * - Structured JSON output via responseMimeType
+ * - Handles concurrent requests without rate limiting issues
  */
 async function callGemini(systemPrompt: string, content: string, isImage: boolean, maxTokens: number): Promise<any> {
   const apiKey = process.env.GEMINI_API_KEY
@@ -143,62 +147,95 @@ async function callGemini(systemPrompt: string, content: string, isImage: boolea
   }
 
   console.log(`[Gemini] Success — response length: ${text.length}`)
-  return parseGroqJSON(text)
+  return parseAIJSON(text)
 }
 
-async function callGroq(systemPrompt: string, content: string, isImage: boolean, maxTokens: number = 2000) {
-  // Use fast model for text, vision model for images
+/**
+ * FALLBACK PROVIDER: Groq (llama models)
+ * 
+ * Only used when Gemini is unavailable or fails.
+ */
+async function callGroqDirect(systemPrompt: string, content: string, isImage: boolean, maxTokens: number = 2000) {
   const model = isImage ? 'meta-llama/llama-4-scout-17b-16e-instruct' : 'llama-3.3-70b-versatile'
 
-  // CRITICAL: meta-llama/llama-4-scout-17b-16e-instruct does NOT support response_format json_object
-  // Only apply it for the text model
   const requestParams: any = {
     model,
-    messages: buildMessages(systemPrompt, content, isImage),
+    messages: buildGroqMessages(systemPrompt, content, isImage),
     temperature: 0.1,
     max_tokens: maxTokens,
   }
 
+  // meta-llama/llama-4-scout-17b-16e-instruct does NOT support response_format json_object
   if (!isImage) {
     requestParams.response_format = { type: 'json_object' }
   }
 
-  // Try Groq first, fall back to Gemini on rate limit (429) or transient errors
-  try {
-    const result = await groq.chat.completions.create(requestParams)
-    return parseGroqJSON(result.choices[0].message.content || '')
-  } catch (err: any) {
-    const isRateLimit = err.status === 429 || err.message?.includes('429') || err.message?.includes('rate')
-    const isServerError = err.status >= 500
-    const isTimeout = err.message?.includes('timeout') || err.message?.includes('ETIMEDOUT')
+  const result = await groq.chat.completions.create(requestParams)
+  return parseAIJSON(result.choices[0].message.content || '')
+}
 
-    console.error(`Groq API error (model=${model}, status=${err.status}):`, err.message || err)
+/**
+ * Unified AI caller — Gemini-first architecture with Groq fallback.
+ * 
+ * This eliminates the rate-limiting bottleneck that caused "Server is busy"
+ * errors when multiple students uploaded documents simultaneously.
+ * 
+ * Flow:
+ * 1. If GEMINI_API_KEY exists → call Gemini first (primary)
+ * 2. If Gemini fails → fall back to Groq
+ * 3. If no GEMINI_API_KEY → call Groq directly (with retry on 429)
+ */
+async function callAI(systemPrompt: string, content: string, isImage: boolean, maxTokens: number = 2000) {
+  const hasGemini = !!process.env.GEMINI_API_KEY
+  const hasGroq = !!process.env.GROQ_API_KEY
 
-    // If Gemini fallback is available, use it for rate-limit and server errors
-    if ((isRateLimit || isServerError || isTimeout) && process.env.GEMINI_API_KEY) {
-      console.log('[AI] Groq rate-limited/failed, falling back to Gemini...')
-      try {
-        return await callGemini(systemPrompt, content, isImage, maxTokens)
-      } catch (geminiErr: any) {
-        console.error('[AI] Gemini fallback also failed:', geminiErr.message)
-        // Fall through to throw the original Groq error
+  // ── STRATEGY 1: Gemini primary, Groq fallback ──
+  if (hasGemini) {
+    try {
+      return await callGemini(systemPrompt, content, isImage, maxTokens)
+    } catch (geminiErr: any) {
+      console.error(`[AI] Gemini primary failed: ${geminiErr.message}`)
+
+      // If Groq is also configured, try it as fallback
+      if (hasGroq) {
+        console.log('[AI] Falling back to Groq...')
+        try {
+          return await callGroqDirect(systemPrompt, content, isImage, maxTokens)
+        } catch (groqErr: any) {
+          console.error(`[AI] Groq fallback also failed: ${groqErr.message}`)
+          // Both failed — throw the more informative error
+          throw new Error(`AI analysis failed (both providers down). Gemini: ${geminiErr.message}. Groq: ${groqErr.message}`)
+        }
       }
-    }
 
-    // If rate limited with no fallback, wait and retry once
-    if (isRateLimit && !process.env.GEMINI_API_KEY) {
-      console.log('[AI] Rate limited, waiting 3s and retrying Groq...')
-      await new Promise(r => setTimeout(r, 3000))
-      try {
-        const retryResult = await groq.chat.completions.create(requestParams)
-        return parseGroqJSON(retryResult.choices[0].message.content || '')
-      } catch (retryErr: any) {
-        console.error('[AI] Groq retry also failed:', retryErr.message)
-      }
+      // No Groq fallback — just throw the Gemini error
+      throw new Error(`AI analysis failed: ${geminiErr.message}`)
     }
-
-    throw new Error(`AI analysis timed out or failed: ${err.message || 'unknown error'}`)
   }
+
+  // ── STRATEGY 2: Groq only (no Gemini key) ──
+  if (hasGroq) {
+    try {
+      return await callGroqDirect(systemPrompt, content, isImage, maxTokens)
+    } catch (err: any) {
+      const isRateLimit = err.status === 429 || err.message?.includes('429') || err.message?.includes('rate')
+
+      // Retry once on rate limit with a short delay
+      if (isRateLimit) {
+        console.log('[AI] Groq rate limited, retrying in 3s...')
+        await new Promise(r => setTimeout(r, 3000))
+        try {
+          return await callGroqDirect(systemPrompt, content, isImage, maxTokens)
+        } catch (retryErr: any) {
+          console.error('[AI] Groq retry also failed:', retryErr.message)
+        }
+      }
+
+      throw new Error(`AI analysis failed: ${err.message || 'unknown error'}`)
+    }
+  }
+
+  throw new Error('No AI provider configured. Set GEMINI_API_KEY or GROQ_API_KEY.')
 }
 
 export async function analyzeResume(content: string, isImage: boolean = false) {
@@ -224,7 +261,7 @@ export async function analyzeResume(content: string, isImage: boolean = false) {
   "summary": "<2-3 sentence assessment>"
 }`
 
-  return callGroq(systemPrompt, content, isImage, 2000)
+  return callAI(systemPrompt, content, isImage, 2000)
 }
 
 export async function analyzePoliceDoc(content: string, isImage: boolean = false) {
@@ -243,7 +280,7 @@ export async function analyzePoliceDoc(content: string, isImage: boolean = false
   "issues": []
 }`
 
-  return callGroq(systemPrompt, content, isImage, 2000)
+  return callAI(systemPrompt, content, isImage, 2000)
 }
 
 export async function analyzeAadhaar(content: string, isImage: boolean = false) {
@@ -259,7 +296,7 @@ export async function analyzeAadhaar(content: string, isImage: boolean = false) 
   "issues": []
 }`
 
-  return callGroq(systemPrompt, content, isImage, 2000)
+  return callAI(systemPrompt, content, isImage, 2000)
 }
 
 export async function analyzeDegree(content: string, isImage: boolean = false) {
@@ -276,7 +313,7 @@ export async function analyzeDegree(content: string, isImage: boolean = false) {
   "issues": []
 }`
 
-  return callGroq(systemPrompt, content, isImage, 2000)
+  return callAI(systemPrompt, content, isImage, 2000)
 }
 
 export async function analyzeMarksheet(content: string, isImage: boolean = false, marksheetType: '10th' | '12th' = '10th') {
@@ -306,5 +343,5 @@ You MUST return ONLY a valid JSON object with NO additional text, NO markdown, N
   "issues": []
 }`
 
-  return callGroq(systemPrompt, content, isImage, 2000)
+  return callAI(systemPrompt, content, isImage, 2000)
 }

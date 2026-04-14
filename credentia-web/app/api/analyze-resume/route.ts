@@ -7,7 +7,11 @@ export const maxDuration = 60
 /**
  * Try extracting text from a PDF using unpdf.
  * Returns null if it fails (WASM crash, worker missing, etc.)
- * Wrapped in Promise.race with 5s timeout for safety.
+ * 
+ * SAFETY: Wrapped in its own try/catch with a 4s timeout.
+ * On Vercel Hobby, unpdf WASM can crash the serverless function entirely
+ * (OOM or worker spawn failure), so this is a "best effort" optimization.
+ * If it fails, the caller falls back to vision-based analysis.
  */
 async function tryExtractPdfText(buffer: Buffer): Promise<string | null> {
   try {
@@ -18,7 +22,7 @@ async function tryExtractPdfText(buffer: Buffer): Promise<string | null> {
         const { text } = await extractText(pdf, { mergePages: true })
         return text && text.trim().length > 20 ? text : null
       })(),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000))
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000))
     ])
     return result
   } catch (err) {
@@ -63,14 +67,19 @@ export async function POST(request: Request) {
         // PDFs → try fast text extraction first, fall back to vision
         const arrayBuffer = await response.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
-        const extractedText = await tryExtractPdfText(buffer)
+
+        // Only attempt text extraction for small PDFs to avoid OOM on Vercel Hobby
+        let extractedText: string | null = null
+        if (buffer.length < 2 * 1024 * 1024) { // < 2MB
+          extractedText = await tryExtractPdfText(buffer)
+        }
 
         if (extractedText) {
           // Text extraction succeeded → use fast text model (saves API quota)
           content = extractedText
           isImage = false
         } else {
-          // Text extraction failed → convert to base64 and use vision model
+          // Text extraction failed or skipped → convert to base64 and use vision model
           console.log('[analyze-resume] Using vision fallback for PDF')
           const base64 = buffer.toString('base64')
           content = `data:application/pdf;base64,${base64}`

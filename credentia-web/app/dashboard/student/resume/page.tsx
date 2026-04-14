@@ -44,18 +44,21 @@ export default function ResumePage() {
       formData.append('file', file)
       formData.append('folder', 'resumes')
 
-      // --- Upload step (with retry) ---
+      // --- Upload step (with 3 retries + exponential backoff) ---
       let uploadData: any = null
-      for (let attempt = 1; attempt <= 2; attempt++) {
+      const UPLOAD_RETRIES = 3
+      for (let attempt = 1; attempt <= UPLOAD_RETRIES; attempt++) {
         try {
           const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
           uploadData = await uploadRes.json()
           if (!uploadRes.ok || !uploadData.success) throw new Error(uploadData.error || 'Upload failed')
           break // Success — exit retry loop
         } catch (uploadErr: any) {
-          if (attempt < 2 && (uploadErr.message === 'Failed to fetch' || uploadErr.message === 'Load failed')) {
-            console.warn(`[Resume] Upload attempt ${attempt} failed, retrying in 2s...`)
-            await new Promise(r => setTimeout(r, 2000))
+          const isTransient = uploadErr.message === 'Failed to fetch' || uploadErr.message === 'Load failed'
+          if (attempt < UPLOAD_RETRIES && isTransient) {
+            const delay = Math.min(2000 * Math.pow(2, attempt - 1), 8000) // 2s, 4s, 8s
+            console.warn(`[Resume] Upload attempt ${attempt}/${UPLOAD_RETRIES} failed, retrying in ${delay / 1000}s...`)
+            await new Promise(r => setTimeout(r, delay))
             continue
           }
           throw uploadErr
@@ -65,14 +68,14 @@ export default function ResumePage() {
 
       setUploading(false); setAnalyzing(true)
 
-      // --- Analyze step (with retry) ---
-      const MAX_RETRIES = 2
+      // --- Analyze step (with 3 retries + exponential backoff) ---
+      const ANALYZE_RETRIES = 3
       let analysisResult: any = null
       let finalFileUrl = ''
       let finalStatus = ''
       let lastError: any = null
 
-      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      for (let attempt = 1; attempt <= ANALYZE_RETRIES; attempt++) {
         try {
           const controller = new AbortController()
           const timeout = setTimeout(() => controller.abort(), 55000)
@@ -101,10 +104,12 @@ export default function ResumePage() {
           if (err.name === 'AbortError') {
             throw new Error('Analysis is taking too long. Please try again with a smaller or clearer file.')
           }
-          // Retry on network/crash errors
-          if (attempt < MAX_RETRIES && (err.message === 'Failed to fetch' || err.message === 'Load failed')) {
-            console.warn(`[Resume] Analyze attempt ${attempt} failed, retrying in 2s...`)
-            await new Promise(r => setTimeout(r, 2000))
+          // Retry on network/crash errors with exponential backoff
+          const isTransient = err.message === 'Failed to fetch' || err.message === 'Load failed'
+          if (attempt < ANALYZE_RETRIES && isTransient) {
+            const delay = Math.min(2000 * Math.pow(2, attempt - 1), 8000) // 2s, 4s, 8s
+            console.warn(`[Resume] Analyze attempt ${attempt}/${ANALYZE_RETRIES} failed, retrying in ${delay / 1000}s...`)
+            await new Promise(r => setTimeout(r, delay))
             continue
           }
         }

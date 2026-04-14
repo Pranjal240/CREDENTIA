@@ -6,10 +6,16 @@ export const maxDuration = 60
 
 async function tryExtractPdfText(buffer: Buffer): Promise<string | null> {
   try {
-    const { extractText, getDocumentProxy } = await import('unpdf')
-    const pdf = await getDocumentProxy(new Uint8Array(buffer))
-    const { text } = await extractText(pdf, { mergePages: true })
-    return text && text.trim().length > 20 ? text : null
+    const result = await Promise.race([
+      (async () => {
+        const { extractText, getDocumentProxy } = await import('unpdf')
+        const pdf = await getDocumentProxy(new Uint8Array(buffer))
+        const { text } = await extractText(pdf, { mergePages: true })
+        return text && text.trim().length > 20 ? text : null
+      })(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000))
+    ])
+    return result
   } catch (err) {
     console.warn('[verify-police] unpdf failed, using vision fallback:', (err as Error).message)
     return null
@@ -68,7 +74,11 @@ export async function POST(request: Request) {
         } else if (isPdfUrl) {
           const arrayBuffer = await response.arrayBuffer()
           const buffer = Buffer.from(arrayBuffer)
-          const extractedText = await tryExtractPdfText(buffer)
+
+          let extractedText: string | null = null
+          if (buffer.length < 2 * 1024 * 1024) {
+            extractedText = await tryExtractPdfText(buffer)
+          }
 
           if (extractedText) {
             content = extractedText
