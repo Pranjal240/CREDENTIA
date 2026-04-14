@@ -21,20 +21,21 @@ export default function StudentDashboard() {
       if (!session) return
       const uid = session.user.id
       setUserId(uid)
-      const [{ data: s }, { data: v }, { data: docs }] = await Promise.all([
+      const [{ data: s }, { data: v }] = await Promise.all([
         supabase.from('students').select('*, profiles(linked_university_id)').eq('id', uid).single(),
         supabase.from('verifications').select('*').eq('student_id', uid).order('updated_at', { ascending: false }),
-        supabase.from('documents').select('id', { count: 'exact', head: true }).eq('user_id', uid),
       ])
       setStudent(s)
       setVerifications(v || [])
+      // Count documents with an actual uploaded file
+      const uploadedDocs = (v || []).filter((d: any) => d.document_url && d.status !== 'not_submitted').length
+      setDocCount(uploadedDocs)
       // Fetch university name if linked
       const uniId = s?.university_id || s?.profiles?.linked_university_id
       if (uniId) {
         const { data: uni } = await supabase.from('profiles').select('full_name').eq('id', uniId).single()
         setUniversityName(uni?.full_name || null)
       }
-      setDocCount((docs as any)?.count || 0)
       setLoading(false)
     }
     load()
@@ -276,7 +277,7 @@ export default function StudentDashboard() {
           <div className="flex-1 min-w-0">
             <p className="text-[10px] text-white/30 uppercase tracking-wider font-medium">My Documents</p>
             <p className="text-sm font-semibold text-white/90 mt-0.5">
-              {docCount > 0 ? `${docCount} document${docCount !== 1 ? 's' : ''} uploaded` : 'No documents yet'}
+              {docCount > 0 ? `${docCount} document${docCount !== 1 ? 's' : ''} uploaded` : 'Upload documents →'}
             </p>
           </div>
           <ArrowRight size={14} className="text-white/15 group-hover:text-amber-400 transition-colors flex-shrink-0" />

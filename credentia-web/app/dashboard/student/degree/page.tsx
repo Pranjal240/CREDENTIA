@@ -100,12 +100,35 @@ export default function DegreePage() {
       }
       if (uid) {
         setUserId(uid)
-        // Fetch existing verifications for degree-related types
+        // Fetch full verification records including document_url and ai_result
         const { data } = await supabase.from('verifications')
-          .select('type, status')
+          .select('type, status, document_url, ai_result, ai_confidence')
           .eq('student_id', uid)
           .in('type', ['degree', 'marksheet_10th', 'marksheet_12th', 'passport'])
         setDegreeVerifs(data || [])
+
+        // Pre-populate upload slots from existing verified documents
+        const verifTypeToSlotId: Record<string, string> = {
+          'degree': 'degree',
+          'marksheet_10th': '10th',
+          'marksheet_12th': '12th',
+          'passport': 'other',
+        }
+        if (data) {
+          for (const v of data) {
+            const slotId = verifTypeToSlotId[v.type]
+            if (slotId && v.document_url && v.status !== 'not_submitted') {
+              updateSlot(slotId, {
+                status: 'success',
+                fileUrl: v.document_url,
+                fileName: v.document_url.split('/').pop() || 'Document',
+                result: v.ai_result || { status: v.status, confidence: v.ai_confidence || 0 },
+                saved: true,
+                progress: 100,
+              })
+            }
+          }
+        }
       }
     }
     init()
