@@ -172,11 +172,10 @@ export default function DegreePage() {
       updateSlot(slotId, { progress: 100 })
       await new Promise(r => setTimeout(r, 400))
 
-      // Verify phase
+      // Verify phase — AI analysis only, NO database save
       updateSlot(slotId, { status: 'verifying' })
 
       if (slotId === 'degree') {
-        // Main degree slot: AI verify + auto-save to verifications
         const verifyRes = await fetch('/api/verify-degree', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -186,18 +185,9 @@ export default function DegreePage() {
         if (!verifyRes.ok) throw new Error(verifyData.error || 'Verification failed')
 
         const analysis = verifyData.analysis || verifyData
-        const saveStatus = verifyData.status || (analysis.verified ? 'ai_approved' : 'needs_review')
-
-        // Auto-save to verifications
-        await fetch('/api/save-verification', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ studentId: userId, type: 'degree', analysis, fileUrl: uploadData.url, status: saveStatus }),
-        })
-
-        updateSlot(slotId, { status: 'success', result: analysis, fileUrl: uploadData.url, saved: true, progress: 100 })
+        // Store in local state only — user must click Save
+        updateSlot(slotId, { status: 'success', result: analysis, fileUrl: uploadData.url, saved: false, progress: 100 })
       } else if (slotId === '10th' || slotId === '12th') {
-        // 10th/12th: call real AI marksheet verifier
         updateSlot(slotId, { status: 'verifying' })
         const verifyRes = await fetch('/api/verify-marksheet', {
           method: 'POST',
@@ -208,49 +198,10 @@ export default function DegreePage() {
         if (!verifyRes.ok) throw new Error(verifyData.error || 'Marksheet verification failed')
 
         const analysis = verifyData.analysis || {}
-        const saveStatus = verifyData.status || 'pending'
-
-        // Save to documents table
-        await fetch('/api/save-document', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId,
-            documentType: slotId,
-            fileUrl: uploadData.url,
-            fileName: slot.file.name,
-            fileSize: slot.file.size,
-          }),
-        })
-
-        // Save to verifications table with real AI result
-        await fetch('/api/save-verification', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            studentId: userId,
-            type: slotDef.verifType,
-            analysis,
-            fileUrl: uploadData.url,
-            status: saveStatus,
-          }),
-        })
-
-        updateSlot(slotId, { status: 'success', result: analysis, fileUrl: uploadData.url, saved: true, progress: 100 })
+        // Store in local state only — user must click Save
+        updateSlot(slotId, { status: 'success', result: analysis, fileUrl: uploadData.url, saved: false, progress: 100 })
       } else {
-        // 'other' slot — no AI, save as pending for manual review
-        await fetch('/api/save-document', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId,
-            documentType: slotId,
-            fileUrl: uploadData.url,
-            fileName: slot.file.name,
-            fileSize: slot.file.size,
-          }),
-        })
-
+        // 'other' slot — no AI, create a simple analysis object
         const analysis = {
           document_type: slotDef.label,
           file_name: slot.file.name,
@@ -258,23 +209,69 @@ export default function DegreePage() {
           status: 'uploaded',
           confidence: 0,
         }
-        await fetch('/api/save-verification', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            studentId: userId,
-            type: slotDef.verifType,
-            analysis,
-            fileUrl: uploadData.url,
-            status: 'pending',
-          }),
-        })
-
-        updateSlot(slotId, { status: 'success', fileUrl: uploadData.url, saved: true, progress: 100 })
+        updateSlot(slotId, { status: 'success', result: analysis, fileUrl: uploadData.url, saved: false, progress: 100 })
       }
     } catch (err: any) {
       clearInterval(progressInterval)
       updateSlot(slotId, { status: 'error', error: err.message, progress: 0 })
+    }
+  }
+
+  // Save slot data to database — only called when user clicks "Save & Update Profile"
+  const handleSaveSlot = async (slotId: string) => {
+    const slot = slots[slotId]
+    const slotDef = SLOTS.find(s => s.id === slotId)!
+    if (!slot.fileUrl || !userId) return
+
+    updateSlot(slotId, { error: '' })
+
+    try {
+      const analysis = slot.result || {}
+      const saveStatus = slotId === 'degree'
+        ? (analysis.verified ? 'ai_approved' : 'needs_review')
+        : slotId === 'other'
+          ? 'pending'
+          : (analysis.verified !== undefined ? (analysis.verified ? 'ai_approved' : 'needs_review') : 'pending')
+
+      // Save document record (for marksheet/other slots)
+      if (slotId !== 'degree') {
+        await fetch('/api/save-document', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            documentType: slotId,
+            fileUrl: slot.fileUrl,
+            fileName: slot.fileName,
+            fileSize: slot.fileSize,
+          }),
+        })
+      }
+
+      // Save verification + sync extracted data to students table
+      const saveRes = await fetch('/api/save-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: userId,
+          type: slotDef.verifType,
+          analysis,
+          fileUrl: slot.fileUrl,
+          status: saveStatus,
+        }),
+      })
+      const saveData = await saveRes.json()
+      if (!saveRes.ok || !saveData.success) throw new Error(saveData.error || 'Failed to save')
+
+      updateSlot(slotId, { saved: true })
+      // Refresh degree verifs status bar
+      const { data: refreshedVerifs } = await supabase.from('verifications')
+        .select('type, status')
+        .eq('student_id', userId)
+        .in('type', ['degree', 'marksheet_10th', 'marksheet_12th', 'passport'])
+      setDegreeVerifs(refreshedVerifs || [])
+    } catch (err: any) {
+      updateSlot(slotId, { error: err.message || 'Save failed' })
     }
   }
 
@@ -406,16 +403,25 @@ export default function DegreePage() {
               <div className="p-4">
                 {s.status === 'success' ? (
                   /* Success state */
-                  <div className="rounded-xl p-4 flex flex-col items-center gap-3 text-center" style={{ background: 'rgba(16,185,129,0.04)' }}>
-                    <SuccessTick />
+                  <div className="rounded-xl p-4 flex flex-col items-center gap-3 text-center" style={{ background: s.saved ? 'rgba(16,185,129,0.04)' : 'rgba(245,158,11,0.04)' }}>
+                    {s.saved ? <SuccessTick /> : (
+                      <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
+                        <Sparkles size={20} className="text-amber-400" />
+                      </div>
+                    )}
                     <div>
-                      <p className="text-sm font-medium text-emerald-400">Document Saved & Uploaded</p>
+                      <p className={`text-sm font-medium ${s.saved ? 'text-emerald-400' : 'text-amber-400'}`}>
+                        {s.saved ? 'Saved & Verified ✓' : 'Review & Save'}
+                      </p>
                       <p className="text-xs text-white/30 mt-0.5 break-all">{s.fileName}</p>
                       {s.fileSize && (
                         <p className="text-[11px] text-white/20 mt-0.5">{(s.fileSize / 1024 / 1024).toFixed(2)} MB</p>
                       )}
-                      {slot.id !== 'degree' && (
+                      {s.saved && (
                         <p className="text-[11px] text-teal-400/70 mt-1">✓ Saved to My Verifications</p>
+                      )}
+                      {!s.saved && (
+                        <p className="text-[11px] text-amber-400/60 mt-1">⚠ Not saved yet — click Save below</p>
                       )}
                     </div>
                     {/* Degree-specific result */}
@@ -470,25 +476,46 @@ export default function DegreePage() {
                         )}
                       </div>
                     )}
-                    <div className="flex gap-2 w-full">
-                      {s.fileUrl && (
-                        <a
-                          href={s.fileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors"
-                          style={{ background: 'rgba(59,130,246,0.08)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.15)' }}
+                    {/* Save error */}
+                    {s.error && (
+                      <div className="w-full rounded-lg px-3 py-2 text-xs flex items-center gap-1.5" style={{ background: 'rgba(239,68,68,0.08)', color: '#f87171', border: '1px solid rgba(239,68,68,0.15)' }}>
+                        <AlertCircle size={12} /> {s.error}
+                      </div>
+                    )}
+                    {/* Action buttons */}
+                    <div className="flex flex-col gap-2 w-full">
+                      {!s.saved && (
+                        <button
+                          onClick={() => handleSaveSlot(slot.id)}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90 hover:translate-y-[-1px]"
+                          style={{
+                            background: `linear-gradient(135deg, ${slot.color}, ${slot.color}cc)`,
+                            boxShadow: `0 4px 16px ${slot.color}30`,
+                          }}
                         >
-                          <Eye size={13} /> View
-                        </a>
+                          <Check size={14} /> Save & Update Profile
+                        </button>
                       )}
-                      <button
-                        onClick={() => resetSlot(slot.id)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-white/5"
-                        style={{ color: 'rgba(255,255,255,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}
-                      >
-                        <RotateCcw size={13} /> Replace
-                      </button>
+                      <div className="flex gap-2">
+                        {s.fileUrl && (
+                          <a
+                            href={s.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors"
+                            style={{ background: 'rgba(59,130,246,0.08)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.15)' }}
+                          >
+                            <Eye size={13} /> View
+                          </a>
+                        )}
+                        <button
+                          onClick={() => resetSlot(slot.id)}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-white/5"
+                          style={{ color: 'rgba(255,255,255,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}
+                        >
+                          <RotateCcw size={13} /> Replace
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : (

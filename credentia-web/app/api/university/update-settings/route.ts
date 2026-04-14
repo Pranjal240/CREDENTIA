@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
 
@@ -25,8 +26,9 @@ export async function POST(req: Request) {
 
     const { university_name } = await req.json()
 
-    // 1. Update profiles table (touch updated_at)
+    // 1. Update profiles table — sync full_name + updated_at so every portal sees the new name
     const { error: profErr } = await supabaseAdmin.from('profiles').update({
+      full_name: university_name,
       updated_at: new Date().toISOString()
     }).eq('id', user.id)
 
@@ -47,6 +49,14 @@ export async function POST(req: Request) {
     }
 
     console.log(`[university/update-settings] Successfully updated university name to "${university_name}" for user ${user.id}`)
+
+    // 3. Revalidate all portal paths so server-rendered pages pick up the new name
+    revalidatePath('/dashboard/university')
+    revalidatePath('/dashboard/university/settings')
+    revalidatePath('/dashboard/student')
+    revalidatePath('/dashboard/admin')
+    revalidatePath('/dashboard/company')
+
     return NextResponse.json({ success: true })
 
   } catch (err: any) {

@@ -83,27 +83,9 @@ export default function ResumePage() {
       setSaveStatus(finalStatus)
       setAnalyzing(false)
 
-      // Auto-save to database immediately so CGPA/ATS propagate across all portals
-      try {
-        const saveRes = await fetch('/api/save-verification', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            studentId: userId,
-            type: 'resume',
-            analysis: analysisResult,
-            fileUrl: finalFileUrl,
-            status: finalStatus
-          })
-        })
-        const saveData = await saveRes.json()
-        if (saveRes.ok && saveData.success) {
-          setSaved(true)
-          router.refresh()
-        }
-      } catch (autoSaveErr) {
-        console.warn('Auto-save failed, user can still save manually:', autoSaveErr)
-      }
+      // NOTE: Data is intentionally NOT auto-saved here.
+      // The user must review the AI-extracted info and click "SAVE TO PROFILE"
+      // to persist changes (name, CGPA, skills, etc.) to the database.
     } catch (err: any) {
       const msg = err.message || 'Something went wrong'
       // Map cryptic browser errors to user-friendly messages

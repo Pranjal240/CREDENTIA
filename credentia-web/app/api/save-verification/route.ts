@@ -165,19 +165,19 @@ export async function POST(request: Request) {
       }
       await supabaseAdmin.from('students').upsert(upsertData, { onConflict: 'id' })
 
-      // Also update full_name in profiles if extracted from resume and not already set
+      // Sync profiles table — always update name + phone from AI on explicit save
+      const profilePatch: any = { updated_at: new Date().toISOString() }
       if (analysis.student_name) {
-        const { data: prof } = await supabaseAdmin
+        profilePatch.full_name = analysis.student_name
+      }
+      if (analysis.phone_number) {
+        profilePatch.phone = analysis.phone_number
+      }
+      if (Object.keys(profilePatch).length > 1) {
+        await supabaseAdmin
           .from('profiles')
-          .select('full_name')
+          .update(profilePatch)
           .eq('id', studentId)
-          .single()
-        if (!prof?.full_name || prof.full_name.trim() === '') {
-          await supabaseAdmin
-            .from('profiles')
-            .update({ full_name: analysis.student_name, updated_at: new Date().toISOString() })
-            .eq('id', studentId)
-        }
       }
     } else if (type === 'aadhaar') {
       await supabaseAdmin.from('students').upsert({
@@ -196,14 +196,18 @@ export async function POST(request: Request) {
         const parsed = parseFloat(String(analysis.grade_cgpa).replace(/[^0-9.]/g, ''))
         if (!isNaN(parsed) && parsed > 0) cgpaVal = parsed
       }
-      await supabaseAdmin.from('students').upsert({
+      const degreeUpsert: any = {
         id: studentId,
         degree_verified: ['ai_approved', 'admin_verified', 'verified'].includes(status),
-        course: analysis.course || analysis.degree || null,
-        cgpa: cgpaVal,
-        graduation_year: analysis.year_of_passing ? parseInt(analysis.year_of_passing) || null : null,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'id' })
+      }
+      if (analysis.course || analysis.degree) degreeUpsert.course = analysis.course || analysis.degree
+      if (analysis.branch) degreeUpsert.branch = analysis.branch
+      if (cgpaVal !== null) degreeUpsert.cgpa = cgpaVal
+      if (analysis.year_of_passing) degreeUpsert.graduation_year = parseInt(analysis.year_of_passing) || null
+      // Sync student's name from degree certificate if extracted
+      if (analysis.student_name) degreeUpsert.name = analysis.student_name
+      await supabaseAdmin.from('students').upsert(degreeUpsert, { onConflict: 'id' })
     } else if (type === 'police') {
       await supabaseAdmin.from('students').upsert({
         id: studentId,
