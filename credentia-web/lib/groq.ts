@@ -51,6 +51,7 @@ function buildMessages(systemPrompt: string, content: string, isImage: boolean =
 /**
  * Call Gemini as a fallback when Groq is rate-limited.
  * Uses the REST API directly — no SDK needed.
+ * Produces identical JSON output to Groq using the same system prompts.
  */
 async function callGemini(systemPrompt: string, content: string, isImage: boolean, maxTokens: number): Promise<any> {
   const apiKey = process.env.GEMINI_API_KEY
@@ -59,51 +60,89 @@ async function callGemini(systemPrompt: string, content: string, isImage: boolea
   const model = 'gemini-2.0-flash'
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
 
-  // Build parts for the request
-  const parts: any[] = [
-    { text: systemPrompt + '\n\nAnalyze the following and return ONLY a valid JSON object:' }
-  ]
+  // Build user parts for the request
+  const userParts: any[] = []
 
   if (isImage && content.startsWith('data:')) {
-    // Extract base64 data and mime type
+    // Extract base64 data and mime type from data URL
     const match = content.match(/^data:([^;]+);base64,(.+)$/)
     if (match) {
-      parts.push({
+      const mimeType = match[1]
+      const base64Data = match[2]
+
+      // Add the document/image first
+      userParts.push({
         inline_data: {
-          mime_type: match[1],
-          data: match[2].substring(0, 2_000_000) // Cap at ~1.5MB for safety
+          mime_type: mimeType,
+          data: base64Data.substring(0, 4_000_000) // Gemini supports up to ~4MB inline
         }
       })
+
+      // Then add the instruction text
+      userParts.push({
+        text: 'Analyze this document thoroughly. Extract ALL information visible in the document. Return ONLY a valid JSON object matching the schema in the system instructions. No markdown, no explanation, just the JSON.'
+      })
     } else {
-      parts.push({ text: content.substring(0, 8000) })
+      userParts.push({ text: content.substring(0, 15000) })
     }
   } else {
-    parts.push({ text: content.substring(0, 8000) })
+    // Text content — send more text (Gemini handles longer context than Groq)
+    userParts.push({
+      text: `Analyze the following document and extract all information. Return ONLY a valid JSON object matching the schema in the system instructions.\n\n${content.substring(0, 15000)}`
+    })
   }
 
   const body = {
-    contents: [{ parts }],
+    // systemInstruction gives Gemini stronger prompt adherence than putting it in contents
+    systemInstruction: {
+      parts: [{ text: systemPrompt }]
+    },
+    contents: [{
+      role: 'user',
+      parts: userParts
+    }],
     generationConfig: {
       temperature: 0.1,
       maxOutputTokens: maxTokens,
       responseMimeType: 'application/json',
-    }
+    },
+    // Prevent Gemini from blocking document images (Aadhaar, certificates, etc.)
+    safetySettings: [
+      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+    ]
   }
+
+  console.log(`[Gemini] Calling ${model} (isImage=${isImage}, contentLen=${content.length})`)
 
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(45000), // 45s timeout — Gemini vision can be slower
   })
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '')
-    throw new Error(`Gemini API error ${res.status}: ${errText.substring(0, 200)}`)
+    throw new Error(`Gemini API error ${res.status}: ${errText.substring(0, 300)}`)
   }
 
   const data = await res.json()
+
+  // Check for blocked content
+  if (data.candidates?.[0]?.finishReason === 'SAFETY') {
+    console.warn('[Gemini] Response blocked by safety filter')
+    throw new Error('Gemini safety filter blocked the response')
+  }
+
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+  if (!text.trim()) {
+    throw new Error('Gemini returned empty response')
+  }
+
+  console.log(`[Gemini] Success — response length: ${text.length}`)
   return parseGroqJSON(text)
 }
 
