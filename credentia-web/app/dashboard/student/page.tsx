@@ -17,9 +17,9 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      const uid = session.user.id
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const uid = user.id
       setUserId(uid)
       const [{ data: s }, { data: v }] = await Promise.all([
         supabase.from('students').select('*, profiles(linked_university_id)').eq('id', uid).single(),
@@ -267,7 +267,7 @@ export default function StudentDashboard() {
         </Link>
 
         {/* My Documents */}
-        <Link href="/dashboard/student/degree"
+        <Link href="/dashboard/student/saved"
           className="group flex items-center gap-4 p-4 rounded-2xl transition-all hover:translate-y-[-2px]"
           style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.08), rgba(251,191,36,0.04))', border: '1px solid rgba(245,158,11,0.15)' }}
         >
