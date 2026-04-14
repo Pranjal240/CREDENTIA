@@ -21,8 +21,9 @@ export default function AadhaarPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setUserId(session.user.id)
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) { setUserId(user.id) }
+      else { supabase.auth.refreshSession().then(({ data: { session } }) => { if (session) setUserId(session.user.id) }) }
     })
   }, [])
 
@@ -39,22 +40,54 @@ export default function AadhaarPage() {
     setUploading(true); setError('')
     try {
       const formData = new FormData(); formData.append('file', file); formData.append('folder', 'aadhaar')
-      const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
-      const data = await uploadRes.json()
-      if (!uploadRes.ok || !data.success) throw new Error(data.error || 'Upload failed')
-      setUploading(false); setAnalyzing(true)
-      const res = await fetch('/api/verify-aadhaar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileUrl: data.url, studentId: userId }),
-      })
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        throw new Error(errData.error || 'Verification failed')
+
+      // Upload with retry
+      let uploadData: any = null
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
+          uploadData = await uploadRes.json()
+          if (!uploadRes.ok || !uploadData.success) throw new Error(uploadData.error || 'Upload failed')
+          break
+        } catch (e: any) {
+          if (attempt < 3 && (e.message === 'Failed to fetch' || e.message === 'Load failed')) {
+            await new Promise(r => setTimeout(r, 2000 * Math.pow(2, attempt - 1)))
+            continue
+          }
+          throw e
+        }
       }
-      const resData = await res.json()
+      if (!uploadData?.success) throw new Error('Upload failed after retries')
+
+      setUploading(false); setAnalyzing(true)
+
+      // Verify with retry
+      let resData: any = null
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const res = await fetch('/api/verify-aadhaar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileUrl: uploadData.url, studentId: userId }),
+          })
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}))
+            throw new Error(errData.error || 'Verification failed')
+          }
+          resData = await res.json()
+          break
+        } catch (e: any) {
+          if (attempt < 3 && (e.message === 'Failed to fetch' || e.message === 'Load failed')) {
+            await new Promise(r => setTimeout(r, 2000 * Math.pow(2, attempt - 1)))
+            continue
+          }
+          throw e
+        }
+      }
+      if (!resData) throw new Error('Verification failed after retries')
+
       setResult(resData.analysis || resData)
-      setFileUrl(resData.fileUrl || data.url)
+      setFileUrl(resData.fileUrl || uploadData.url)
       setSaveStatus(resData.status || (resData.analysis?.verified ? 'ai_approved' : 'rejected'))
       setAnalyzing(false)
     } catch (err: any) { setError(err.message); setUploading(false); setAnalyzing(false) }

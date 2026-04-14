@@ -90,17 +90,25 @@ export default function DegreePage() {
   const [degreeVerifs, setDegreeVerifs] = useState<any[]>([])
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setUserId(session.user.id)
-        // Fetch existing verifications for degree-related types
-        supabase.from('verifications')
-          .select('type, status')
-          .eq('student_id', session.user.id)
-          .in('type', ['degree', 'marksheet_10th', 'marksheet_12th', 'passport'])
-          .then(({ data }) => setDegreeVerifs(data || []))
+    const init = async () => {
+      let uid: string | null = null
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) { uid = user.id }
+      else {
+        const { data: { session } } = await supabase.auth.refreshSession()
+        if (session) uid = session.user.id
       }
-    })
+      if (uid) {
+        setUserId(uid)
+        // Fetch existing verifications for degree-related types
+        const { data } = await supabase.from('verifications')
+          .select('type, status')
+          .eq('student_id', uid)
+          .in('type', ['degree', 'marksheet_10th', 'marksheet_12th', 'passport'])
+        setDegreeVerifs(data || [])
+      }
+    }
+    init()
   }, [])
 
   // Degree verification stats

@@ -21,8 +21,18 @@ export default function ResumePage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setUserId(session.user.id)
+    // Use getUser() — validates JWT with Supabase auth server.
+    // getSession() can return stale/expired sessions from cache,
+    // causing API calls to silently fail for specific users.
+    supabase.auth.getUser().then(({ data: { user }, error }) => {
+      if (user) {
+        setUserId(user.id)
+      } else {
+        // Session expired server-side — try refreshing
+        supabase.auth.refreshSession().then(({ data: { session } }) => {
+          if (session) setUserId(session.user.id)
+        })
+      }
     })
   }, [])
 
