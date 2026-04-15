@@ -353,7 +353,12 @@ export default function AdminAnalytics() {
           </div>
           {/* Chart + center label share this exact container */}
           <div style={{ position: 'relative', width: '100%', height: 'clamp(180px, 25vw, 210px)', minHeight: 180 }}>
-            <ResponsiveContainer width="100%" height="100%">
+            {/* Center text — placed first so the chart SVG and Tooltip render on top of it */}
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+              <span style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 900, color: t.tp, lineHeight: 1 }}><AnimatedNumber value={profiles.length} /></span>
+              <span style={{ fontSize: 'clamp(8px, 2vw, 9px)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: t.tm, marginTop: 2 }}>Users</span>
+            </div>
+            <ResponsiveContainer width="100%" height="100%" style={{ position: 'relative', zIndex: 10 }}>
               <PieChart>
                 <Pie data={roleDistribution} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius="60%" outerRadius="82%" paddingAngle={3} stroke="none" isAnimationActive animationBegin={200} animationDuration={1600}>
                   {roleDistribution.map((entry, i) => <Cell key={i} fill={entry.color} style={{ outline: 'none' }} />)}
@@ -361,11 +366,6 @@ export default function AdminAnalytics() {
                 <RechartsTooltip content={<TT />} contentStyle={noTTBg} />
               </PieChart>
             </ResponsiveContainer>
-            {/* Center text — absolute inset:0 + flex = always perfectly centered */}
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-              <span style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 900, color: t.tp, lineHeight: 1 }}><AnimatedNumber value={profiles.length} /></span>
-              <span style={{ fontSize: 'clamp(8px, 2vw, 9px)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: t.tm, marginTop: 2 }}>Users</span>
-            </div>
           </div>
           <div className="grid grid-cols-2 gap-1.5 mt-auto pt-3 sm:gap-2">
             {roleDistribution.map(r => (
