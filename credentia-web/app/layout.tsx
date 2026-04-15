@@ -23,12 +23,10 @@ export const metadata: Metadata = {
   keywords: 'credential verification, India, student verification, police certificate, Aadhaar, resume ATS, university ERP',
   icons: {
     icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
       { url: '/favicon.png', sizes: '32x32', type: 'image/png' },
-      { url: '/favicon.png', sizes: '16x16', type: 'image/png' },
     ],
-    apple: [
-      { url: '/favicon.png', sizes: '180x180', type: 'image/png' },
-    ],
+    apple: '/favicon.png',
   },
   openGraph: {
     title: 'CREDENTIA',
