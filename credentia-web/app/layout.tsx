@@ -21,6 +21,10 @@ export const metadata: Metadata = {
   title: 'CREDENTIA — India\'s #1 Credential Verification Platform',
   description: 'AI-powered credential verification for students, companies, and universities. Verify once. Trusted forever.',
   keywords: 'credential verification, India, student verification, police certificate, Aadhaar, resume ATS, university ERP',
+  icons: {
+    icon: '/favicon.png',
+    apple: '/apple-icon.png',
+  },
   openGraph: {
     title: 'CREDENTIA',
     description: 'Verify Once. Trusted Forever.',

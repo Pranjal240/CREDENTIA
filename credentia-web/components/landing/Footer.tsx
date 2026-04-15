@@ -9,22 +9,22 @@ const InstagramIcon = () => <svg viewBox="0 0 24 24" className="w-4 h-4" fill="c
 
 const links = {
   Product: [
-    { label: 'Features', href: '#features' },
-    { label: 'How It Works', href: '#how-it-works' },
-    { label: 'For Companies', href: '#for-companies' },
-    { label: 'Pricing', href: '#' },
+    { label: 'Features', href: '/features' },
+    { label: 'How It Works', href: '/how-it-works' },
+    { label: 'For Companies', href: '/for-companies' },
+    { label: 'Pricing', href: '/pricing' },
   ],
   Company: [
-    { label: 'About', href: '#team' },
-    { label: 'Careers', href: '#' },
-    { label: 'Blog', href: '#' },
-    { label: 'Contact', href: '#' },
+    { label: 'About', href: '/about' },
+    { label: 'Careers', href: '/careers' },
+    { label: 'Blog', href: '/blog' },
+    { label: 'Contact', href: '/contact' },
   ],
   Legal: [
-    { label: 'Privacy Policy', href: '#' },
-    { label: 'Terms of Service', href: '#' },
-    { label: 'Cookie Policy', href: '#' },
-    { label: 'Data Security', href: '#' },
+    { label: 'Privacy Policy', href: '/privacy' },
+    { label: 'Terms of Service', href: '/terms' },
+    { label: 'Cookie Policy', href: '/cookies' },
+    { label: 'Data Security', href: '/data-security' },
   ],
 }
 
@@ -64,9 +64,9 @@ export default function Footer() {
               <ul className="space-y-2.5">
                 {items.map((item) => (
                   <li key={item.label}>
-                    <a href={item.href} className="text-sm text-[rgb(var(--text-muted))] hover:text-[rgb(var(--text-primary))] transition-colors">
+                    <Link href={item.href} className="text-sm text-[rgb(var(--text-muted))] hover:text-[rgb(var(--text-primary))] transition-colors">
                       {item.label}
-                    </a>
+                    </Link>
                   </li>
                 ))}
               </ul>

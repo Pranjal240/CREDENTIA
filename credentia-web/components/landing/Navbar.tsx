@@ -59,7 +59,7 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16 md:h-[72px]">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="relative w-9 h-9 rounded-full overflow-hidden ring-2 ring-[rgb(var(--accent))]/30 group-hover:ring-[rgb(var(--accent))]/60 transition-all">
+            <div className="relative w-16 h-16 rounded-full overflow-hidden ring-2 ring-[rgb(var(--accent))]/30 group-hover:ring-[rgb(var(--accent))]/60 transition-all">
               <Image src="/logo.png" alt="CREDENTIA" fill className="object-contain p-0.5" />
             </div>
             <span className="font-heading text-lg font-extrabold tracking-tight text-[rgb(var(--text-primary))]">
