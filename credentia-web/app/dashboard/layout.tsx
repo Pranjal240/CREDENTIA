@@ -11,7 +11,7 @@ import {
   LayoutDashboard, FileText, Shield, CreditCard, GraduationCap, Link2,
   ChevronLeft, ChevronRight, LogOut, Menu, X, Home, Users, Settings,
   BookmarkCheck, BarChart3, ClipboardList, Building2, Briefcase,
-  ScrollText, Search, Sun, Moon, Headphones
+  ScrollText, Search, Sun, Moon, Headphones, AlertTriangle
 } from 'lucide-react'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
 import { SupportChat } from '@/components/SupportChat'
@@ -83,6 +83,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [supportChatOpen, setSupportChatOpen] = useState(false)
   const [supportUnread, setSupportUnread] = useState(0)
   const [adminSupportUnread, setAdminSupportUnread] = useState(0)
+  const [showLightWarning, setShowLightWarning] = useState(false)
 
   // Avoid hydration mismatch for theme toggle
   useEffect(() => { setMounted(true) }, [])
@@ -440,7 +441,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
           {/* Theme toggle */}
           <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            onClick={() => {
+              if (theme === 'dark') {
+                setTheme('light')
+                setShowLightWarning(true)
+                setTimeout(() => setShowLightWarning(false), 10000)
+              } else {
+                setTheme('dark')
+                setShowLightWarning(false)
+              }
+            }}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-colors hover:bg-black/5 dark:hover:bg-white/5 overflow-hidden text-text-muted"
             title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
@@ -731,6 +741,91 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           onUnreadChange={setSupportUnread}
         />
       )}
+
+      {/* ── Light Mode Development Warning Toast ── */}
+      <AnimatePresence>
+        {showLightWarning && mounted && theme === 'light' && (
+          <motion.div
+            initial={{ opacity: 0, x: 80, scale: 0.9 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 80, scale: 0.9 }}
+            transition={{ type: 'spring', damping: 22, stiffness: 300 }}
+            className="fixed bottom-6 right-6 z-[200] w-[380px] max-w-[calc(100vw-32px)] overflow-hidden"
+          >
+            {/* Glowing border div */}
+            <div
+              className="relative rounded-2xl p-[1px]"
+              style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.5), rgba(251,191,36,0.3), rgba(245,158,11,0.5))' }}
+            >
+              {/* Inner card */}
+              <div className="rounded-2xl p-5 relative overflow-hidden" style={{ background: 'rgba(253,250,245,0.97)', backdropFilter: 'blur(20px)' }}>
+                {/* Ambient glow */}
+                <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-30 pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.4) 0%, transparent 70%)' }} />
+
+                {/* Close button */}
+                <button
+                  onClick={() => setShowLightWarning(false)}
+                  className="absolute top-3 right-3 p-1.5 rounded-lg transition-colors z-10"
+                  style={{ color: 'rgba(120,100,70,0.5)' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(245,158,11,0.1)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <X size={14} />
+                </button>
+
+                {/* Icon + Title row */}
+                <div className="flex items-start gap-3.5 relative z-10">
+                  <motion.div
+                    animate={{ rotate: [0, -8, 8, -4, 0] }}
+                    transition={{ duration: 0.6, delay: 0.3 }}
+                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.2)' }}
+                  >
+                    <AlertTriangle size={20} style={{ color: '#d97706' }} />
+                  </motion.div>
+                  <div className="flex-1 min-w-0 pr-5">
+                    <p className="font-heading font-bold text-sm" style={{ color: '#92400e' }}>Light Mode — In Development</p>
+                    <p className="text-xs leading-relaxed mt-1.5" style={{ color: 'rgba(120,90,50,0.7)' }}>
+                      Light mode is still being perfected. For the best experience with all features working flawlessly, we recommend using <strong style={{ color: '#78350f' }}>Dark Mode</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex items-center gap-2.5 mt-4 relative z-10">
+                  <button
+                    onClick={() => setShowLightWarning(false)}
+                    className="flex-1 h-9 rounded-xl text-xs font-semibold transition-all"
+                    style={{ background: 'rgba(245,158,11,0.08)', color: '#b45309', border: '1px solid rgba(245,158,11,0.2)' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(245,158,11,0.15)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'rgba(245,158,11,0.08)')}
+                  >
+                    Continue in Light
+                  </button>
+                  <button
+                    onClick={() => { setTheme('dark'); setShowLightWarning(false) }}
+                    className="flex-1 h-9 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                    style={{ background: 'linear-gradient(135deg, #1e1b4b, #312e81)', color: '#e0e7ff', boxShadow: '0 4px 16px rgba(30,27,75,0.3)' }}
+                    onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-1px)')}
+                    onMouseLeave={e => (e.currentTarget.style.transform = 'translateY(0)')}
+                  >
+                    <Moon size={13} /> Switch to Dark
+                  </button>
+                </div>
+
+                {/* Auto-dismiss progress bar */}
+                <motion.div
+                  initial={{ scaleX: 1 }}
+                  animate={{ scaleX: 0 }}
+                  transition={{ duration: 10, ease: 'linear' }}
+                  className="absolute bottom-0 left-0 right-0 h-[3px] origin-left"
+                  style={{ background: 'linear-gradient(90deg, #f59e0b, #d97706)' }}
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
