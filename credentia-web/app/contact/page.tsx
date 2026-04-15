@@ -57,8 +57,8 @@ export default function ContactPage() {
                 <p className="text-xs text-[rgb(var(--text-muted))]">We usually respond within 24 hours</p>
               </div>
             </div>
-            <a href="mailto:contact@credentiaonline.in" className="text-[rgb(var(--accent))] hover:underline text-sm font-medium">
-              contact@credentiaonline.in
+            <a href="mailto:pranjalwork2602@gmail.com" className="text-[rgb(var(--accent))] hover:underline text-sm font-medium">
+              pranjalwork2602@gmail.com
             </a>
           </div>
 

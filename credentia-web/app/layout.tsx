@@ -22,8 +22,13 @@ export const metadata: Metadata = {
   description: 'AI-powered credential verification for students, companies, and universities. Verify once. Trusted forever.',
   keywords: 'credential verification, India, student verification, police certificate, Aadhaar, resume ATS, university ERP',
   icons: {
-    icon: '/favicon.png',
-    apple: '/apple-icon.png',
+    icon: [
+      { url: '/favicon.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon.png', sizes: '16x16', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/favicon.png', sizes: '180x180', type: 'image/png' },
+    ],
   },
   openGraph: {
     title: 'CREDENTIA',
