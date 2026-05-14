@@ -3,10 +3,10 @@
 
 import { useState, useRef } from "react";
 import { motion, useInView, AnimatePresence } from "framer-motion";
-import Image from "next/image";
-import { X } from "lucide-react";
+import { X, Users, ArrowRight } from "lucide-react";
+import Link from "next/link";
 
-const team = [
+const founders = [
   {
     name: "Pranjal Mishra",
     role: "Founder & Senior Developer",
@@ -24,20 +24,12 @@ const team = [
     objectPosition: "object-center",
   },
   {
-    name: "Nihal Kumar",
-    role: "Founder & Manager",
-    img: "/team/NIHAL Kumar.png",
-    bio: "Architecting scalable AI-powered verification systems using cutting-edge technologies. Expert in building secure, high-throughput platforms that handle millions of document verifications.",
+    name: "Nancy",
+    role: "Founder & Developer",
+    img: "/team/Nancy.png",
+    bio: "Driving innovation in full-stack development and crafting intuitive user experiences for the Credentia platform. Committed to building elegant, scalable solutions that bridge the gap between technology and user needs.",
     linkedin: "#",
     objectPosition: "object-center",
-  },
-  {
-    name: "Pragya Mishra",
-    role: "Founder & Junior Backend Developer",
-    img: "/team/Pragya Mishra.png",
-    bio: "Contributing to backend systems and server-side logic that powers the Credentia platform. Passionate about building reliable APIs and database architectures that ensure seamless credential verification at scale.",
-    linkedin: "#",
-    objectPosition: "object-[55%_20%]",
   },
   {
     name: "Sourav Yadav",
@@ -46,14 +38,6 @@ const team = [
     bio: "Building robust full-stack solutions that power the Credentia platform. Passionate about scalable backend architecture, seamless API integrations, and crafting delightful developer experiences.",
     linkedin: "#",
     objectPosition: "object-top",
-  },
-  {
-    name: "Harshita Sangwan",
-    role: "Founder & Backend Developer",
-    img: "/team/Harshita Sangwan.png",
-    bio: "Engineering robust backend systems and scalable server infrastructure for the Credentia platform. Dedicated to building secure, high-performance APIs and architecting reliable data pipelines.",
-    linkedin: "#",
-    objectPosition: "object-[center_15%]",
   },
 ];
 
@@ -85,9 +69,9 @@ export default function Team() {
           </p>
         </motion.div>
 
-        {/* 6 founders in a 3x2 grid — 3 on top, 3 on bottom */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-8 sm:gap-10 justify-items-center max-w-3xl mx-auto">
-          {team.map((member, i) => (
+        {/* Founders grid — 2x2 */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 sm:gap-10 justify-items-center max-w-4xl mx-auto">
+          {founders.map((member, i) => (
             <motion.div
               key={i}
               initial={{ opacity: 0, y: 30 }}
@@ -125,6 +109,43 @@ export default function Team() {
             </motion.div>
           ))}
         </div>
+
+        {/* Contributing Members Button */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.6, delay: 0.6 }}
+          className="flex justify-center mt-14"
+        >
+          <Link href="/team">
+            <motion.div
+              whileHover={{ scale: 1.04, y: -3 }}
+              whileTap={{ scale: 0.97 }}
+              className="group relative cursor-pointer rounded-full p-[2px] bg-gradient-to-r from-blue-500 via-teal-400 to-indigo-500"
+            >
+              {/* Inner button */}
+              <div
+                className="relative flex items-center gap-3 px-7 py-3 sm:px-8 sm:py-3.5 rounded-full overflow-hidden"
+                style={{ background: "rgb(var(--bg-base))" }}
+              >
+                {/* Shimmer sweep */}
+                <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+
+                <Users size={17} className="relative z-10 text-teal-400" />
+                <span
+                  className="relative z-10 font-heading font-bold text-sm sm:text-base"
+                  style={{ color: "rgb(var(--text-primary))" }}
+                >
+                  Contributing Members
+                </span>
+                <ArrowRight
+                  size={15}
+                  className="relative z-10 text-blue-400 group-hover:translate-x-1.5 transition-transform duration-300"
+                />
+              </div>
+            </motion.div>
+          </Link>
+        </motion.div>
       </div>
 
       {/* Glassmorphism Zoom Modal */}
@@ -169,9 +190,9 @@ export default function Team() {
               {/* Image area */}
               <div className="relative w-full aspect-[4/5] bg-gradient-to-br from-blue-600/20 via-transparent to-teal-600/20">
                 <img
-                  src={team[selected].img}
-                  alt={team[selected].name}
-                  className={`w-full h-full object-cover transition-transform duration-1000 ${team[selected].objectPosition}`}
+                  src={founders[selected].img}
+                  alt={founders[selected].name}
+                  className={`w-full h-full object-cover transition-transform duration-1000 ${founders[selected].objectPosition}`}
                 />
                 {/* Bottom gradient fade into bio */}
                 <div
@@ -186,17 +207,17 @@ export default function Team() {
               {/* Bio area */}
               <div className="px-6 pb-6 -mt-14 relative z-10">
                 <h3 className="font-heading text-2xl font-bold text-white mb-1">
-                  {team[selected].name}
+                  {founders[selected].name}
                 </h3>
                 <p className="text-sm font-semibold text-blue-400 mb-3">
-                  {team[selected].role}
+                  {founders[selected].role}
                 </p>
                 <p className="text-sm leading-relaxed text-white/60">
-                  {team[selected].bio}
+                  {founders[selected].bio}
                 </p>
-                {team[selected].linkedin && team[selected].linkedin !== "#" && (
+                {founders[selected].linkedin && founders[selected].linkedin !== "#" && (
                   <a
-                    href={team[selected].linkedin}
+                    href={founders[selected].linkedin}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-xl text-sm font-medium text-blue-400 transition-all hover:bg-blue-500/20"
