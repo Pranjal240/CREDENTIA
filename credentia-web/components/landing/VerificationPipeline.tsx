@@ -94,7 +94,7 @@ export default function VerificationPipeline() {
         <div
           ref={gridRef}
           onMouseMove={handleMove}
-          onMouseLeave={() => { setHovered(null); cursorX.set('50%') }}
+          onMouseLeave={() => { setHovered(null); cursorX.set(50) }}
           className="relative"
         >
           {/* Connector line — sits at 32px = vertical center of the 64px icons */}
