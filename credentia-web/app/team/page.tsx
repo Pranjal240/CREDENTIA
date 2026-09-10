@@ -5,6 +5,8 @@ import { useState, useRef } from "react";
 import { motion, useInView, AnimatePresence } from "framer-motion";
 import { X, ArrowLeft, Sparkles } from "lucide-react";
 import Link from "next/link";
+import ScrollProgress from "@/components/landing/ScrollProgress";
+import CustomCursor from "@/components/landing/CustomCursor";
 
 const contributors = [
   {
@@ -40,9 +42,19 @@ export default function ContributingMembersPage() {
 
   return (
     <main className="gradient-bg min-h-screen relative overflow-hidden">
-      {/* Ambient glow orbs */}
-      <div className="absolute top-20 left-1/4 w-[400px] h-[400px] bg-blue-500/[0.04] rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-40 right-1/4 w-[350px] h-[350px] bg-teal-400/[0.04] rounded-full blur-[100px] pointer-events-none" />
+      <ScrollProgress />
+      <CustomCursor />
+      {/* Ambient glow orbs — animated */}
+      <motion.div
+        animate={{ x: [0, 40, 0], y: [0, -25, 0] }}
+        transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
+        className="absolute top-20 left-1/4 w-[400px] h-[400px] bg-indigo-500/[0.08] rounded-full blur-[120px] pointer-events-none"
+      />
+      <motion.div
+        animate={{ x: [0, -30, 0], y: [0, 20, 0] }}
+        transition={{ duration: 17, repeat: Infinity, ease: "easeInOut" }}
+        className="absolute bottom-40 right-1/4 w-[350px] h-[350px] bg-teal-400/[0.08] rounded-full blur-[100px] pointer-events-none"
+      />
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-indigo-500/[0.03] rounded-full blur-[140px] pointer-events-none" />
 
       {/* Navigation bar */}

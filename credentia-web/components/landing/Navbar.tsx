@@ -9,10 +9,10 @@ import { Menu, X, Sun, Moon, AlertTriangle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 const navLinks = [
-  { label: 'Features', href: '#features' },
-  { label: 'How It Works', href: '#how-it-works' },
-  { label: 'For Companies', href: '#for-companies' },
-  { label: 'Our Team', href: '#team' },
+  { label: 'Platform', href: '#features' },
+  { label: 'How it works', href: '#how-it-works' },
+  { label: 'For teams', href: '#portals' },
+  { label: 'Analytics', href: '#analytics' },
 ]
 
 export default function Navbar() {
@@ -54,7 +54,7 @@ export default function Navbar() {
       animate={{ y: 0 }}
       transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
-        scrolled ? 'glass-strong shadow-lg' : 'bg-transparent'
+        scrolled ? 'glass-strong shadow-lg' : 'backdrop-blur-sm bg-[rgb(var(--bg-base))]/40'
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -117,13 +117,14 @@ export default function Navbar() {
                   href="/login"
                   className="px-4 py-2 text-sm font-medium text-[rgb(var(--text-secondary))] hover:text-[rgb(var(--text-primary))] transition-colors"
                 >
-                  Login
+                  Sign in
                 </Link>
                 <Link
                   href="/register"
-                  className="btn-primary px-5 py-2.5 text-sm"
+                  className="px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition-all hover:-translate-y-0.5 shadow-lg shadow-indigo-500/20 inline-flex items-center gap-1.5"
+                  style={{ background: 'linear-gradient(135deg, #4F46E5, #4338CA)' }}
                 >
-                  Get Started
+                  Get started <span className="inline-block">→</span>
                 </Link>
               </>
             )}
@@ -164,8 +165,8 @@ export default function Navbar() {
                   <Link href={`/dashboard/${userRole}`} className="block w-full text-center btn-primary px-4 py-2.5 text-sm">Go to Dashboard</Link>
                 ) : (
                   <>
-                    <Link href="/login" className="block w-full text-center px-4 py-2.5 rounded-xl text-sm font-medium border border-[rgb(var(--border-default))] text-[rgb(var(--text-primary))] hover:border-[rgb(var(--accent))]/50 transition-all">Login</Link>
-                    <Link href="/register" className="block w-full text-center btn-primary px-4 py-2.5 text-sm">Get Started</Link>
+                    <Link href="/login" className="block w-full text-center px-4 py-2.5 rounded-xl text-sm font-medium border border-[rgb(var(--border-default))] text-[rgb(var(--text-primary))] hover:border-[rgb(var(--accent))]/50 transition-all">Sign in</Link>
+                    <Link href="/register" className="block w-full text-center px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-all shadow-lg shadow-indigo-500/20" style={{ background: 'linear-gradient(135deg, #4F46E5, #4338CA)' }}>Get started →</Link>
                   </>
                 )}
               </div>

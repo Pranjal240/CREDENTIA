@@ -124,7 +124,7 @@ export default function PlatformFeatures() {
   const [hovered, setHovered] = useState<number | null>(null)
 
   return (
-    <section ref={ref} className="py-20 relative overflow-hidden">
+    <section id="stats" ref={ref} className="py-20 relative overflow-hidden">
       {/* Ambient BG wash */}
       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[rgb(var(--accent))]/[0.025] to-transparent pointer-events-none" />
 

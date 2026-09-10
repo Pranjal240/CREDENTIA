@@ -9,15 +9,19 @@ import Link from "next/link";
 const founders = [
   {
     name: "Pranjal Mishra",
-    role: "Founder & Senior Developer",
+    role: "Founder & CEO",
+    badge: "CEO",
+    badgeColor: "#818cf8",
     img: "/team/pranjal.png",
     bio: "Visionary entrepreneur dedicated to building India's trust infrastructure for the next generation. Leading the charge to eliminate hiring fraud and empower students with verifiable credentials.",
     linkedin: "#",
     objectPosition: "object-top",
   },
   {
-    name: "KRITI AHLAWAT",
-    role: "Founder & COO",
+    name: "Kriti Ahlawat",
+    role: "Co-founder · Product",
+    badge: "CPO",
+    badgeColor: "#2dd4bf",
     img: "/team/KRITI AHLAWAT.png",
     bio: "Driving strategic operations and forging partnerships across India's education and corporate landscape. Passionate about creating seamless verification experiences at scale.",
     linkedin: "#",
@@ -25,15 +29,19 @@ const founders = [
   },
   {
     name: "Nancy",
-    role: "Founder & Developer",
+    role: "Co-founder · Design",
+    badge: "CDO",
+    badgeColor: "#f472b6",
     img: "/team/Nancy.png",
     bio: "Driving innovation in full-stack development and crafting intuitive user experiences for the Credentia platform. Committed to building elegant, scalable solutions that bridge the gap between technology and user needs.",
     linkedin: "#",
     objectPosition: "object-center",
   },
   {
-    name: "Sourav Yadav",
-    role: "Founder & Developer",
+    name: "Sourav",
+    role: "Co-founder · Engineering",
+    badge: "CTO",
+    badgeColor: "#a78bfa",
     img: "/team/sourav.png",
     bio: "Building robust full-stack solutions that power the Credentia platform. Passionate about scalable backend architecture, seamless API integrations, and crafting delightful developer experiences.",
     linkedin: "#",
@@ -55,17 +63,21 @@ export default function Team() {
           animate={inView ? { opacity: 1, y: 0 } : {}}
           className="text-center mb-16"
         >
+          <span className="text-[10px] font-bold tracking-[0.25em] text-indigo-400 uppercase mb-4 inline-block">
+            The Team
+          </span>
           <h2
-            className="font-heading text-3xl sm:text-4xl font-bold mb-4"
+            className="font-heading text-3xl sm:text-4xl lg:text-5xl font-extrabold mb-4 leading-tight"
             style={{ color: "rgb(var(--text-primary))" }}
           >
-            Meet Our <span className="gradient-text">Founders</span>
+            Meet the{' '}
+            <span style={{ background: 'linear-gradient(135deg, #818cf8, #2dd4bf)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>founders</span>
           </h2>
           <p
             style={{ color: "rgb(var(--text-secondary))" }}
-            className="text-lg"
+            className="text-base"
           >
-            The people building India&apos;s most trusted credential platform
+            The people building India&apos;s most trusted credential platform.
           </p>
         </motion.div>
 
@@ -92,6 +104,13 @@ export default function Team() {
                       className={`w-full h-full object-cover transition-all duration-700 group-hover:brightness-110 group-hover:scale-105 ${member.objectPosition}`}
                     />
                   </div>
+                </div>
+                {/* Role badge */}
+                <div
+                  className="absolute -bottom-1 -right-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold tracking-widest text-white shadow-lg z-10"
+                  style={{ background: `linear-gradient(135deg, ${member.badgeColor}, ${member.badgeColor}dd)`, boxShadow: `0 4px 12px ${member.badgeColor}40` }}
+                >
+                  {member.badge}
                 </div>
               </div>
               <h3

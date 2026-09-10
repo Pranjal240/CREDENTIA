@@ -3,10 +3,14 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import Navbar from '@/components/landing/Navbar'
 import Hero from '@/components/landing/Hero'
-import Stats from '@/components/landing/Stats'
-import Features from '@/components/landing/Features'
-import HowItWorks from '@/components/landing/HowItWorks'
-import ForCompanies from '@/components/landing/ForCompanies'
+import ScrollProgress from '@/components/landing/ScrollProgress'
+import CustomCursor from '@/components/landing/CustomCursor'
+import TrustedInstitutions from '@/components/landing/TrustedInstitutions'
+import ThreePortals from '@/components/landing/ThreePortals'
+import RealTimeAnalytics from '@/components/landing/RealTimeAnalytics'
+import AIVerificationEngine from '@/components/landing/AIVerificationEngine'
+import VerificationPipeline from '@/components/landing/VerificationPipeline'
+import FullStack from '@/components/landing/FullStack'
 import Team from '@/components/landing/Team'
 import CTA from '@/components/landing/CTA'
 import Footer from '@/components/landing/Footer'
@@ -18,6 +22,26 @@ const ROLE_REDIRECT: Record<string, string> = {
   admin      : '/dashboard/admin',
 }
 
+function LandingContent() {
+  return (
+    <main className="gradient-bg min-h-screen">
+      <ScrollProgress />
+      <CustomCursor />
+      <Navbar />
+      <Hero />
+      <TrustedInstitutions />
+      <ThreePortals />
+      <RealTimeAnalytics />
+      <AIVerificationEngine />
+      <VerificationPipeline />
+      <FullStack />
+      <Team />
+      <CTA />
+      <Footer />
+    </main>
+  )
+}
+
 export default async function Home({
   searchParams
 }: {
@@ -25,22 +49,7 @@ export default async function Home({
 }) {
   // CRITICAL: If there is an error param,
   // NEVER auto-redirect. Show landing page.
-  // This breaks the session loop.
-  if (searchParams.error) {
-    return (
-      <main className="gradient-bg min-h-screen">
-        <Navbar />
-        <Hero />
-        <Stats />
-        <Features />
-        <HowItWorks />
-        <ForCompanies />
-        <Team />
-        <CTA />
-        <Footer />
-      </main>
-    )
-  }
+  if (searchParams.error) return <LandingContent />
 
   const cookieStore = cookies()
   const supabase = createServerClient(
@@ -55,8 +64,7 @@ export default async function Home({
   )
 
   try {
-    const { data: { session } } =
-      await supabase.auth.getSession()
+    const { data: { session } } = await supabase.auth.getSession()
 
     if (session?.user?.id) {
       const { data: profile } = await supabase
@@ -73,17 +81,5 @@ export default async function Home({
     // show landing
   }
 
-  return (
-    <main className="gradient-bg min-h-screen">
-      <Navbar />
-      <Hero />
-      <Stats />
-      <Features />
-      <HowItWorks />
-      <ForCompanies />
-      <Team />
-      <CTA />
-      <Footer />
-    </main>
-  )
+  return <LandingContent />
 }

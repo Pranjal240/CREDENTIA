@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import { GraduationCap, Building2, Briefcase, ShieldAlert, ArrowRight, ArrowLeft } from 'lucide-react'
 import { PORTAL_META } from '@/lib/auth/portalMeta'
 import type { Portal } from '@/lib/auth/portalMeta'
+import CustomCursor from '@/components/landing/CustomCursor'
 
 // Icon map for the portal cards
 const PortalIcon: Record<string, React.FC<{ size: number; className?: string }>> = {
@@ -24,9 +25,20 @@ export default function PortalSelectionPage() {
       className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden"
       style={{ background: '#080a19' }}
     >
-      {/* Ambient blobs */}
-      <div className="absolute w-[500px] h-[500px] rounded-full bg-indigo-500/[0.06] blur-[140px] -top-40 -right-40 pointer-events-none" />
-      <div className="absolute w-[400px] h-[400px] rounded-full bg-teal-500/[0.05] blur-[120px] -bottom-32 -left-32 pointer-events-none" />
+      <CustomCursor />
+      {/* Ambient blobs — animated */}
+      <motion.div
+        animate={{ x: [0, 40, 0], y: [0, -20, 0] }}
+        transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute w-[500px] h-[500px] rounded-full bg-indigo-500/[0.1] blur-[140px] -top-40 -right-40 pointer-events-none"
+      />
+      <motion.div
+        animate={{ x: [0, -30, 0], y: [0, 25, 0] }}
+        transition={{ duration: 15, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute w-[400px] h-[400px] rounded-full bg-teal-500/[0.08] blur-[120px] -bottom-32 -left-32 pointer-events-none"
+      />
+      {/* Grid overlay */}
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, rgb(148,158,194) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
       <motion.div
         initial={{ opacity: 0, y: 16 }}

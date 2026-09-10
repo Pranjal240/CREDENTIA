@@ -4,6 +4,16 @@
 
 /* ====== CREDENTIA DESIGN SYSTEM v3 — Unified Token System ====== */
 
+html {
+  scroll-behavior: smooth;
+}
+
+/* ── Custom cursor: hide native cursor on fine pointers only ── */
+@media (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  html, body { cursor: none; }
+  a, button, [role="button"], input, textarea, select, label { cursor: none; }
+}
+
 :root {
   /* ── Colors ── */
   --primary: #4F46E5;

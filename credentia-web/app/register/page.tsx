@@ -6,12 +6,13 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
-import { ArrowLeft, Loader2, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Loader2, CheckCircle2, GraduationCap, Building2, Briefcase, ArrowRight } from 'lucide-react'
+import CustomCursor from '@/components/landing/CustomCursor'
 
 const roles = [
-  { id: 'student', emoji: '🎓', label: 'Student', desc: 'Verify your credentials', color: 'from-blue-500 to-blue-600' },
-  { id: 'company', emoji: '🏢', label: 'Company', desc: 'Find verified talent', color: 'from-teal-500 to-teal-600' },
-  { id: 'university', emoji: '🏫', label: 'University', desc: 'Manage your students', color: 'from-indigo-500 to-indigo-600' },
+  { id: 'student', Icon: GraduationCap, label: 'Student', desc: 'Verify your credentials', accent: '#818cf8', bg: 'rgba(129,140,248,0.1)', border: 'rgba(129,140,248,0.25)' },
+  { id: 'company', Icon: Briefcase, label: 'Company', desc: 'Find verified talent', accent: '#a78bfa', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.25)' },
+  { id: 'university', Icon: Building2, label: 'University', desc: 'Manage your students', accent: '#2dd4bf', bg: 'rgba(45,212,191,0.1)', border: 'rgba(45,212,191,0.25)' },
 ]
 
 export default function RegisterPage() {
@@ -69,8 +70,19 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden" style={{ background: 'rgb(var(--bg-base))' }}>
-      <div className="absolute w-[500px] h-[500px] rounded-full bg-indigo-500/10 blur-[120px] -top-40 -right-40" />
-      <div className="absolute w-[300px] h-[300px] rounded-full bg-teal-500/8 blur-[80px] -bottom-20 -left-20" />
+      <CustomCursor />
+      <motion.div
+        animate={{ x: [0, 30, 0], y: [0, -20, 0] }}
+        transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute w-[500px] h-[500px] rounded-full bg-indigo-500/15 blur-[140px] -top-40 -right-40"
+      />
+      <motion.div
+        animate={{ x: [0, -20, 0], y: [0, 15, 0] }}
+        transition={{ duration: 15, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute w-[400px] h-[400px] rounded-full bg-teal-500/10 blur-[120px] -bottom-32 -left-32"
+      />
+      {/* Grid overlay */}
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, rgb(148,158,194) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
       <div className="relative z-10 w-full max-w-md">
         <div className="text-center mb-8">
@@ -87,21 +99,30 @@ export default function RegisterPage() {
         <AnimatePresence mode="wait">
           {step === 'role' && (
             <motion.div key="role" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-              <p className="text-sm text-center mb-5" style={{ color: 'rgb(var(--text-secondary))' }}>I am a...</p>
+              <p className="text-sm text-center mb-5" style={{ color: 'rgba(240,243,255,0.7)' }}>I am a...</p>
               <div className="grid grid-cols-1 gap-3">
-                {roles.map((r) => (
-                  <button
+                {roles.map((r, i) => (
+                  <motion.button
                     key={r.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.08 * i }}
+                    whileHover={{ y: -3, transition: { duration: 0.2 } }}
+                    whileTap={{ scale: 0.98 }}
                     onClick={() => { setSelectedRole(r.id); setStep('form'); setError('') }}
-                    className="rounded-2xl p-5 text-left transition-all duration-300 hover:scale-[1.01] flex items-center gap-4 border"
-                    style={{ background: 'rgba(var(--bg-card), 0.8)', borderColor: 'rgba(var(--border-default), 0.6)' }}
+                    className="group rounded-2xl p-5 text-left transition-colors duration-300 flex items-center gap-4 border relative overflow-hidden"
+                    style={{ background: 'rgba(14,17,40,0.6)', backdropFilter: 'blur(12px)', borderColor: r.border }}
                   >
-                    <span className="text-3xl">{r.emoji}</span>
-                    <div>
-                      <span className="font-heading font-bold block" style={{ color: 'rgb(var(--text-primary))' }}>{r.label}</span>
-                      <span className="text-xs" style={{ color: 'rgb(var(--text-muted))' }}>{r.desc}</span>
+                    <div className="absolute -top-8 -right-8 w-24 h-24 rounded-full opacity-15 group-hover:opacity-30 blur-2xl transition-opacity" style={{ background: r.accent }} />
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 relative z-10" style={{ background: r.bg, border: `1px solid ${r.border}` }}>
+                      <r.Icon size={22} style={{ color: r.accent }} />
                     </div>
-                  </button>
+                    <div className="flex-1 relative z-10">
+                      <span className="font-heading font-bold block text-base" style={{ color: 'rgb(var(--text-primary))' }}>{r.label}</span>
+                      <span className="text-xs" style={{ color: 'rgba(240,243,255,0.6)' }}>{r.desc}</span>
+                    </div>
+                    <ArrowRight size={16} className="text-white/30 group-hover:text-white/70 group-hover:translate-x-1 transition-all relative z-10" />
+                  </motion.button>
                 ))}
               </div>
               <p className="text-center mt-6 text-sm" style={{ color: 'rgb(var(--text-secondary))' }}>
@@ -140,7 +161,7 @@ export default function RegisterPage() {
                   <label className="text-xs font-medium block mb-1.5" style={{ color: 'rgb(var(--text-secondary))' }}>Confirm Password</label>
                   <input type="password" required value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} className="w-full h-12 px-4 rounded-xl text-sm" style={{ background: 'rgb(var(--bg-input))', border: '1px solid rgba(var(--border-default), 0.8)', color: 'rgb(var(--text-primary))' }} placeholder="Repeat password" />
                 </div>
-                <button type="submit" disabled={loading} className="w-full h-12 rounded-xl font-bold text-white transition-all disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: 'linear-gradient(135deg, rgb(var(--accent)), rgb(var(--accent-hover)))' }}>
+                <button type="submit" disabled={loading} className="w-full h-12 rounded-xl font-bold text-white transition-all disabled:opacity-50 hover:-translate-y-0.5 shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2" style={{ background: 'linear-gradient(135deg, #4F46E5, #4338CA)' }}>
                   {loading ? <Loader2 size={18} className="animate-spin" /> : 'Create Account'}
                 </button>
               </form>

@@ -9,6 +9,7 @@ import { Loader2, ArrowLeft, ShieldAlert, GraduationCap, Building2, Briefcase, A
 import { supabase } from '@/lib/supabase'
 import { PORTAL_META, isValidPortal } from '@/lib/auth/portalMeta'
 import type { Portal } from '@/lib/auth/portalMeta'
+import CustomCursor from '@/components/landing/CustomCursor'
 
 // ── Portal icon map ───────────────────────────────────────────────────────────
 const PortalIcon: Record<string, React.FC<{ size: number; color: string }>> = {
@@ -237,15 +238,25 @@ function PortalLoginContent({ portal }: { portal: Portal }) {
       className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
       style={{ background: '#080a19' }}
     >
-      {/* Ambient glow blob */}
-      <div
+      <CustomCursor />
+      {/* Ambient glow blob — animated */}
+      <motion.div
+        animate={{ x: [0, 40, 0], y: [0, -30, 0] }}
+        transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut' }}
         className="absolute w-[600px] h-[600px] rounded-full blur-[160px] pointer-events-none"
         style={{
-          background: `rgba(${meta.accentRgb}, 0.08)`,
+          background: `rgba(${meta.accentRgb}, 0.12)`,
           top: '50%', left: '50%',
           transform: 'translate(-50%, -50%)',
         }}
       />
+      <motion.div
+        animate={{ x: [0, -30, 0], y: [0, 20, 0] }}
+        transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute w-[400px] h-[400px] rounded-full bg-indigo-500/10 blur-[120px] pointer-events-none -bottom-40 -right-40"
+      />
+      {/* Grid overlay */}
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, rgb(148,158,194) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
