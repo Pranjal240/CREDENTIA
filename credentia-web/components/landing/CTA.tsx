@@ -24,7 +24,7 @@ export default function CTA() {
           <div className="absolute -bottom-32 -right-32 w-64 h-64 rounded-full opacity-30 blur-3xl" style={{ background: '#2dd4bf' }} />
 
           <div className="relative z-10">
-            <h2 className="font-heading text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[rgb(var(--text-primary))] mb-4 leading-tight">
+            <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-[rgb(var(--text-primary))] mb-4 leading-tight">
               Ship your verified{' '}
               <span style={{ background: 'linear-gradient(135deg, #818cf8, #2dd4bf)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                 profile today

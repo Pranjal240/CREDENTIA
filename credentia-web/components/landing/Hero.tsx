@@ -412,8 +412,11 @@ export default function Hero() {
               </span>
             </motion.div>
 
-            {/* Headline — character-by-character cut reveal */}
-            <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-extrabold leading-[1.05] mb-6" style={{ color: '#f0f3ff' }}>
+            {/* Headline — character-by-character cut reveal (Bricolage display font) */}
+            <h1
+              className="font-display text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-extrabold leading-[1.02] mb-6"
+              style={{ color: '#f0f3ff', letterSpacing: '-0.03em' }}
+            >
               <VerticalCutReveal
                 splitBy="characters"
                 staggerDuration={0.028}

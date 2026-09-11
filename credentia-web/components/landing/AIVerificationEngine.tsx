@@ -66,7 +66,7 @@ export default function AIVerificationEngine() {
             <Cpu size={11} />
             AI Verification Engine
           </span>
-          <h2 className="font-heading text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[rgb(var(--text-primary))] mb-4 leading-tight">
+          <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-[rgb(var(--text-primary))] mb-4 leading-tight">
             Watch a document
             <span className="block" style={{ background: 'linear-gradient(135deg, #2dd4bf, #818cf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
               get verified
@@ -120,7 +120,7 @@ export default function AIVerificationEngine() {
               {/* Certificate header */}
               <div className="text-center border-b border-amber-900/10 pb-4 mb-4">
                 <div className="text-[10px] font-bold tracking-[0.2em] text-amber-900/50 uppercase mb-1">Indian Institute</div>
-                <div className="font-heading text-lg font-extrabold text-amber-950" style={{ fontFamily: 'serif' }}>Board of Studies · 2024</div>
+                <div className="font-display text-lg font-extrabold tracking-[-0.01em] text-amber-950" style={{ fontFamily: 'serif' }}>Board of Studies · 2024</div>
               </div>
 
               {/* Body */}

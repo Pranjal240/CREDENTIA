@@ -86,7 +86,7 @@ export default function FullStack() {
             <span className="text-[10px] font-bold tracking-[0.25em] text-indigo-400 uppercase mb-4 inline-block">
               Full Stack
             </span>
-            <h2 className="font-heading text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[rgb(var(--text-primary))] leading-tight max-w-2xl">
+            <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-[rgb(var(--text-primary))] leading-tight max-w-2xl">
               Not just verification — a complete{' '}
               <span style={{ background: 'linear-gradient(135deg, #818cf8, #2dd4bf)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                 trust platform
@@ -108,19 +108,30 @@ export default function FullStack() {
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.5, delay: 0.1 + i * 0.08 }}
               whileHover={{ y: -6 }}
-              className={`relative rounded-2xl border ${c.border} p-6 group overflow-hidden transition-all`}
-              style={{ background: 'rgba(14,17,40,0.6)', backdropFilter: 'blur(12px)' }}
+              className={`relative rounded-2xl border ${c.border} p-6 group overflow-hidden`}
+              style={{
+                background: 'linear-gradient(180deg, rgba(20,24,55,0.6) 0%, rgba(14,17,40,0.75) 100%)',
+                backdropFilter: 'blur(12px)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5)',
+                transition: 'box-shadow var(--duration-base) var(--ease-smooth), border-color var(--duration-base) var(--ease-smooth), transform var(--duration-base) var(--ease-smooth)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.14), 0 2px 4px rgba(0,0,0,0.4), 0 16px 40px -8px ${c.accent}40`
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5)'
+              }}
             >
-              <div className="absolute -top-12 -right-12 w-32 h-32 rounded-full opacity-15 group-hover:opacity-30 blur-2xl transition-opacity" style={{ background: c.accent }} />
+              <div className="absolute -top-12 -right-12 w-32 h-32 rounded-full opacity-15 group-hover:opacity-40 blur-2xl transition-opacity duration-500" style={{ background: c.accent }} />
 
-              <div className={`w-11 h-11 rounded-xl ${c.bg} border ${c.border} flex items-center justify-center mb-4`}>
+              <div className={`w-11 h-11 rounded-xl ${c.bg} border ${c.border} flex items-center justify-center mb-4 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3`}>
                 <c.icon size={20} className={c.color} />
               </div>
 
               <span className={`text-[9px] font-bold tracking-[0.2em] ${c.color} uppercase mb-2 inline-block`}>
                 {c.tag}
               </span>
-              <h3 className="font-heading text-lg font-extrabold text-[rgb(var(--text-primary))] mb-2 leading-snug">
+              <h3 className="font-display font-extrabold text-lg text-[rgb(var(--text-primary))] mb-2 leading-snug tracking-[-0.01em]">
                 {c.title}
               </h3>
               <p className="text-sm leading-relaxed" style={{ color: 'rgba(240,243,255,0.72)' }}>

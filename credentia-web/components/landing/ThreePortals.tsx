@@ -66,7 +66,7 @@ export default function ThreePortals() {
           <span className="text-[10px] font-bold tracking-[0.25em] text-indigo-400 uppercase mb-4 inline-block">
             Three Portals · One Trust Layer
           </span>
-          <h2 className="font-heading text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[rgb(var(--text-primary))] mb-5 leading-tight">
+          <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-[rgb(var(--text-primary))] mb-5 leading-tight">
             The link between students,
             <br />
             <span style={{ background: 'linear-gradient(135deg, #818cf8, #2dd4bf)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
@@ -87,8 +87,19 @@ export default function ThreePortals() {
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.6, delay: 0.15 + i * 0.12 }}
               whileHover={{ y: -6 }}
-              className={`relative rounded-2xl p-6 border ${portal.color.border} transition-all duration-300 overflow-hidden group`}
-              style={{ background: 'rgba(14,17,40,0.6)', backdropFilter: 'blur(12px)' }}
+              className={`relative rounded-2xl p-6 border ${portal.color.border} overflow-hidden group`}
+              style={{
+                background: 'linear-gradient(180deg, rgba(20,24,55,0.6) 0%, rgba(14,17,40,0.75) 100%)',
+                backdropFilter: 'blur(12px)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5)',
+                transition: 'box-shadow 240ms cubic-bezier(0.22,1,0.36,1), border-color 240ms',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.14), 0 2px 4px rgba(0,0,0,0.4), 0 16px 40px -8px ${portal.color.accent}55`
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5)'
+              }}
             >
               {/* Glow */}
               <div
@@ -107,7 +118,7 @@ export default function ThreePortals() {
               </div>
 
               {/* Title */}
-              <h3 className="font-heading text-2xl font-extrabold text-[rgb(var(--text-primary))] mb-1 leading-tight">
+              <h3 className="font-display text-2xl font-extrabold text-[rgb(var(--text-primary))] mb-1 leading-tight tracking-[-0.02em]">
                 {portal.title}
               </h3>
               <h3 className="font-heading text-2xl font-extrabold mb-4 leading-tight" style={{ color: portal.color.accent }}>

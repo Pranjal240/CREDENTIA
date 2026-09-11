@@ -64,7 +64,7 @@ export default function Navbar() {
             <div className="relative w-16 h-16 rounded-full overflow-hidden ring-2 ring-[rgb(var(--accent))]/30 group-hover:ring-[rgb(var(--accent))]/60 transition-all">
               <Image src="/logo.png" alt="CREDENTIA" fill className="object-contain p-0.5" />
             </div>
-            <span className="font-heading text-lg font-extrabold tracking-tight text-[rgb(var(--text-primary))]">
+            <span className="font-display text-lg font-extrabold tracking-[-0.02em] text-[rgb(var(--text-primary))]">
               CREDENTIA
             </span>
           </Link>

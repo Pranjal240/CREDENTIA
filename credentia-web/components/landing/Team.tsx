@@ -67,7 +67,7 @@ export default function Team() {
             The Team
           </span>
           <h2
-            className="font-heading text-3xl sm:text-4xl lg:text-5xl font-extrabold mb-4 leading-tight"
+            className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] mb-4 leading-tight"
             style={{ color: "rgb(var(--text-primary))" }}
           >
             Meet the{' '}

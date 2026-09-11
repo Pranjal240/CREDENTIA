@@ -1,7 +1,9 @@
 'use client'
 
+import { useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { motion, useInView } from 'framer-motion'
 
 const XIcon = () => <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
 const LinkedInIcon = () => <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
@@ -29,60 +31,112 @@ const links = {
 }
 
 export default function Footer() {
+  const ref = useRef(null)
+  const inView = useInView(ref, { once: true, amount: 0.1 })
+
   return (
-    <footer className="border-t border-[rgb(var(--border-default))]/50 pt-16 pb-8">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+    <footer ref={ref} className="relative border-t border-[rgb(var(--border-default))]/50 pt-20 pb-10 overflow-hidden">
+      {/* Ambient bottom glow */}
+      <div className="absolute inset-x-0 -top-32 h-64 pointer-events-none opacity-60">
+        <div className="absolute inset-0" style={{
+          background: 'radial-gradient(ellipse at center top, rgba(129,140,248,0.12), transparent 70%)',
+        }} />
+      </div>
+
+      <div className="relative max-w-6xl mx-auto px-4 sm:px-6">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
           {/* Brand column */}
-          <div className="col-span-2">
-            <Link href="/" className="flex items-center gap-2.5 mb-4">
-              <div className="relative w-8 h-8 rounded-full overflow-hidden ring-2 ring-[rgb(var(--accent))]/20">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={inView ? { opacity: 1, y: 0 } : {}}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            className="col-span-2"
+          >
+            <Link href="/" className="inline-flex items-center gap-2.5 mb-4 group">
+              <div className="relative w-9 h-9 rounded-full overflow-hidden ring-2 ring-indigo-400/30 group-hover:ring-indigo-400/60 transition-all duration-300">
                 <Image src="/logo.png" alt="CREDENTIA" fill className="object-contain p-0.5" />
               </div>
-              <span className="font-heading text-lg font-extrabold text-[rgb(var(--text-primary))]">CREDENTIA</span>
+              <span className="font-display text-lg font-extrabold text-[rgb(var(--text-primary))] tracking-[-0.02em]">CREDENTIA</span>
             </Link>
-            <p className="text-[rgb(var(--text-secondary))] text-sm leading-relaxed mb-4 max-w-xs">
-              India&apos;s most trusted AI-powered credential verification platform. Verify once. Trusted forever.
+            <p className="text-sm leading-relaxed mb-5 max-w-xs" style={{ color: 'rgba(240,243,255,0.65)' }}>
+              India&apos;s most trusted AI-powered credential verification platform.{' '}
+              <span className="font-accent-serif text-[rgb(var(--text-primary))]">Verify once. Trusted forever.</span>
             </p>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               {[
                 { icon: XIcon, href: 'https://x.com/Nihal81788', label: 'X' },
                 { icon: LinkedInIcon, href: 'https://www.linkedin.com/in/pranjal-mishra-3a7256291/', label: 'LinkedIn' },
                 { icon: InstagramIcon, href: 'https://www.instagram.com/pranjal.__.mishra/', label: 'Instagram' },
-              ].map((social) => (
-                <a key={social.label} href={social.href} target="_blank" rel="noreferrer" className="w-9 h-9 rounded-lg flex items-center justify-center text-[rgb(var(--text-muted))] hover:text-[rgb(var(--accent))] hover:bg-[rgb(var(--accent))]/5 transition-all" aria-label={social.label}>
+              ].map((social, i) => (
+                <motion.a
+                  key={social.label}
+                  href={social.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={inView ? { opacity: 1, scale: 1 } : {}}
+                  transition={{ delay: 0.2 + i * 0.05, duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
+                  whileHover={{ y: -2 }}
+                  whileTap={{ scale: 0.94 }}
+                  className="w-10 h-10 rounded-xl flex items-center justify-center border border-white/[0.06] text-[rgb(var(--text-muted))] hover:text-indigo-300 hover:border-indigo-400/40 hover:bg-indigo-400/[0.08] transition-all duration-200"
+                  aria-label={social.label}
+                >
                   <social.icon />
-                </a>
+                </motion.a>
               ))}
             </div>
-          </div>
+          </motion.div>
 
           {/* Link columns */}
-          {Object.entries(links).map(([title, items]) => (
-            <div key={title}>
-              <h4 className="font-heading text-sm font-bold text-[rgb(var(--text-primary))] mb-4">{title}</h4>
+          {Object.entries(links).map(([title, items], colI) => (
+            <motion.div
+              key={title}
+              initial={{ opacity: 0, y: 16 }}
+              animate={inView ? { opacity: 1, y: 0 } : {}}
+              transition={{ duration: 0.5, delay: 0.15 + colI * 0.08, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <h4 className="font-display text-xs font-extrabold uppercase tracking-[0.15em] text-[rgb(var(--text-primary))] mb-4">
+                {title}
+              </h4>
               <ul className="space-y-2.5">
-                {items.map((item) => (
-                  <li key={item.label}>
-                    <Link href={item.href} className="text-sm text-[rgb(var(--text-muted))] hover:text-[rgb(var(--text-primary))] transition-colors">
-                      {item.label}
+                {items.map((item, i) => (
+                  <motion.li
+                    key={item.label}
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={inView ? { opacity: 1, x: 0 } : {}}
+                    transition={{ delay: 0.3 + colI * 0.08 + i * 0.04, duration: 0.35 }}
+                  >
+                    <Link
+                      href={item.href}
+                      className="group text-sm flex items-center gap-1.5 transition-colors duration-200"
+                      style={{ color: 'rgba(240,243,255,0.55)' }}
+                    >
+                      <span className="w-0 group-hover:w-2 h-px bg-indigo-400 transition-all duration-300" />
+                      <span className="group-hover:text-white transition-colors duration-200">{item.label}</span>
                     </Link>
-                  </li>
+                  </motion.li>
                 ))}
               </ul>
-            </div>
+            </motion.div>
           ))}
         </div>
 
         {/* Bottom bar */}
-        <div className="border-t border-[rgb(var(--border-default))]/30 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-[rgb(var(--text-muted))] text-xs">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={inView ? { opacity: 1 } : {}}
+          transition={{ delay: 0.6, duration: 0.5 }}
+          className="border-t border-[rgb(var(--border-default))]/30 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4"
+        >
+          <p className="text-xs tabular-nums" style={{ color: 'rgba(240,243,255,0.45)' }}>
             © {new Date().getFullYear()} CREDENTIA. All rights reserved.
           </p>
-          <p className="text-[rgb(var(--text-muted))] text-xs">
-            Made in India 🇮🇳 with ❤️
+          <p className="text-xs" style={{ color: 'rgba(240,243,255,0.45)' }}>
+            Made in India{' '}
+            <span aria-hidden>🇮🇳</span> with{' '}
+            <span className="text-pink-400" aria-hidden>♥</span>
           </p>
-        </div>
+        </motion.div>
       </div>
     </footer>
   )

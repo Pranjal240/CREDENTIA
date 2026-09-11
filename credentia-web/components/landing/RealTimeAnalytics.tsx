@@ -69,7 +69,7 @@ function LiveStream() {
   }, [])
 
   return (
-    <div className="space-y-2 font-mono relative overflow-hidden" style={{ minHeight: 152 }}>
+    <div className="space-y-2 font-mono tabular-nums relative overflow-hidden" style={{ minHeight: 152 }}>
       <AnimatePresence initial={false}>
         {events.map((row, i) => (
           <motion.div
@@ -111,7 +111,7 @@ export default function RealTimeAnalytics() {
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
             Real-Time Analytics
           </span>
-          <h2 className="font-heading text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[rgb(var(--text-primary))] mb-4 leading-tight">
+          <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-[rgb(var(--text-primary))] mb-4 leading-tight">
             Every verification,
             <span className="block" style={{ background: 'linear-gradient(135deg, #818cf8, #2dd4bf)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
               measured live.
