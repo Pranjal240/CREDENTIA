@@ -11,9 +11,54 @@ import MagneticButton from './MagneticButton'
 import SpotlightBackground from './SpotlightBackground'
 import AuroraLayer from './AuroraLayer'
 import PerspectiveGrid from './PerspectiveGrid'
-import FloatingBadges from './FloatingBadges'
 import { VerticalCutReveal } from '@/components/ui/vertical-cut-reveal'
 import { Tilt } from '@/components/ui/tilt'
+
+/* ── Word-by-word fade-in with gradient keyword highlights ─────────── */
+function WordFadeIn({
+  text,
+  highlight = [],
+  delay = 0,
+  stagger = 0.035,
+}: {
+  text: string
+  highlight?: string[]
+  delay?: number
+  stagger?: number
+}) {
+  const words = text.split(' ')
+  const highlightSet = new Set(highlight.map(h => h.trim()))
+  return (
+    <span className="inline">
+      {words.map((word, i) => {
+        const isHi = highlightSet.has(word.trim())
+        return (
+          <motion.span
+            key={`${word}-${i}`}
+            initial={{ opacity: 0, y: 8, filter: 'blur(4px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.45, delay: delay + i * stagger, ease: [0.22, 1, 0.36, 1] }}
+            className={isHi ? 'font-semibold' : ''}
+            style={
+              isHi
+                ? {
+                    background: 'linear-gradient(135deg, #a5b4fc 0%, #6ee7d7 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                    display: 'inline-block',
+                    marginRight: '0.28em',
+                  }
+                : { marginRight: '0.28em' }
+            }
+          >
+            {word}
+          </motion.span>
+        )
+      })}
+    </span>
+  )
+}
 
 /* ── Rotating "VERIFYING NOW" tags ────────────────────────────────── */
 const rotatingTags = [
@@ -329,23 +374,41 @@ export default function Hero() {
       <motion.div style={{ y: orbY2 }} className="orb w-[400px] h-[400px] bg-teal-500/15 -bottom-32 -right-32" />
       <motion.div style={{ y: orbY3 }} className="orb w-[300px] h-[300px] bg-indigo-500/10 top-1/3 right-1/4" />
 
-      {/* Layer 4: floating trust badges — parallax at multiple z-depths */}
-      <FloatingBadges />
-
       <motion.div style={{ y: contentY }} className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-10 items-center">
           {/* Left side */}
           <div>
-            {/* Badge */}
+            {/* Badge — with shimmer sweep + pulse dot */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/[0.08] mb-8"
+              whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
+              className="relative inline-flex items-center gap-2 px-4 py-2 rounded-full mb-8 overflow-hidden"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)' }}
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[rgb(var(--text-secondary))] text-sm font-medium">
-                AI-verified · Aadhaar-safe · <strong className="text-[rgb(var(--text-primary))]">One link, every employer</strong>
+              {/* Shimmer sweep */}
+              <motion.div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  background:
+                    'linear-gradient(90deg, transparent 0%, rgba(129,140,248,0.25) 50%, transparent 100%)',
+                }}
+                animate={{ x: ['-100%', '200%'] }}
+                transition={{ duration: 3.5, repeat: Infinity, ease: 'linear', repeatDelay: 1.5 }}
+              />
+              {/* Pulse indicator */}
+              <span className="relative flex items-center justify-center w-2 h-2">
+                <motion.span
+                  className="absolute inset-0 rounded-full bg-emerald-400"
+                  animate={{ scale: [1, 2.4, 1], opacity: [0.7, 0, 0.7] }}
+                  transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
+                />
+                <span className="relative w-2 h-2 rounded-full bg-emerald-400" />
+              </span>
+              <span className="relative text-sm font-medium" style={{ color: 'rgba(240,243,255,0.75)' }}>
+                AI-verified · Aadhaar-safe ·{' '}
+                <strong className="text-white">One link, every employer</strong>
               </span>
             </motion.div>
 
@@ -393,15 +456,19 @@ export default function Hero() {
               </span>
             </h1>
 
-            {/* Description */}
+            {/* Description — word-by-word fade + highlighted keywords */}
             <motion.p
-              initial={{ opacity: 0, y: 30 }}
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.3 }}
+              transition={{ duration: 0.7, delay: 1.4 }}
               className="text-base sm:text-lg max-w-lg mb-8 leading-relaxed"
-              style={{ color: 'rgba(240,243,255,0.8)' }}
+              style={{ color: 'rgba(240,243,255,0.82)' }}
             >
-              One AI-verified profile. Every document — resume, degree, police clearance, Aadhaar — cross-checked in seconds. Hire, admit, and apply with zero doubt.
+              <WordFadeIn
+                text="One AI-verified profile. Every document — resume, degree, police clearance, Aadhaar — cross-checked in seconds. Hire, admit, and apply with zero doubt."
+                highlight={['AI-verified', 'seconds.', 'doubt.']}
+                delay={1.5}
+              />
             </motion.p>
 
             {/* CTA + Rotating tag */}
@@ -424,24 +491,45 @@ export default function Hero() {
               <RotatingTag />
             </motion.div>
 
-            {/* Feature bullets */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.6 }}
-              className="flex flex-wrap gap-x-6 gap-y-3"
-            >
+            {/* Feature bullets — staggered scale-in + hover glow */}
+            <div className="flex flex-wrap gap-x-6 gap-y-3">
               {[
                 { icon: Cpu, text: 'AI-powered document extraction' },
                 { icon: Shield, text: 'Only last-4 of Aadhaar stored' },
                 { icon: Link2, text: 'One shareable QR + link' },
-              ].map((f) => (
-                <div key={f.text} className="flex items-center gap-2 text-xs" style={{ color: 'rgba(240,243,255,0.7)' }}>
-                  <f.icon size={13} className="text-indigo-400" />
-                  <span className="font-medium">{f.text}</span>
-                </div>
+              ].map((f, i) => (
+                <motion.div
+                  key={f.text}
+                  initial={{ opacity: 0, y: 12, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{
+                    duration: 0.5,
+                    delay: 2.3 + i * 0.12,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                  whileHover={{ y: -2, transition: { duration: 0.2 } }}
+                  className="group flex items-center gap-2 text-xs cursor-default"
+                  style={{ color: 'rgba(240,243,255,0.72)' }}
+                >
+                  <motion.div
+                    className="w-6 h-6 rounded-lg flex items-center justify-center"
+                    style={{
+                      background: 'rgba(129,140,248,0.08)',
+                      border: '1px solid rgba(129,140,248,0.2)',
+                    }}
+                    whileHover={{
+                      background: 'rgba(129,140,248,0.15)',
+                      boxShadow: '0 0 12px rgba(129,140,248,0.35)',
+                    }}
+                  >
+                    <f.icon size={12} className="text-indigo-400" />
+                  </motion.div>
+                  <span className="font-medium transition-colors group-hover:text-white">
+                    {f.text}
+                  </span>
+                </motion.div>
               ))}
-            </motion.div>
+            </div>
           </div>
 
           {/* Right side — 3D-tilting Dashboard mockup */}
