@@ -9,7 +9,11 @@ import {
 } from 'lucide-react'
 import MagneticButton from './MagneticButton'
 import SpotlightBackground from './SpotlightBackground'
+import AuroraLayer from './AuroraLayer'
+import PerspectiveGrid from './PerspectiveGrid'
+import FloatingBadges from './FloatingBadges'
 import { VerticalCutReveal } from '@/components/ui/vertical-cut-reveal'
+import { Tilt } from '@/components/ui/tilt'
 
 /* ── Rotating "VERIFYING NOW" tags ────────────────────────────────── */
 const rotatingTags = [
@@ -310,13 +314,23 @@ export default function Hero() {
 
   return (
     <section ref={heroRef} className="relative min-h-screen flex items-center overflow-hidden pt-24 pb-16">
-      {/* Cursor-reactive spotlight — feels alive from first paint */}
+      {/* ── DEPTH STACK (back → front) ──────────────────────────────── */}
+      {/* Layer 0: aurora — drifting color clouds, mix-blend-screen */}
+      <AuroraLayer />
+
+      {/* Layer 1: 3D perspective grid floor — recedes into horizon, tilts with cursor Y */}
+      <PerspectiveGrid />
+
+      {/* Layer 2: cursor-reactive spotlight — follows the pointer with springy breathing */}
       <SpotlightBackground />
 
-      {/* Animated orbs with parallax (behind spotlight for depth) */}
+      {/* Layer 3: parallax orb blooms */}
       <motion.div style={{ y: orbY1 }} className="orb w-[500px] h-[500px] bg-indigo-500/20 -top-40 -left-40" />
       <motion.div style={{ y: orbY2 }} className="orb w-[400px] h-[400px] bg-teal-500/15 -bottom-32 -right-32" />
       <motion.div style={{ y: orbY3 }} className="orb w-[300px] h-[300px] bg-indigo-500/10 top-1/3 right-1/4" />
+
+      {/* Layer 4: floating trust badges — parallax at multiple z-depths */}
+      <FloatingBadges />
 
       <motion.div style={{ y: contentY }} className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-10 items-center">
@@ -430,9 +444,15 @@ export default function Hero() {
             </motion.div>
           </div>
 
-          {/* Right side — Dashboard mockup */}
+          {/* Right side — 3D-tilting Dashboard mockup */}
           <div className="flex justify-center lg:justify-end">
-            <DashboardMockup />
+            <Tilt
+              rotationFactor={6}
+              springOptions={{ damping: 18, stiffness: 160, mass: 0.5 }}
+              className="w-full max-w-[600px]"
+            >
+              <DashboardMockup />
+            </Tilt>
           </div>
         </div>
       </motion.div>
