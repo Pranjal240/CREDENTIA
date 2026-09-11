@@ -5,6 +5,7 @@ import Navbar from '@/components/landing/Navbar'
 import Hero from '@/components/landing/Hero'
 import ScrollProgress from '@/components/landing/ScrollProgress'
 import CustomCursor from '@/components/landing/CustomCursor'
+import PageIntro from '@/components/landing/PageIntro'
 import TrustedInstitutions from '@/components/landing/TrustedInstitutions'
 import ThreePortals from '@/components/landing/ThreePortals'
 import RealTimeAnalytics from '@/components/landing/RealTimeAnalytics'
@@ -25,6 +26,7 @@ const ROLE_REDIRECT: Record<string, string> = {
 function LandingContent() {
   return (
     <main className="gradient-bg min-h-screen">
+      <PageIntro />
       <ScrollProgress />
       <CustomCursor />
       <Navbar />

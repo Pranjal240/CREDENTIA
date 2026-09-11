@@ -8,6 +8,8 @@ import {
   Upload, CheckCircle2, TrendingUp, Sparkles, Cpu, Users, Building2, Search, Award,
 } from 'lucide-react'
 import MagneticButton from './MagneticButton'
+import SpotlightBackground from './SpotlightBackground'
+import { VerticalCutReveal } from '@/components/ui/vertical-cut-reveal'
 
 /* ── Rotating "VERIFYING NOW" tags ────────────────────────────────── */
 const rotatingTags = [
@@ -308,13 +310,13 @@ export default function Hero() {
 
   return (
     <section ref={heroRef} className="relative min-h-screen flex items-center overflow-hidden pt-24 pb-16">
-      {/* Animated orbs with parallax */}
+      {/* Cursor-reactive spotlight — feels alive from first paint */}
+      <SpotlightBackground />
+
+      {/* Animated orbs with parallax (behind spotlight for depth) */}
       <motion.div style={{ y: orbY1 }} className="orb w-[500px] h-[500px] bg-indigo-500/20 -top-40 -left-40" />
       <motion.div style={{ y: orbY2 }} className="orb w-[400px] h-[400px] bg-teal-500/15 -bottom-32 -right-32" />
       <motion.div style={{ y: orbY3 }} className="orb w-[300px] h-[300px] bg-indigo-500/10 top-1/3 right-1/4" />
-
-      {/* Grid overlay */}
-      <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'radial-gradient(circle, rgb(148,158,194) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
       <motion.div style={{ y: contentY }} className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-10 items-center">
@@ -333,21 +335,49 @@ export default function Hero() {
               </span>
             </motion.div>
 
-            {/* Headline */}
-            <motion.h1
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, delay: 0.15 }}
-              className="font-heading text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-extrabold leading-[1.05] mb-6 text-[rgb(var(--text-primary))]"
-            >
-              The Credential
-              <span className="block italic font-normal my-1" style={{ fontFamily: 'var(--font-serif), "Instrument Serif", serif', background: 'linear-gradient(135deg, #a5b4fc 0%, #6ee7d7 60%, #a5b4fc 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-                Trust Layer
+            {/* Headline — character-by-character cut reveal */}
+            <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-extrabold leading-[1.05] mb-6" style={{ color: '#f0f3ff' }}>
+              <VerticalCutReveal
+                splitBy="characters"
+                staggerDuration={0.028}
+                staggerFrom="first"
+                transition={{ type: 'spring', stiffness: 200, damping: 22 }}
+                containerClassName="block"
+              >
+                The Credential
+              </VerticalCutReveal>
+              <span
+                className="block italic font-normal my-1"
+                style={{
+                  fontFamily: 'var(--font-serif), "Instrument Serif", serif',
+                  background: 'linear-gradient(135deg, #a5b4fc 0%, #6ee7d7 60%, #a5b4fc 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}
+              >
+                <VerticalCutReveal
+                  splitBy="characters"
+                  staggerDuration={0.04}
+                  staggerFrom="first"
+                  transition={{ type: 'spring', stiffness: 200, damping: 22, delay: 0.35 }}
+                  containerClassName="block"
+                >
+                  Trust Layer
+                </VerticalCutReveal>
               </span>
-              <span className="block text-[rgb(var(--text-secondary))] text-[0.5em] font-semibold mt-2 leading-snug">
-                for students, universities &amp; companies.
+              <span className="block text-[0.5em] font-semibold mt-2 leading-snug" style={{ color: 'rgba(240,243,255,0.72)' }}>
+                <VerticalCutReveal
+                  splitBy="words"
+                  staggerDuration={0.05}
+                  staggerFrom="first"
+                  transition={{ type: 'spring', stiffness: 220, damping: 26, delay: 0.85 }}
+                  containerClassName="block"
+                >
+                  for students, universities &amp; companies.
+                </VerticalCutReveal>
               </span>
-            </motion.h1>
+            </h1>
 
             {/* Description */}
             <motion.p
