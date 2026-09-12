@@ -67,7 +67,7 @@ export default function ThreePortals() {
           <span className="text-[10px] font-bold tracking-[0.25em] text-indigo-400 uppercase mb-4 inline-block">
             Three Portals · One Trust Layer
           </span>
-          <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-[rgb(var(--text-primary))] mb-5 leading-tight">
+          <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-white mb-5 leading-tight">
             The link between students,
             <br />
             <span style={{ background: 'linear-gradient(135deg, #818cf8, #2dd4bf)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
@@ -121,7 +121,7 @@ export default function ThreePortals() {
               </div>
 
               {/* Title */}
-              <h3 className="font-display text-2xl font-extrabold text-[rgb(var(--text-primary))] mb-1 leading-tight tracking-[-0.02em]">
+              <h3 className="font-display text-2xl font-extrabold text-white mb-1 leading-tight tracking-[-0.02em]">
                 {portal.title}
               </h3>
               <h3 className="font-heading text-2xl font-extrabold mb-4 leading-tight" style={{ color: portal.color.accent }}>

@@ -40,7 +40,7 @@ function TrustBadge3D({ inView }: { inView: boolean }) {
       initial={{ opacity: 0, scale: 0.7, rotateY: -30 }}
       animate={inView ? { opacity: 1, scale: 1, rotateY: 0 } : {}}
       transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-      className="relative w-full max-w-[440px] mx-auto"
+      className="relative w-full max-w-[280px] sm:max-w-[360px] lg:max-w-[440px] mx-auto"
       style={{ perspective: 1200 }}
     >
       <Tilt rotationFactor={12} springOptions={{ damping: 20, stiffness: 180, mass: 0.5 }} className="relative">
@@ -176,7 +176,7 @@ export default function RealTimeAnalytics() {
   const badgeY = useTransform(scrollYProgress, [0, 1], [40, -40])
 
   return (
-    <section id="analytics" ref={ref} className="py-28 relative overflow-hidden">
+    <section id="analytics" ref={ref} className="py-20 sm:py-28 relative overflow-hidden">
       {/* Ambient section glow */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full opacity-30" style={{ background: 'radial-gradient(circle, rgba(129,140,248,0.15), transparent 60%)' }} />
@@ -194,7 +194,7 @@ export default function RealTimeAnalytics() {
             <Sparkles size={11} />
             The trust layer
           </span>
-          <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-[rgb(var(--text-primary))] mb-4 leading-tight">
+          <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-white mb-4 leading-tight">
             Trust isn&apos;t claimed.{' '}
             <span
               className="block sm:inline"
@@ -268,7 +268,7 @@ export default function RealTimeAnalytics() {
                         <span className="text-[9px] font-bold tracking-[0.2em] uppercase mb-1 inline-block" style={{ color: p.accent }}>
                           {p.tag}
                         </span>
-                        <h3 className="font-display font-extrabold text-base sm:text-lg text-[rgb(var(--text-primary))] mb-1.5 leading-snug tracking-[-0.01em]">
+                        <h3 className="font-display font-extrabold text-base sm:text-lg text-white mb-1.5 leading-snug tracking-[-0.01em]">
                           {p.title}
                         </h3>
                         <p className="text-sm leading-relaxed" style={{ color: 'rgba(240,243,255,0.72)' }}>

@@ -79,7 +79,7 @@ export default function VerificationPipeline() {
           <span className="text-[10px] font-bold tracking-[0.25em] text-violet-400 uppercase mb-4 inline-block">
             Verification Pipeline
           </span>
-          <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-[rgb(var(--text-primary))] mb-4 leading-tight">
+          <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-white mb-4 leading-tight">
             From upload to verified
             <span className="block" style={{ background: 'linear-gradient(135deg, #a78bfa, #2dd4bf)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
               profile in seconds
@@ -160,7 +160,7 @@ export default function VerificationPipeline() {
                   <span className={`text-[9px] font-bold tracking-[0.2em] ${s.text} uppercase mb-2`}>
                     {s.step}
                   </span>
-                  <h3 className="font-display text-xl font-extrabold tracking-[-0.01em] text-[rgb(var(--text-primary))] mb-2 transition-colors group-hover:text-white">
+                  <h3 className="font-display text-xl font-extrabold tracking-[-0.01em] text-white mb-2 transition-colors group-hover:text-white">
                     {s.title}
                   </h3>
                   <p className="text-sm leading-relaxed max-w-[220px]" style={{ color: active ? 'rgba(240,243,255,0.92)' : 'rgba(240,243,255,0.72)' }}>

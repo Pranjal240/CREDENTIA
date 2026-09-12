@@ -24,7 +24,7 @@ export default function CTA() {
           <div className="absolute -bottom-32 -right-32 w-64 h-64 rounded-full opacity-30 blur-3xl" style={{ background: '#2dd4bf' }} />
 
           <div className="relative z-10">
-            <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-[rgb(var(--text-primary))] mb-4 leading-tight">
+            <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-white mb-4 leading-tight">
               Ship your verified{' '}
               <span style={{ background: 'linear-gradient(135deg, #818cf8, #2dd4bf)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                 profile today
@@ -66,7 +66,7 @@ export default function CTA() {
             </div>
 
             {/* Trust badges */}
-            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-xs text-[rgb(var(--text-muted))]">
+            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-xs" style={{ color: 'rgba(240,243,255,0.65)' }}>
               <div className="flex items-center gap-1.5">
                 <ShieldCheck size={13} className="text-emerald-400" />
                 <span className="font-medium">No credit card</span>

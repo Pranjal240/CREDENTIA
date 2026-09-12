@@ -62,24 +62,6 @@ export default function InfoPageLayout({
               </span>
             </Link>
             <div className="flex items-center gap-3">
-              {mounted && (
-                <button
-                  onClick={() => {
-                    if (theme === "dark") {
-                      setTheme("light");
-                      setShowLightWarning(true);
-                      setTimeout(() => setShowLightWarning(false), 10000);
-                    } else {
-                      setTheme("dark");
-                      setShowLightWarning(false);
-                    }
-                  }}
-                  className="w-9 h-9 rounded-lg flex items-center justify-center text-[rgb(var(--text-secondary))] hover:text-[rgb(var(--text-primary))] hover:bg-[rgb(var(--accent))]/5 transition-all"
-                  aria-label="Toggle theme"
-                >
-                  {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-                </button>
-              )}
               <Link
                 href="/"
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[rgb(var(--text-secondary))] hover:text-[rgb(var(--text-primary))] hover:bg-[rgb(var(--accent))]/5 rounded-lg transition-all"

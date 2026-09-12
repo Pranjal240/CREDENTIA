@@ -84,26 +84,6 @@ export default function Navbar() {
 
           {/* Right side */}
           <div className="hidden md:flex items-center gap-3">
-            {mounted && (
-              <button
-                onClick={() => {
-                  if (theme === 'dark') {
-                    setTheme('light')
-                    setShowLightWarning(true)
-                    setTimeout(() => setShowLightWarning(false), 10000)
-                  } else {
-                    setTheme('dark')
-                    setShowLightWarning(false)
-                  }
-                }}
-                className="w-9 h-9 rounded-lg flex items-center justify-center text-[rgb(var(--text-secondary))] hover:text-[rgb(var(--text-primary))] hover:bg-[rgb(var(--accent))]/5 transition-all"
-                aria-label="Toggle theme"
-              >
-                <motion.div key={theme} initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} transition={{ duration: 0.3 }}>
-                  {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-                </motion.div>
-              </button>
-            )}
             {userRole ? (
               <Link
                 href={`/dashboard/${userRole}`}

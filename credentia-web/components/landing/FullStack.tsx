@@ -86,7 +86,7 @@ export default function FullStack() {
             <span className="text-[10px] font-bold tracking-[0.25em] text-indigo-400 uppercase mb-4 inline-block">
               Full Stack
             </span>
-            <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-[rgb(var(--text-primary))] leading-tight max-w-2xl">
+            <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-white leading-tight max-w-2xl">
               Not just verification — a complete{' '}
               <span style={{ background: 'linear-gradient(135deg, #818cf8, #2dd4bf)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                 trust platform
@@ -131,7 +131,7 @@ export default function FullStack() {
               <span className={`text-[9px] font-bold tracking-[0.2em] ${c.color} uppercase mb-2 inline-block`}>
                 {c.tag}
               </span>
-              <h3 className="font-display font-extrabold text-lg text-[rgb(var(--text-primary))] mb-2 leading-snug tracking-[-0.01em]">
+              <h3 className="font-display font-extrabold text-lg text-white mb-2 leading-snug tracking-[-0.01em]">
                 {c.title}
               </h3>
               <p className="text-sm leading-relaxed" style={{ color: 'rgba(240,243,255,0.72)' }}>

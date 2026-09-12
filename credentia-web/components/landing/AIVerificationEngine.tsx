@@ -67,7 +67,7 @@ export default function AIVerificationEngine() {
             <Cpu size={11} />
             AI Verification Engine
           </span>
-          <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-[rgb(var(--text-primary))] mb-4 leading-tight">
+          <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-white mb-4 leading-tight">
             Watch a document
             <span className="block" style={{ background: 'linear-gradient(135deg, #2dd4bf, #818cf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
               get verified
