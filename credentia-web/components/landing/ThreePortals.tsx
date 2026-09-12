@@ -12,7 +12,7 @@ const portals = [
     title: 'Upload once.',
     subtitle: 'Verified forever.',
     description:
-      'Groq AI reads every document, scores your resume against real ATS benchmarks, and mints a tamper-proof profile link.',
+      'Our AI reads every document, scores your resume against real ATS benchmarks, and mints a tamper-proof profile link.',
     bullets: [
       'ATS score 0–100 in 12 seconds',
       'Shareable QR + credentiaonline.in/verify/id',

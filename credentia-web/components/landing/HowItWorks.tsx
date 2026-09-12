@@ -6,7 +6,7 @@ import { Upload, Cpu, Share2 } from 'lucide-react'
 
 const steps = [
   { icon: Upload, num: '01', title: 'Upload Documents', desc: 'Upload your resume, police certificate, Aadhaar, or degree. Or just paste a link.' },
-  { icon: Cpu, num: '02', title: 'AI Verifies Instantly', desc: 'Groq AI analyzes your documents in seconds. Get ATS scores, authenticity checks, and fraud detection.' },
+  { icon: Cpu, num: '02', title: 'AI Verifies Instantly', desc: 'Documents are analyzed in seconds — ATS scores, authenticity checks and fraud signals all in one pass.' },
   { icon: Share2, num: '03', title: 'Share One Link', desc: 'Get a verified profile link. Share it with any company — they see all your credentials in one place.' },
 ]
 

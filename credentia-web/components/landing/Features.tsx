@@ -5,7 +5,7 @@ import { useRef } from 'react'
 import { FileText, Shield, CreditCard, GraduationCap, Link2, BarChart3 } from 'lucide-react'
 
 const features = [
-  { icon: FileText, title: 'AI Resume Scoring', desc: 'Groq AI analyzes your PDF, gives ATS score 0-100, finds missing keywords and strengths.', gradient: 'from-blue-500 to-blue-600' },
+  { icon: FileText, title: 'AI Resume Scoring', desc: 'Your resume gets scored 0–100 against real ATS benchmarks. See the missing keywords and top strengths at a glance.', gradient: 'from-blue-500 to-blue-600' },
   { icon: Shield, title: 'Police Verification', desc: 'Upload certificate or paste link. AI extracts certificate number, authority, district — no manual process.', gradient: 'from-emerald-500 to-emerald-600' },
   { icon: CreditCard, title: 'Aadhaar Verified', desc: 'Upload front/back. AI extracts details. Full number NEVER stored — only last 4 digits.', gradient: 'from-teal-500 to-teal-600' },
   { icon: GraduationCap, title: 'University ERP', desc: 'Universities push academic records directly. Companies see CGPA, degree, branch — verified.', gradient: 'from-indigo-500 to-indigo-600' },

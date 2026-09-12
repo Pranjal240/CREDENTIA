@@ -1,247 +1,286 @@
 'use client'
 
-import { useRef, useEffect, useState } from 'react'
-import { motion, useInView, AnimatePresence } from 'framer-motion'
-import { Activity, ShieldAlert, FileLock2, Zap } from 'lucide-react'
+import { useRef } from 'react'
+import { motion, useInView, useScroll, useTransform } from 'framer-motion'
+import { Lock, ShieldCheck, Sparkles, FileCheck, KeyRound, Layers } from 'lucide-react'
 import { Tilt } from '@/components/ui/tilt'
 
-const statCards = [
+/* ── Trust pillars — user-facing benefits, no implementation details ───── */
+const pillars = [
   {
-    icon: Activity,
-    tag: 'Live change-stream',
-    title: 'Postgres subscriptions per row',
+    Icon: FileCheck,
+    tag: 'CROSS-CHECKED',
+    title: 'Every field verified against source',
+    body: 'Names, dates, degrees and CGPAs are matched back to the issuing university or authority. No hand-typed claims — only what the source confirms.',
     accent: '#818cf8',
-    bg: 'bg-indigo-500/10',
-    border: 'border-indigo-400/25',
-    color: 'text-indigo-400',
+    ring: 'rgba(129,140,248,0.35)',
   },
   {
-    icon: ShieldAlert,
-    tag: 'Fraud detection',
-    title: 'Cross-doc consistency, 99.2% precision',
-    metric: '99.2%',
+    Icon: ShieldCheck,
+    tag: 'FRAUD-RESISTANT',
+    title: 'Detects tampering before you see it',
+    body: 'Seal patterns, font consistency, signature geometry and metadata are scored together. Anything that doesn’t add up is flagged, never quietly accepted.',
     accent: '#f472b6',
-    bg: 'bg-pink-500/10',
-    border: 'border-pink-400/25',
-    color: 'text-pink-400',
+    ring: 'rgba(244,114,182,0.35)',
   },
   {
-    icon: FileLock2,
-    tag: 'Audit trail',
-    title: 'Every admin override logged forever',
-    metric: 'IMMUTABLE',
+    Icon: Lock,
+    tag: 'AADHAAR-SAFE',
+    title: 'Your ID stays yours',
+    body: 'Only the last four digits are stored. The full number is dropped the second extraction finishes — never logged, never shared, never surfaced.',
     accent: '#2dd4bf',
-    bg: 'bg-teal-500/10',
-    border: 'border-teal-400/25',
-    color: 'text-teal-400',
+    ring: 'rgba(45,212,191,0.35)',
   },
 ]
 
-/* ── Rolling event feed ───────────────────────────────────────────── */
-type Event = { id: number; type: 'INSERT' | 'UPDATE'; typeColor: string; msg: string }
-
-const EVENT_POOL: Omit<Event, 'id'>[] = [
-  { type: 'INSERT', typeColor: 'text-emerald-400', msg: 'documents · resume_verified · Priya Sharma (IIT-B) · ATS 91' },
-  { type: 'UPDATE', typeColor: 'text-indigo-400', msg: 'profiles · trust_score = 96 · cross-check passed' },
-  { type: 'INSERT', typeColor: 'text-emerald-400', msg: 'documents · aadhaar_verified · last-4 stored · full dropped' },
-  { type: 'UPDATE', typeColor: 'text-violet-400', msg: 'analytics · verification_count = 12,847 · fraud_flags = 0' },
-  { type: 'INSERT', typeColor: 'text-emerald-400', msg: 'documents · degree_verified · Aryan Kumar (NIT-T) · CGPA 8.9' },
-  { type: 'UPDATE', typeColor: 'text-indigo-400', msg: 'profiles · profile_views += 12 · shared to 3 recruiters' },
-  { type: 'INSERT', typeColor: 'text-teal-400', msg: 'documents · pcc_verified · seal_match = 98.4%' },
-  { type: 'UPDATE', typeColor: 'text-pink-400', msg: 'universities · records_synced = 428 · queue_depth = 0' },
-]
-
-function LiveStream() {
-  const [events, setEvents] = useState<Event[]>(() =>
-    EVENT_POOL.slice(0, 4).map((e, i) => ({ ...e, id: i }))
-  )
-  const nextId = useRef(4)
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setEvents(prev => {
-        const nextTemplate = EVENT_POOL[nextId.current % EVENT_POOL.length]
-        const newEvent: Event = { ...nextTemplate, id: nextId.current }
-        nextId.current += 1
-        return [newEvent, ...prev].slice(0, 4)
-      })
-    }, 3200)
-    return () => clearInterval(interval)
-  }, [])
-
+/* ── Scroll-choreographed 3D trust badge ───────────────────────────────── */
+function TrustBadge3D({ inView }: { inView: boolean }) {
   return (
-    <div className="space-y-2 font-mono tabular-nums relative overflow-hidden" style={{ minHeight: 152 }}>
-      <AnimatePresence initial={false}>
-        {events.map((row, i) => (
-          <motion.div
-            key={row.id}
-            initial={{ opacity: 0, y: -20, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: 34 }}
-            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            className="flex items-center gap-3 text-[11px] px-3 rounded-lg overflow-hidden"
-            style={{ background: i === 0 ? 'rgba(129,140,248,0.08)' : 'rgba(255,255,255,0.025)' }}
-          >
-            <span className={`font-bold ${row.typeColor} w-14 flex-shrink-0`}>{row.type}</span>
-            <span className="text-white/80 flex-1 truncate">{row.msg}</span>
-            <span className="text-white/40 text-[10px] flex-shrink-0">
-              {i === 0 ? 'now' : `${i * 3}s`}
-            </span>
-          </motion.div>
-        ))}
-      </AnimatePresence>
-    </div>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.7, rotateY: -30 }}
+      animate={inView ? { opacity: 1, scale: 1, rotateY: 0 } : {}}
+      transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
+      className="relative w-full max-w-[440px] mx-auto"
+      style={{ perspective: 1200 }}
+    >
+      <Tilt rotationFactor={12} springOptions={{ damping: 20, stiffness: 180, mass: 0.5 }} className="relative">
+        {/* Outer glow */}
+        <div className="absolute -inset-8 rounded-full blur-3xl opacity-40" style={{ background: 'radial-gradient(circle, rgba(129,140,248,0.5), rgba(45,212,191,0.3) 40%, transparent 70%)' }} />
+
+        {/* Rotating outer ring */}
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}
+          className="relative w-full aspect-square"
+        >
+          <svg viewBox="0 0 400 400" className="w-full h-full">
+            <defs>
+              <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#818cf8" />
+                <stop offset="50%" stopColor="#a78bfa" />
+                <stop offset="100%" stopColor="#2dd4bf" />
+              </linearGradient>
+              <radialGradient id="coreGrad" cx="50%" cy="50%">
+                <stop offset="0%" stopColor="rgba(129,140,248,0.4)" />
+                <stop offset="100%" stopColor="rgba(129,140,248,0)" />
+              </radialGradient>
+            </defs>
+            {/* Outer dashed ring */}
+            <circle cx="200" cy="200" r="180" fill="none" stroke="url(#ringGrad)" strokeWidth="1.5" strokeDasharray="4 8" opacity="0.6" />
+            {/* Middle ring */}
+            <circle cx="200" cy="200" r="150" fill="none" stroke="url(#ringGrad)" strokeWidth="1" opacity="0.4" />
+            {/* Inner glow disc */}
+            <circle cx="200" cy="200" r="120" fill="url(#coreGrad)" />
+            {/* Anchor points on ring */}
+            {[0, 60, 120, 180, 240, 300].map((deg) => {
+              const rad = (deg * Math.PI) / 180
+              const cx = 200 + Math.cos(rad) * 180
+              const cy = 200 + Math.sin(rad) * 180
+              return <circle key={deg} cx={cx} cy={cy} r="3" fill="#818cf8" />
+            })}
+          </svg>
+        </motion.div>
+
+        {/* Counter-rotating inner ring (feels alive) */}
+        <motion.div
+          animate={{ rotate: -360 }}
+          transition={{ duration: 25, repeat: Infinity, ease: 'linear' }}
+          className="absolute inset-0 flex items-center justify-center"
+        >
+          <svg viewBox="0 0 300 300" className="w-[60%] h-[60%]">
+            <circle cx="150" cy="150" r="130" fill="none" stroke="rgba(45,212,191,0.35)" strokeWidth="1" strokeDasharray="2 6" />
+          </svg>
+        </motion.div>
+
+        {/* Center shield */}
+        <motion.div
+          animate={{ y: [0, -6, 0] }}
+          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute inset-0 flex items-center justify-center"
+        >
+          <div className="relative">
+            <div
+              className="absolute inset-0 rounded-3xl blur-2xl opacity-60"
+              style={{ background: 'radial-gradient(circle, #818cf8, transparent 70%)' }}
+            />
+            <div
+              className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-3xl flex items-center justify-center"
+              style={{
+                background: 'linear-gradient(135deg, rgba(129,140,248,0.35), rgba(45,212,191,0.28))',
+                border: '1.5px solid rgba(129,140,248,0.5)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2), 0 20px 60px -12px rgba(129,140,248,0.5)',
+              }}
+            >
+              <ShieldCheck size={44} className="text-white drop-shadow-lg" strokeWidth={1.5} />
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Floating orbital labels */}
+        <FloatingChip label="AI cross-check" pos={{ top: '5%', left: '10%' }} accent="#818cf8" delay={0.4} inView={inView} />
+        <FloatingChip label="Signed profile" pos={{ top: '10%', right: '5%' }} accent="#a78bfa" delay={0.6} inView={inView} />
+        <FloatingChip label="Tamper-proof" pos={{ bottom: '15%', left: '3%' }} accent="#2dd4bf" delay={0.8} inView={inView} />
+        <FloatingChip label="Audit-ready" pos={{ bottom: '8%', right: '8%' }} accent="#f472b6" delay={1.0} inView={inView} />
+      </Tilt>
+    </motion.div>
   )
 }
 
-/* ── Live counter — ticks up while section in view ─────────────────── */
-function LiveCounter() {
-  const [count, setCount] = useState(12847)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCount(c => c + Math.floor(Math.random() * 3) + 1)
-    }, 1800)
-    return () => clearInterval(interval)
-  }, [])
+function FloatingChip({
+  label,
+  pos,
+  accent,
+  delay,
+  inView,
+}: {
+  label: string
+  pos: { top?: string; bottom?: string; left?: string; right?: string }
+  accent: string
+  delay: number
+  inView: boolean
+}) {
   return (
-    <span className="tabular-nums" style={{ fontFeatureSettings: '"tnum" 1' }}>
-      {count.toLocaleString('en-IN')}
-    </span>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.6 }}
+      animate={inView ? { opacity: 1, scale: 1 } : {}}
+      transition={{ duration: 0.5, delay, ease: [0.34, 1.56, 0.64, 1] }}
+      className="absolute"
+      style={pos}
+    >
+      <motion.div
+        animate={{ y: [0, -4, 0] }}
+        transition={{ duration: 3 + Math.random(), repeat: Infinity, ease: 'easeInOut', delay: delay * 2 }}
+        className="px-2.5 py-1 rounded-full text-[9px] font-bold tracking-wider uppercase backdrop-blur-md border"
+        style={{
+          background: `${accent}22`,
+          borderColor: `${accent}66`,
+          color: accent,
+          boxShadow: `0 6px 20px ${accent}30`,
+        }}
+      >
+        {label}
+      </motion.div>
+    </motion.div>
   )
 }
 
 export default function RealTimeAnalytics() {
-  const ref = useRef(null)
-  const inView = useInView(ref, { once: true, amount: 0.05 })
+  const ref = useRef<HTMLElement>(null)
+  const inView = useInView(ref, { once: true, amount: 0.15 })
+
+  // Scroll-driven parallax for the badge — feels like the shield hovers as you scroll
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ['start end', 'end start'],
+  })
+  const badgeY = useTransform(scrollYProgress, [0, 1], [40, -40])
 
   return (
-    <section id="analytics" ref={ref} className="py-24 relative overflow-hidden">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
+    <section id="analytics" ref={ref} className="py-28 relative overflow-hidden">
+      {/* Ambient section glow */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full opacity-30" style={{ background: 'radial-gradient(circle, rgba(129,140,248,0.15), transparent 60%)' }} />
+      </div>
+
+      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header — scroll reveal */}
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-14"
+          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+          className="text-center mb-16"
         >
           <span className="inline-flex items-center gap-2 text-[10px] font-bold tracking-[0.25em] text-indigo-400 uppercase mb-4">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
-            Real-Time Analytics
+            <Sparkles size={11} />
+            The trust layer
           </span>
           <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] text-[rgb(var(--text-primary))] mb-4 leading-tight">
-            Every verification,
-            <span className="block" style={{ background: 'linear-gradient(135deg, #818cf8, #2dd4bf)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-              measured live.
+            Trust isn&apos;t claimed.{' '}
+            <span
+              className="block sm:inline"
+              style={{
+                background: 'linear-gradient(135deg, #818cf8, #2dd4bf)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}
+            >
+              It&apos;s cross-checked.
             </span>
           </h2>
-          <p className="text-base sm:text-lg max-w-2xl mx-auto leading-relaxed" style={{ color: 'rgba(240,243,255,0.75)' }}>
-            Supabase Postgres change-streams push updates the moment a document is scored. Admins, universities and companies see the same numbers at the same second — no dashboards to refresh.
+          <p className="text-base sm:text-lg max-w-2xl mx-auto leading-relaxed" style={{ color: 'rgba(240,243,255,0.78)' }}>
+            Every profile is stitched together from verified sources — universities, government IDs and issuing authorities — then sealed against tampering.
           </p>
         </motion.div>
 
-        {/* Live counter — hero metric that ticks in real-time */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={inView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.6, delay: 0.15 }}
-          className="text-center mb-8"
-        >
-          <div className="text-[10px] font-bold tracking-[0.3em] uppercase mb-2" style={{ color: 'rgba(240,243,255,0.5)' }}>
-            Verifications completed today
-          </div>
-          <div
-            className="font-display font-extrabold text-6xl sm:text-7xl tracking-[-0.03em]"
-            style={{
-              background: 'linear-gradient(135deg, #818cf8 0%, #6ee7d7 50%, #a78bfa 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              filter: 'drop-shadow(0 4px 20px rgba(129,140,248,0.35))',
-            }}
-          >
-            <LiveCounter />
-          </div>
-          <div className="flex items-center justify-center gap-2 mt-2 text-xs" style={{ color: 'rgba(240,243,255,0.55)' }}>
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
-            </span>
-            <span className="font-mono text-[11px]">+ new verification every ~2s</span>
-          </div>
-        </motion.div>
+        {/* Split layout — 3D badge left, pillar cards right */}
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-10 lg:gap-16 items-center">
+          <motion.div style={{ y: badgeY }} className="order-2 lg:order-1">
+            <TrustBadge3D inView={inView} />
+          </motion.div>
 
-        {/* Live stream visual */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={inView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.7, delay: 0.25 }}
-          className="rounded-2xl border border-white/[0.08] p-6 mb-6 relative overflow-hidden"
-          style={{
-            background: 'linear-gradient(180deg, rgba(20,24,55,0.65) 0%, rgba(14,17,40,0.8) 100%)',
-            backdropFilter: 'blur(12px)',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 20px 60px -20px rgba(129,140,248,0.25)',
-          }}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Zap size={14} className="text-indigo-400" />
-              <span className="text-xs font-bold text-white/80 tracking-wider font-mono">STREAM · verifications</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
-              </span>
-              <span className="text-[10px] font-semibold text-emerald-400 tracking-wider">LIVE</span>
-            </div>
-          </div>
-
-          <LiveStream />
-        </motion.div>
-
-        {/* 3-column stat cards — each in its own 3D Tilt */}
-        <div className="grid md:grid-cols-3 gap-4">
-          {statCards.map((s, i) => (
-            <motion.div
-              key={s.tag}
-              initial={{ opacity: 0, y: 20 }}
-              animate={inView ? { opacity: 1, y: 0 } : {}}
-              transition={{ duration: 0.5, delay: 0.35 + i * 0.1 }}
-              className="h-full"
-            >
-            <Tilt rotationFactor={6} springOptions={{ damping: 18, stiffness: 160, mass: 0.5 }} className="h-full">
-              <div
-                className={`rounded-2xl border ${s.border} p-5 relative overflow-hidden group h-full`}
-                style={{
-                  background: 'linear-gradient(180deg, rgba(20,24,55,0.65) 0%, rgba(14,17,40,0.8) 100%)',
-                  backdropFilter: 'blur(12px)',
-                  boxShadow: `inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5)`,
-                  transition: 'box-shadow 300ms cubic-bezier(0.22,1,0.36,1)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.14), 0 2px 4px rgba(0,0,0,0.4), 0 20px 48px -12px ${s.accent}55`
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5)'
+          <div className="order-1 lg:order-2 space-y-4">
+            {pillars.map((p, i) => (
+              <motion.div
+                key={p.tag}
+                initial={{ opacity: 0, x: 40 }}
+                animate={inView ? { opacity: 1, x: 0 } : {}}
+                transition={{
+                  duration: 0.6,
+                  delay: 0.2 + i * 0.15,
+                  ease: [0.22, 1, 0.36, 1],
                 }}
               >
-                <div className="absolute -top-10 -right-10 w-28 h-28 rounded-full opacity-25 group-hover:opacity-50 blur-2xl transition-opacity duration-500" style={{ background: s.accent }} />
-                <div className="flex items-center gap-2 mb-3 relative">
-                  <div className={`w-8 h-8 rounded-lg ${s.bg} border ${s.border} flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3`}>
-                    <s.icon size={15} className={s.color} />
+                <Tilt rotationFactor={4} springOptions={{ damping: 20, stiffness: 200, mass: 0.4 }}>
+                  <div
+                    className="relative rounded-2xl p-5 sm:p-6 border overflow-hidden group"
+                    style={{
+                      background: 'linear-gradient(180deg, rgba(20,24,55,0.65) 0%, rgba(14,17,40,0.8) 100%)',
+                      backdropFilter: 'blur(12px)',
+                      borderColor: 'rgba(255,255,255,0.08)',
+                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 24px -8px rgba(0,0,0,0.5)',
+                      transition: 'box-shadow 300ms cubic-bezier(0.22,1,0.36,1), border-color 300ms',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.14), 0 2px 4px rgba(0,0,0,0.4), 0 20px 48px -12px ${p.accent}55`
+                      e.currentTarget.style.borderColor = p.ring
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 24px -8px rgba(0,0,0,0.5)'
+                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'
+                    }}
+                  >
+                    {/* Corner glow */}
+                    <div className="absolute -top-12 -right-12 w-32 h-32 rounded-full opacity-15 group-hover:opacity-40 blur-2xl transition-opacity duration-500" style={{ background: p.accent }} />
+
+                    <div className="relative flex items-start gap-4">
+                      <div
+                        className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform duration-300 group-hover:scale-110"
+                        style={{
+                          background: `${p.accent}18`,
+                          border: `1px solid ${p.ring}`,
+                        }}
+                      >
+                        <p.Icon size={22} style={{ color: p.accent }} />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[9px] font-bold tracking-[0.2em] uppercase mb-1 inline-block" style={{ color: p.accent }}>
+                          {p.tag}
+                        </span>
+                        <h3 className="font-display font-extrabold text-base sm:text-lg text-[rgb(var(--text-primary))] mb-1.5 leading-snug tracking-[-0.01em]">
+                          {p.title}
+                        </h3>
+                        <p className="text-sm leading-relaxed" style={{ color: 'rgba(240,243,255,0.72)' }}>
+                          {p.body}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <span className={`text-[10px] font-bold tracking-[0.2em] ${s.color} uppercase`}>{s.tag}</span>
-                </div>
-                <p className="text-sm leading-relaxed relative" style={{ color: 'rgba(240,243,255,0.82)' }}>
-                  {s.title}
-                </p>
-                {s.metric && (
-                  <div className={`mt-3 font-display text-3xl font-extrabold tracking-[-0.02em] tabular-nums ${s.color}`}>{s.metric}</div>
-                )}
-              </div>
-            </Tilt>
-            </motion.div>
-          ))}
+                </Tilt>
+              </motion.div>
+            ))}
+          </div>
         </div>
       </div>
     </section>

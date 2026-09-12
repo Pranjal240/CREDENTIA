@@ -30,7 +30,7 @@ const cells = [
     tag: 'SPEED',
     icon: Zap,
     title: 'Under 12 seconds',
-    description: 'From upload to verified — PDF parse via unpdf, R2 storage, response in one round trip.',
+    description: 'From upload to verified profile in a single round trip. No queues, no email confirmations to wait on.',
     color: 'text-yellow-400',
     bg: 'bg-yellow-500/10',
     border: 'border-yellow-400/20',
