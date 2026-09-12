@@ -3,13 +3,14 @@
 import { useRef, useState, useEffect } from 'react'
 import { motion, useInView, AnimatePresence } from 'framer-motion'
 import { Cpu, CheckCircle2, GraduationCap, ShieldCheck, Zap } from 'lucide-react'
+import { Tilt } from '@/components/ui/tilt'
 
 const fields = [
   { label: 'FULL NAME', value: 'Pranjal Mishra' },
-  { label: 'INSTITUTION', value: 'Verified university' },
-  { label: 'PROGRAM', value: 'B.Tech · Computer Science' },
-  { label: 'YEAR OF PASSING', value: '2024' },
-  { label: 'CGPA', value: '8.72 / 10' },
+  { label: 'INSTITUTION', value: 'J.C. Bose University, YMCA' },
+  { label: 'PROGRAM', value: 'B.Tech · Electronics & Communication' },
+  { label: 'YEAR OF PASSING', value: 'Aug 2023 – Aug 2027' },
+  { label: 'CGPA', value: '7.51 / 10' },
 ]
 
 export default function AIVerificationEngine() {
@@ -79,7 +80,7 @@ export default function AIVerificationEngine() {
 
         {/* Certificate + extraction grid */}
         <div className="grid lg:grid-cols-2 gap-8 items-center">
-          {/* Certificate mock */}
+          {/* Certificate mock — with 3D tilt */}
           <motion.div
             initial={{ opacity: 0, x: -30 }}
             animate={inView ? { opacity: 1, x: 0 } : {}}
@@ -88,6 +89,7 @@ export default function AIVerificationEngine() {
           >
             <div className="absolute -inset-3 rounded-3xl blur-2xl opacity-40" style={{ background: 'radial-gradient(circle at center, #2dd4bf, transparent 60%)' }} />
 
+            <Tilt rotationFactor={8} springOptions={{ damping: 18, stiffness: 160, mass: 0.5 }} className="relative rounded-2xl">
             <div className="relative rounded-2xl border border-white/[0.1] p-6 shadow-2xl overflow-hidden" style={{ background: 'linear-gradient(180deg, #faf6ec 0%, #f0e9d6 100%)' }}>
               {/* Header row */}
               <div className="flex items-center justify-between mb-4 relative z-10">
@@ -119,17 +121,17 @@ export default function AIVerificationEngine() {
 
               {/* Certificate header */}
               <div className="text-center border-b border-amber-900/10 pb-4 mb-4">
-                <div className="text-[10px] font-bold tracking-[0.2em] text-amber-900/50 uppercase mb-1">Indian Institute</div>
-                <div className="font-display text-lg font-extrabold tracking-[-0.01em] text-amber-950" style={{ fontFamily: 'serif' }}>Board of Studies · 2024</div>
+                <div className="text-[10px] font-bold tracking-[0.2em] text-amber-900/50 uppercase mb-1">J.C. Bose University · YMCA · Faridabad</div>
+                <div className="font-display text-lg font-extrabold tracking-[-0.01em] text-amber-950" style={{ fontFamily: 'serif' }}>Office of the Registrar · 2026</div>
               </div>
 
               {/* Body */}
               <div className="space-y-2 text-amber-950/80 text-sm mb-4" style={{ fontFamily: 'serif' }}>
                 <div>This is to certify that</div>
                 <div className="text-lg font-bold text-amber-950 italic">Pranjal Mishra</div>
-                <div>has successfully completed</div>
-                <div className="italic">B.Tech · Computer Science</div>
-                <div className="text-xs">CGPA 8.72 / 10 · Year of Passing 2024</div>
+                <div>is currently enrolled in</div>
+                <div className="italic">B.Tech · Electronics &amp; Communication Engineering</div>
+                <div className="text-xs">CGPA 7.51 / 10 · Aug 2023 – Aug 2027</div>
               </div>
 
               {/* Seal + progress meter */}
@@ -154,7 +156,7 @@ export default function AIVerificationEngine() {
                   className="w-16 h-16 rounded-full border-4 border-amber-900/30 flex flex-col items-center justify-center flex-shrink-0"
                 >
                   <div className="text-[8px] font-bold tracking-widest text-amber-900/60">SEAL</div>
-                  <div className="text-[8px] font-bold text-amber-900/60">2024</div>
+                  <div className="text-[8px] font-bold text-amber-900/60">2026</div>
                 </motion.div>
               </div>
 
@@ -176,15 +178,17 @@ export default function AIVerificationEngine() {
                 }}
               />
             </div>
+            </Tilt>
           </motion.div>
 
-          {/* Extracted fields panel */}
+          {/* Extracted fields panel — also with 3D tilt (reverse direction for depth) */}
           <motion.div
             initial={{ opacity: 0, x: 30 }}
             animate={inView ? { opacity: 1, x: 0 } : {}}
             transition={{ duration: 0.7, delay: 0.3 }}
           >
-            <div className="rounded-2xl border border-white/[0.08] p-6" style={{ background: 'rgba(14,17,40,0.7)', backdropFilter: 'blur(12px)' }}>
+            <Tilt rotationFactor={6} isReverse springOptions={{ damping: 18, stiffness: 160, mass: 0.5 }}>
+            <div className="rounded-2xl border border-white/[0.08] p-6" style={{ background: 'linear-gradient(180deg, rgba(20,24,55,0.7) 0%, rgba(14,17,40,0.8) 100%)', backdropFilter: 'blur(12px)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 20px 60px -20px rgba(45,212,191,0.25)' }}>
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-2">
                   <motion.div
@@ -268,6 +272,7 @@ export default function AIVerificationEngine() {
                 All fields cross-checked against university ERP · avg 11.4s per document
               </p>
             </div>
+            </Tilt>
           </motion.div>
         </div>
       </div>

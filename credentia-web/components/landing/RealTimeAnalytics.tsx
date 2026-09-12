@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState } from 'react'
 import { motion, useInView, AnimatePresence } from 'framer-motion'
 import { Activity, ShieldAlert, FileLock2, Zap } from 'lucide-react'
+import { Tilt } from '@/components/ui/tilt'
 
 const statCards = [
   {
@@ -93,6 +94,22 @@ function LiveStream() {
   )
 }
 
+/* ── Live counter — ticks up while section in view ─────────────────── */
+function LiveCounter() {
+  const [count, setCount] = useState(12847)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCount(c => c + Math.floor(Math.random() * 3) + 1)
+    }, 1800)
+    return () => clearInterval(interval)
+  }, [])
+  return (
+    <span className="tabular-nums" style={{ fontFeatureSettings: '"tnum" 1' }}>
+      {count.toLocaleString('en-IN')}
+    </span>
+  )
+}
+
 export default function RealTimeAnalytics() {
   const ref = useRef(null)
   const inView = useInView(ref, { once: true, amount: 0.05 })
@@ -122,21 +139,59 @@ export default function RealTimeAnalytics() {
           </p>
         </motion.div>
 
+        {/* Live counter — hero metric that ticks in real-time */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.6, delay: 0.15 }}
+          className="text-center mb-8"
+        >
+          <div className="text-[10px] font-bold tracking-[0.3em] uppercase mb-2" style={{ color: 'rgba(240,243,255,0.5)' }}>
+            Verifications completed today
+          </div>
+          <div
+            className="font-display font-extrabold text-6xl sm:text-7xl tracking-[-0.03em]"
+            style={{
+              background: 'linear-gradient(135deg, #818cf8 0%, #6ee7d7 50%, #a78bfa 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              filter: 'drop-shadow(0 4px 20px rgba(129,140,248,0.35))',
+            }}
+          >
+            <LiveCounter />
+          </div>
+          <div className="flex items-center justify-center gap-2 mt-2 text-xs" style={{ color: 'rgba(240,243,255,0.55)' }}>
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+            </span>
+            <span className="font-mono text-[11px]">+ new verification every ~2s</span>
+          </div>
+        </motion.div>
+
         {/* Live stream visual */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.7, delay: 0.2 }}
+          transition={{ duration: 0.7, delay: 0.25 }}
           className="rounded-2xl border border-white/[0.08] p-6 mb-6 relative overflow-hidden"
-          style={{ background: 'rgba(14,17,40,0.7)', backdropFilter: 'blur(12px)' }}
+          style={{
+            background: 'linear-gradient(180deg, rgba(20,24,55,0.65) 0%, rgba(14,17,40,0.8) 100%)',
+            backdropFilter: 'blur(12px)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 20px 60px -20px rgba(129,140,248,0.25)',
+          }}
         >
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Zap size={14} className="text-indigo-400" />
-              <span className="text-xs font-bold text-white/80 tracking-wider">STREAM · verifications</span>
+              <span className="text-xs font-bold text-white/80 tracking-wider font-mono">STREAM · verifications</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+              </span>
               <span className="text-[10px] font-semibold text-emerald-400 tracking-wider">LIVE</span>
             </div>
           </div>
@@ -144,7 +199,7 @@ export default function RealTimeAnalytics() {
           <LiveStream />
         </motion.div>
 
-        {/* 3-column stat cards */}
+        {/* 3-column stat cards — each in its own 3D Tilt */}
         <div className="grid md:grid-cols-3 gap-4">
           {statCards.map((s, i) => (
             <motion.div
@@ -152,23 +207,39 @@ export default function RealTimeAnalytics() {
               initial={{ opacity: 0, y: 20 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.5, delay: 0.35 + i * 0.1 }}
-              whileHover={{ y: -4 }}
-              className={`rounded-2xl border ${s.border} p-5 relative overflow-hidden group transition-all`}
-              style={{ background: 'rgba(14,17,40,0.7)', backdropFilter: 'blur(12px)' }}
+              className="h-full"
             >
-              <div className="absolute -top-10 -right-10 w-24 h-24 rounded-full opacity-20 group-hover:opacity-40 blur-2xl transition-opacity" style={{ background: s.accent }} />
-              <div className="flex items-center gap-2 mb-3 relative">
-                <div className={`w-8 h-8 rounded-lg ${s.bg} border ${s.border} flex items-center justify-center`}>
-                  <s.icon size={15} className={s.color} />
+            <Tilt rotationFactor={6} springOptions={{ damping: 18, stiffness: 160, mass: 0.5 }} className="h-full">
+              <div
+                className={`rounded-2xl border ${s.border} p-5 relative overflow-hidden group h-full`}
+                style={{
+                  background: 'linear-gradient(180deg, rgba(20,24,55,0.65) 0%, rgba(14,17,40,0.8) 100%)',
+                  backdropFilter: 'blur(12px)',
+                  boxShadow: `inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5)`,
+                  transition: 'box-shadow 300ms cubic-bezier(0.22,1,0.36,1)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.14), 0 2px 4px rgba(0,0,0,0.4), 0 20px 48px -12px ${s.accent}55`
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5)'
+                }}
+              >
+                <div className="absolute -top-10 -right-10 w-28 h-28 rounded-full opacity-25 group-hover:opacity-50 blur-2xl transition-opacity duration-500" style={{ background: s.accent }} />
+                <div className="flex items-center gap-2 mb-3 relative">
+                  <div className={`w-8 h-8 rounded-lg ${s.bg} border ${s.border} flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3`}>
+                    <s.icon size={15} className={s.color} />
+                  </div>
+                  <span className={`text-[10px] font-bold tracking-[0.2em] ${s.color} uppercase`}>{s.tag}</span>
                 </div>
-                <span className={`text-[10px] font-bold tracking-[0.2em] ${s.color} uppercase`}>{s.tag}</span>
+                <p className="text-sm leading-relaxed relative" style={{ color: 'rgba(240,243,255,0.82)' }}>
+                  {s.title}
+                </p>
+                {s.metric && (
+                  <div className={`mt-3 font-display text-3xl font-extrabold tracking-[-0.02em] tabular-nums ${s.color}`}>{s.metric}</div>
+                )}
               </div>
-              <p className="text-sm leading-relaxed relative" style={{ color: 'rgba(240,243,255,0.8)' }}>
-                {s.title}
-              </p>
-              {s.metric && (
-                <div className={`mt-3 text-2xl font-extrabold ${s.color}`}>{s.metric}</div>
-              )}
+            </Tilt>
             </motion.div>
           ))}
         </div>

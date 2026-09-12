@@ -3,6 +3,7 @@
 import { useRef } from 'react'
 import { motion, useInView } from 'framer-motion'
 import { GraduationCap, Building2, Briefcase, ArrowRight, Check } from 'lucide-react'
+import { Tilt } from '@/components/ui/tilt'
 
 const portals = [
   {
@@ -86,8 +87,10 @@ export default function ThreePortals() {
               initial={{ opacity: 0, y: 30 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.6, delay: 0.15 + i * 0.12 }}
-              whileHover={{ y: -6 }}
-              className={`relative rounded-2xl p-6 border ${portal.color.border} overflow-hidden group`}
+            >
+            <Tilt rotationFactor={8} springOptions={{ damping: 18, stiffness: 160, mass: 0.5 }} className="h-full">
+            <div
+              className={`relative rounded-2xl p-6 border ${portal.color.border} overflow-hidden group h-full`}
               style={{
                 background: 'linear-gradient(180deg, rgba(20,24,55,0.6) 0%, rgba(14,17,40,0.75) 100%)',
                 backdropFilter: 'blur(12px)',
@@ -95,7 +98,7 @@ export default function ThreePortals() {
                 transition: 'box-shadow 240ms cubic-bezier(0.22,1,0.36,1), border-color 240ms',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.14), 0 2px 4px rgba(0,0,0,0.4), 0 16px 40px -8px ${portal.color.accent}55`
+                e.currentTarget.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.14), 0 2px 4px rgba(0,0,0,0.4), 0 20px 50px -12px ${portal.color.accent}66`
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.boxShadow = 'inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5)'
@@ -142,6 +145,8 @@ export default function ThreePortals() {
 
               {/* Bottom line accent */}
               <div className={`absolute bottom-0 left-0 right-0 h-0.5 opacity-40 group-hover:opacity-100 transition-opacity`} style={{ background: portal.color.accent }} />
+            </div>
+            </Tilt>
             </motion.div>
           ))}
         </div>
