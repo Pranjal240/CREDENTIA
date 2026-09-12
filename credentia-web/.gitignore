@@ -46,3 +46,12 @@ test-r2.js
 # Secrets / production env --- NEVER COMMIT
 .env.production
 vercel_envs.txt
+
+# Scratch / temp files
+check.js
+check2.js
+test.js
+clean.js
+build_error.log
+env_list.txt
+temp_*.html
