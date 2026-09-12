@@ -8,10 +8,20 @@ html {
   scroll-behavior: smooth;
 }
 
-/* ── Custom cursor: hide native cursor on fine pointers only ── */
+/* ── Custom cursor: hide native cursor ONLY on pages that mounted <CustomCursor />.
+ *   The component adds `data-custom-cursor="on"` to <html> on mount and removes
+ *   it on unmount. Dashboard and any page without CustomCursor keeps the native
+ *   cursor visible. ── */
 @media (pointer: fine) and (prefers-reduced-motion: no-preference) {
-  html, body { cursor: none; }
-  a, button, [role="button"], input, textarea, select, label { cursor: none; }
+  html[data-custom-cursor="on"],
+  html[data-custom-cursor="on"] body { cursor: none; }
+  html[data-custom-cursor="on"] a,
+  html[data-custom-cursor="on"] button,
+  html[data-custom-cursor="on"] [role="button"],
+  html[data-custom-cursor="on"] input,
+  html[data-custom-cursor="on"] textarea,
+  html[data-custom-cursor="on"] select,
+  html[data-custom-cursor="on"] label { cursor: none; }
 }
 
 :root {
