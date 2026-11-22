@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useDash } from '@/components/dash/dashboard-context'
+import { cacheGet, cacheSet } from '@/lib/swr-cache'
 
 interface Options {
   /** Tables whose changes should reload the page's data. */
@@ -22,8 +23,8 @@ interface Options {
 export function useAdminResource<T>(url: string, { tables = [], pollMs = 60_000, enabled = true }: Options = {}) {
   const { userId } = useDash()
   const channelName = useId().replace(/:/g, '')
-  const [data, setData] = useState<T | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState<T | null>(() => cacheGet<T>(url) ?? null)
+  const [loading, setLoading] = useState(() => cacheGet<T>(url) === undefined)
   const [error, setError] = useState('')
   const urlRef = useRef(url)
   urlRef.current = url
@@ -34,6 +35,7 @@ export function useAdminResource<T>(url: string, { tables = [], pollMs = 60_000,
       const res = await fetch(urlRef.current, { cache: 'no-store' })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(body.error || 'This could not be loaded.')
+      cacheSet(urlRef.current, body)
       setData(body as T)
       setError('')
     } catch (err) {

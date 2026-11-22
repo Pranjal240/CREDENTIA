@@ -106,7 +106,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               tabIndex={-1}
               className="px-4 pb-10 pt-5 outline-none sm:px-8 sm:pt-7 lg:h-[max(560px,calc(100dvh-150px))] lg:overflow-y-auto lg:overscroll-contain lg:px-12 lg:pb-12 lg:pt-9 lg:scrollbar-thin"
             >
-              {loading ? (
+              {loading && !userId ? (
                 <div className="grid min-h-[320px] place-items-center">
                   <AILoader label="Loading your workspace" variant="bar" />
                 </div>

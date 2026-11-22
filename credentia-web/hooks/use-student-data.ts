@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { cacheGet, cacheSet } from '@/lib/swr-cache'
 import { useDash } from '@/components/dash/dashboard-context'
 import { isVerifiedStatus, isPendingStatus } from '@/lib/status'
 import type { DocType } from '@/lib/documents'
@@ -52,9 +53,10 @@ export interface VerificationRow {
  */
 export function useStudentData() {
   const { userId } = useDash()
-  const [student, setStudent] = useState<StudentRow | null>(null)
-  const [verifications, setVerifications] = useState<VerificationRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const cached = cacheGet<{ student: StudentRow | null; verifications: VerificationRow[] }>('student-data')
+  const [student, setStudent] = useState<StudentRow | null>(cached?.student ?? null)
+  const [verifications, setVerifications] = useState<VerificationRow[]>(cached?.verifications ?? [])
+  const [loading, setLoading] = useState(!cached)
   const [error, setError] = useState('')
 
   const refresh = useCallback(async () => {
@@ -67,6 +69,7 @@ export function useStudentData() {
       setError(studentResult.error?.message || verificationResult.error?.message || 'Could not load your records.')
     } else {
       setError('')
+      cacheSet('student-data', { student: (studentResult.data as StudentRow | null) ?? null, verifications: (verificationResult.data as VerificationRow[]) ?? [] })
       setStudent((studentResult.data as StudentRow | null) ?? null)
       setVerifications((verificationResult.data as VerificationRow[]) ?? [])
     }

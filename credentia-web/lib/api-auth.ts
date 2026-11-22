@@ -16,8 +16,23 @@ const ROLES: DashRole[] = ['student', 'company', 'university', 'admin']
  * Never trusts an id sent by the client. Returns null when nobody is signed in
  * or the account has been disabled.
  */
+const CALLER_TTL_MS = 30_000
+const callers = new Map<string, { caller: Caller; expires: number }>()
+
 export async function getCaller(): Promise<Caller | null> {
   const supabase = createSupabaseServerClient()
+
+  // The token is only a key for remembering a person who was just confirmed. It is never trusted on its
+  // own: a token that has not been confirmed in the last half minute is checked with the auth server below.
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (token) {
+    const hit = callers.get(token)
+    if (hit && hit.expires > Date.now()) return hit.caller
+  }
+
   const {
     data: { user },
     error,
@@ -28,7 +43,17 @@ export async function getCaller(): Promise<Caller | null> {
   const role = profile?.role as DashRole | undefined
   if (!role || !ROLES.includes(role) || profile?.is_active === false) return null
 
-  return { userId: user.id, role, email: (profile?.email as string) || user.email || '', name: (profile?.full_name as string) || '' }
+  const caller: Caller = { userId: user.id, role, email: (profile?.email as string) || user.email || '', name: (profile?.full_name as string) || '' }
+  if (token) {
+    callers.set(token, { caller, expires: Date.now() + CALLER_TTL_MS })
+    if (callers.size > 500) {
+      const now = Date.now()
+      callers.forEach((value, key) => {
+        if (value.expires <= now) callers.delete(key)
+      })
+    }
+  }
+  return caller
 }
 
 /** Like getCaller, but only for the listed roles. */

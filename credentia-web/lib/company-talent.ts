@@ -70,10 +70,14 @@ export async function loadTalent(options: LoadOptions = {}): Promise<Talent[]> {
   if (rows.length === 0) return []
 
   const ids = rows.map((row) => row.id as string)
-  const [{ data: profiles }, { data: verifications }] = await Promise.all([
+  // The AI output is large, and only the resume and the degree are read from it, so it is fetched for those two
+  // alone. Every document still gets its status.
+  const [{ data: profiles }, { data: verifications }, { data: readings }] = await Promise.all([
     supabaseAdmin.from('profiles').select('id, full_name, email, avatar_url').in('id', ids),
-    supabaseAdmin.from('verifications').select('student_id, type, status, ai_result').in('student_id', ids),
+    supabaseAdmin.from('verifications').select('student_id, type, status').in('student_id', ids),
+    supabaseAdmin.from('verifications').select('student_id, type, ai_result').in('student_id', ids).in('type', ['resume', 'degree']),
   ])
+  const readingOf = new Map<string, Row>(((readings ?? []) as Row[]).map((r) => [`${r.student_id}:${r.type}`, (r.ai_result ?? {}) as Row] as [string, Row]))
 
   const profileById = new Map<string, Row>((profiles ?? []).map((p: Row) => [p.id as string, p] as [string, Row]))
   const docsByStudent = new Map<string, Row[]>()
@@ -86,8 +90,8 @@ export async function loadTalent(options: LoadOptions = {}): Promise<Talent[]> {
   return rows.map((row) => {
     const profile = profileById.get(row.id)
     const docs = docsByStudent.get(row.id) ?? []
-    const resume = docs.find((d) => d.type === 'resume')?.ai_result ?? {}
-    const degree = docs.find((d) => d.type === 'degree')?.ai_result ?? {}
+    const resume = readingOf.get(`${row.id}:resume`) ?? {}
+    const degree = readingOf.get(`${row.id}:degree`) ?? {}
     const verified = (type: string) => docs.some((d) => d.type === type && isVerifiedStatus(d.status))
 
     return {

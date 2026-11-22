@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useDash } from '@/components/dash/dashboard-context'
+import { cacheGet, cacheSet } from '@/lib/swr-cache'
 import type { Talent } from '@/lib/company-talent'
 
 export interface UniversityInfo {
@@ -20,10 +21,11 @@ export interface UniversityInfo {
  */
 export function useRegistry() {
   const { userId } = useDash()
-  const [approved, setApproved] = useState<boolean | null>(null)
-  const [university, setUniversity] = useState<UniversityInfo | null>(null)
-  const [students, setStudents] = useState<Talent[]>([])
-  const [loading, setLoading] = useState(true)
+  const cached = cacheGet<{ approved: boolean; university: UniversityInfo | null; students: Talent[] }>('registry')
+  const [approved, setApproved] = useState<boolean | null>(cached ? cached.approved : null)
+  const [university, setUniversity] = useState<UniversityInfo | null>(cached?.university ?? null)
+  const [students, setStudents] = useState<Talent[]>(cached?.students ?? [])
+  const [loading, setLoading] = useState(!cached)
   const [error, setError] = useState('')
 
   const refresh = useCallback(async () => {
@@ -31,6 +33,7 @@ export function useRegistry() {
       const res = await fetch('/api/university/students', { cache: 'no-store' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'The registry could not be loaded.')
+      cacheSet('registry', { approved: data.approved === true, university: data.university ?? null, students: data.students ?? [] })
       setApproved(data.approved === true)
       setUniversity(data.university ?? null)
       setStudents(data.students ?? [])

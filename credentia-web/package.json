@@ -9,7 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "check:style": "node scripts/check-style-rules.mjs",
-    "check:links": "node scripts/check-links.mjs"
+    "check:links": "node scripts/check-links.mjs",
+    "fast": "next build && next start"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1019.0",

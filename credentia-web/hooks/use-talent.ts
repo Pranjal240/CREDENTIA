@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useDash } from '@/components/dash/dashboard-context'
+import { cacheGet, cacheSet } from '@/lib/swr-cache'
 import type { Talent } from '@/lib/company-talent'
 
 export interface SavedCandidate {
@@ -18,9 +19,10 @@ export interface SavedCandidate {
  */
 export function useTalent() {
   const { userId } = useDash()
-  const [talent, setTalent] = useState<Talent[]>([])
-  const [saved, setSaved] = useState<SavedCandidate[]>([])
-  const [loading, setLoading] = useState(true)
+  const cached = cacheGet<{ talent: Talent[]; saved: SavedCandidate[] }>('talent')
+  const [talent, setTalent] = useState<Talent[]>(cached?.talent ?? [])
+  const [saved, setSaved] = useState<SavedCandidate[]>(cached?.saved ?? [])
+  const [loading, setLoading] = useState(!cached)
   const [error, setError] = useState('')
 
   const refresh = useCallback(async () => {
@@ -28,6 +30,7 @@ export function useTalent() {
       const res = await fetch('/api/company/students', { cache: 'no-store' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'The talent pool could not be loaded.')
+      cacheSet('talent', { talent: data.talent ?? [], saved: data.saved ?? [] })
       setTalent(data.talent ?? [])
       setSaved(data.saved ?? [])
       setError('')

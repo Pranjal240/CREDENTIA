@@ -4,6 +4,7 @@ import * as React from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { roleFromPath, roleHome, type DashRole } from '@/lib/dashboard-nav'
+import { cacheClaim, cacheClear } from '@/lib/swr-cache'
 
 export interface DashProfile {
   id: string
@@ -82,6 +83,7 @@ export function DashboardProvider({ children, fixture }: DashboardProviderProps)
         }
         if (!alive) return
         const authUser = session.user
+        cacheClaim(authUser.id)
         setUserId(authUser.id)
         setEmail(authUser.email ?? null)
 
@@ -194,6 +196,7 @@ export function DashboardProvider({ children, fixture }: DashboardProviderProps)
 
   const signOut = React.useCallback(async () => {
     if (fixture) return
+    cacheClear()
     await supabase.auth.signOut()
     router.push(`/login/${role}`)
     router.refresh()

@@ -50,9 +50,22 @@ export async function GET() {
 
     // The ten documents that have waited longest for a person to look at them.
     const waiting = docs.filter((doc) => isPendingStatus(doc.status)).sort((a, b) => (a.updated_at ?? '').localeCompare(b.updated_at ?? '')).slice(0, 10)
-    const waitingStudents = waiting.length
-      ? await supabaseAdmin.from('students').select('id, name, email').in('id', Array.from(new Set(waiting.map((doc) => doc.student_id))))
-      : { data: [] as { id: string; name: string | null; email: string | null }[] }
+
+    // Organisations that signed up but are not approved yet. The sign up date lives on the account.
+    const orgRows = [
+      ...(pendingUniversities.data ?? []).map((row) => ({ id: row.id as string, kind: 'university' as const, name: (row.university_name as string) || 'Unnamed university', place: [row.city, row.state].filter(Boolean).join(', ') })),
+      ...(pendingCompanies.data ?? []).map((row) => ({ id: row.id as string, kind: 'company' as const, name: (row.company_name as string) || 'Unnamed company', place: [row.industry, row.state].filter(Boolean).join(', ') })),
+    ]
+
+    // The two lookups do not depend on each other, so they go out together.
+    const [waitingStudents, accounts] = await Promise.all([
+      waiting.length
+        ? supabaseAdmin.from('students').select('id, name, email').in('id', Array.from(new Set(waiting.map((doc) => doc.student_id))))
+        : Promise.resolve({ data: [] as { id: string; name: string | null; email: string | null }[] }),
+      orgRows.length
+        ? supabaseAdmin.from('profiles').select('id, created_at').in('id', orgRows.slice(0, 60).map((row) => row.id))
+        : Promise.resolve({ data: [] as { id: string; created_at: string | null }[] }),
+    ])
     const nameOf = new Map((waitingStudents.data ?? []).map((s) => [s.id, s.name || s.email || 'Student']))
     const queue: QueueItem[] = waiting.map((doc) => ({
       id: doc.id,
@@ -63,13 +76,6 @@ export async function GET() {
       ai_confidence: doc.ai_confidence,
       updated_at: doc.updated_at,
     }))
-
-    // Organisations that signed up but are not approved yet. The sign up date lives on the account.
-    const orgRows = [
-      ...(pendingUniversities.data ?? []).map((row) => ({ id: row.id as string, kind: 'university' as const, name: (row.university_name as string) || 'Unnamed university', place: [row.city, row.state].filter(Boolean).join(', ') })),
-      ...(pendingCompanies.data ?? []).map((row) => ({ id: row.id as string, kind: 'company' as const, name: (row.company_name as string) || 'Unnamed company', place: [row.industry, row.state].filter(Boolean).join(', ') })),
-    ]
-    const accounts = orgRows.length ? await supabaseAdmin.from('profiles').select('id, created_at').in('id', orgRows.slice(0, 60).map((row) => row.id)) : { data: [] as { id: string; created_at: string | null }[] }
     const joined = new Map((accounts.data ?? []).map((a) => [a.id, a.created_at]))
     const items: ApprovalItem[] = orgRows
       .map((row) => ({ ...row, created_at: joined.get(row.id) ?? null }))
