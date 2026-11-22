@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,11 +16,14 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(request: Request) {
   try {
-    const { userId, portal } = await request.json()
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
-    }
+    // The person is whoever is signed in. An id sent in the body is never trusted, so nobody can create
+    // or change a profile for someone else.
+    const {
+      data: { user: sessionUser },
+    } = await createSupabaseServerClient().auth.getUser()
+    if (!sessionUser) return NextResponse.json({ error: 'Sign in first.' }, { status: 401 })
+    const userId = sessionUser.id
+    const { portal } = await request.json().catch(() => ({ portal: undefined }))
 
     const safePortal = ['student', 'company', 'university'].includes(portal) ? portal : 'student'
 

@@ -11,10 +11,11 @@ export function formatDate(date: string) {
   })
 }
 
+/** Score colour on black: success, warning, danger. Always paired with the number, never the only signal. */
 export function getScoreColor(score: number) {
-  if (score >= 75) return '#22C55E'
-  if (score >= 50) return '#F5C542'
-  return '#EF4444'
+  if (score >= 75) return '#3DDC97'
+  if (score >= 50) return '#FFB84D'
+  return '#FF6B6B'
 }
 
 export function getInitials(name: string) {

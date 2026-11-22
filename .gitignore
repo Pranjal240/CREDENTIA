@@ -15,3 +15,6 @@ node_modules/
 
 IGNORE/
 docs/MASTER_GUIDE.md
+
+# Browser test output
+.playwright-mcp/

@@ -11,6 +11,7 @@ const nextConfig = {
   },
   experimental: {
     serverComponentsExternalPackages: ['unpdf'],
+    optimizePackageImports: ['@phosphor-icons/react', 'framer-motion', 'lucide-react', 'recharts', 'gsap'],
   },
   webpack: (config, { isServer }) => {
     config.resolve.fallback = { fs: false, net: false, tls: false }

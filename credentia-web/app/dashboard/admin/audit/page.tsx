@@ -1,196 +1,218 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
-import { supabase } from '@/lib/supabase'
-import { motion, AnimatePresence } from 'framer-motion'
-import { ScrollText, Search, Shield, UserCog, ToggleRight, BookmarkCheck, CheckCircle2, X as XIcon, Activity, Flame, Clock } from 'lucide-react'
+import * as React from 'react'
+import { useSearchParams } from 'next/navigation'
+import { Activity, Clock3, ScrollText, ShieldCheck, Users } from 'lucide-react'
+import SmoothButton from '@/components/smoothui/components/smooth-button'
+import { CopyButton } from '@/components/ui/copy-button'
+import { useAdminResource } from '@/hooks/use-admin'
+import { BarsChart, SERIES } from '@/components/dash/charts'
+import { DataTable, type Column } from '@/components/dash/data-table'
+import { Dialog } from '@/components/dash/dialog'
+import { FolderShelf, type FolderSpec } from '@/components/dash/folder-shelf'
+import { EmptyState, ErrorState, Metric, PageHeader, PageSkeleton, Panel } from '@/components/dash/kit'
+import { describeAction } from '@/lib/admin-client'
+import { saveCsv } from '@/lib/csv'
+import { dayLabel, formatDateTime, formatNumber, timeAgo } from '@/lib/format'
+import type { AdminAudit } from '@/lib/admin-types'
 
-const actionIcons: Record<string, any> = {
-  change_role: UserCog,
-  toggle_company_access: ToggleRight,
-  save_candidate: BookmarkCheck,
-  unsave_candidate: XIcon,
-  bulk_approve: CheckCircle2,
-  bulk_reject: XIcon,
+type Category = 'documents' | 'accounts' | 'platform'
+const CATEGORY_LABEL: Record<Category, string> = { documents: 'Documents', accounts: 'Accounts and access', platform: 'Platform and support' }
+
+/** Groups an action by what it touched, so the log can be browsed by topic. */
+function categoryOf(action: string): Category {
+  if (/verification|bulk_|police|cgpa/.test(action)) return 'documents'
+  if (/role|user|student|company|university|access|candidate/.test(action)) return 'accounts'
+  return 'platform'
 }
 
-const actionColors: Record<string, string> = {
-  change_role: '#f59e0b',       // amber
-  toggle_company_access: '#3b82f6', // blue
-  save_candidate: '#10b981',    // emerald
-  unsave_candidate: '#ef4444',  // red
-  bulk_approve: '#22c55e',      // green
-  bulk_reject: '#ef4444',       // red
+const show = (value: unknown): string => (value === null || value === undefined ? 'None' : typeof value === 'object' ? JSON.stringify(value, null, 1) : String(value))
+
+function DetailDialog({ row, onClose }: { row: AdminAudit | null; onClose: () => void }) {
+  const entries = row?.details && typeof row.details === 'object' ? Object.entries(row.details) : []
+  return (
+    <Dialog open={Boolean(row)} onClose={onClose} title={row ? describeAction(row.action) : 'Entry'} description={row ? formatDateTime(row.created_at) : undefined} size="md">
+      {row ? (
+        <div className="space-y-4">
+          <dl className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            {[
+              { label: 'Action', value: row.action },
+              { label: 'Done by', value: row.actor_email || 'System' },
+              { label: 'Touched', value: row.target_type ? row.target_type.replace(/_/g, ' ') : 'Not recorded' },
+            ].map((fact) => (
+              <div key={fact.label} className="glass-flat min-w-0 rounded-xl px-3 py-2.5">
+                <dt className="text-[11px] font-semibold text-muted-foreground">{fact.label}</dt>
+                <dd className="mt-0.5 break-words text-sm font-bold">{fact.value}</dd>
+              </div>
+            ))}
+            <div className="glass-flat min-w-0 rounded-xl px-3 py-2.5">
+              <dt className="text-[11px] font-semibold text-muted-foreground">Id of what was touched</dt>
+              <dd className="mt-1 flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-sm font-bold">{row.target_id || 'Not recorded'}</span>
+                {row.target_id ? <CopyButton value={row.target_id} /> : null}
+              </dd>
+            </div>
+          </dl>
+
+          <div>
+            <h3 className="mb-2 text-sm font-extrabold">What changed</h3>
+            {entries.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No further details were recorded.</p>
+            ) : (
+              <dl className="divide-y divide-white/[0.06] rounded-xl border border-white/10 bg-white/[0.03]">
+                {entries.map(([key, value]) => (
+                  <div key={key} className="grid grid-cols-1 gap-1 px-3 py-2.5 sm:grid-cols-[10rem_1fr]">
+                    <dt className="text-xs font-bold text-muted-foreground">{key.replace(/_/g, ' ')}</dt>
+                    <dd className="min-w-0">
+                      {typeof value === 'object' && value !== null ? (
+                        <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed scrollbar-thin">{show(value)}</pre>
+                      ) : (
+                        <span className="break-words text-sm font-semibold">{show(value)}</span>
+                      )}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </Dialog>
+  )
 }
 
-export default function AuditLogs() {
-  const [logs, setLogs] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [filterAction, setFilterAction] = useState('all')
+export default function AdminAuditPage() {
+  const params = useSearchParams()
+  const { data, loading, error, refresh } = useAdminResource<{ rows: AdminAudit[]; limit: number }>('/api/admin/audit?limit=500', { tables: ['audit_logs'] })
+  const [open, setOpen] = React.useState<AdminAudit | null>(null)
+  const rows = React.useMemo(() => data?.rows ?? [], [data])
+  const query = params?.get('q') ?? ''
 
-  const load = async () => {
-    supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(200).then(({ data }) => {
-      setLogs(data || [])
-      setLoading(false)
-    })
-  }
+  const stats = React.useMemo(() => {
+    const dayAgo = Date.now() - 86_400_000
+    const actors = new Set(rows.map((r) => r.actor_email).filter(Boolean))
+    const tally = new Map<string, number>()
+    for (const r of rows) tally.set(r.action, (tally.get(r.action) ?? 0) + 1)
+    const top = Array.from(tally.entries()).sort((a, b) => b[1] - a[1])[0]
+    return { today: rows.filter((r) => new Date(r.created_at).getTime() >= dayAgo).length, actors: actors.size, kinds: tally.size, top: top ? describeAction(top[0]) : 'None yet' }
+  }, [rows])
 
-  useEffect(() => {
-    load()
-    // Subscribe to new audit logs
-    const channel = supabase.channel('audit_log_rt')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_logs' }, payload => {
-         setLogs(prev => [payload.new, ...prev].slice(0, 200))
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [])
+  const days = React.useMemo(() => {
+    const out: { label: string; values: number[] }[] = []
+    for (let i = 13; i >= 0; i -= 1) {
+      const start = new Date()
+      start.setHours(0, 0, 0, 0)
+      start.setDate(start.getDate() - i)
+      const end = new Date(start)
+      end.setDate(end.getDate() + 1)
+      out.push({ label: dayLabel(start), values: [rows.filter((r) => { const t = new Date(r.created_at).getTime(); return t >= start.getTime() && t < end.getTime() }).length] })
+    }
+    return out
+  }, [rows])
 
-  const actions = Array.from(new Set(logs.map(l => l.action).filter(Boolean)))
+  const exportCsv = () =>
+    saveCsv(`audit_log_${new Date().toISOString().slice(0, 10)}.csv`, [
+      ['When', 'Action', 'Done by', 'Touched', 'Id', 'Details'],
+      ...rows.map((r) => [formatDateTime(r.created_at), r.action, r.actor_email ?? '', r.target_type ?? '', r.target_id ?? '', r.details ? JSON.stringify(r.details) : '']),
+    ])
 
-  const filtered = useMemo(() => {
-    return logs.filter(l => {
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase()
-        if (!(l.action?.toLowerCase().includes(q) || l.actor_email?.toLowerCase().includes(q) || l.target_type?.toLowerCase().includes(q))) return false
-      }
-      if (filterAction !== 'all' && l.action !== filterAction) return false
-      return true
-    })
-  }, [logs, searchQuery, filterAction])
+  const actors = React.useMemo(() => Array.from(new Set(rows.map((r) => r.actor_email).filter((e): e is string => Boolean(e)))).sort(), [rows])
+  const targets = React.useMemo(() => Array.from(new Set(rows.map((r) => r.target_type).filter((t): t is string => Boolean(t)))).sort(), [rows])
 
-  // Analytics for the top summary row
-  const totalEvents = logs.length
-  const todayEvents = logs.filter(l => new Date(l.created_at).toDateString() === new Date().toDateString()).length
-  
-  const mostFrequentAction = useMemo(() => {
-    if (!logs.length) return { action: 'None', count: 0 }
-    const counts = logs.reduce((acc, l) => { acc[l.action] = (acc[l.action] || 0) + 1; return acc }, {} as Record<string, number>)
-    const max = Object.entries(counts).sort((a: any, b: any) => b[1]-a[1])[0]
-    return { action: max[0].replace(/_/g, ' '), count: max[1] }
-  }, [logs])
+  const columns: Column<AdminAudit>[] = [
+    {
+      key: 'when',
+      header: 'When',
+      sortValue: (r) => r.created_at,
+      cell: (r) => (
+        <button type="button" onClick={() => setOpen(r)} className="block text-left">
+          <span className="block text-sm font-bold">{timeAgo(r.created_at)}</span>
+          <span className="block text-xs text-muted-foreground">{formatDateTime(r.created_at)}</span>
+        </button>
+      ),
+    },
+    { key: 'action', header: 'Action', sortValue: (r) => describeAction(r.action), cell: (r) => <span className="font-semibold">{describeAction(r.action)}</span> },
+    { key: 'actor', header: 'Done by', hideOnMobile: true, sortValue: (r) => r.actor_email ?? '', cell: (r) => <span className="block max-w-[14rem] truncate text-muted-foreground">{r.actor_email || 'System'}</span> },
+    { key: 'target', header: 'Touched', hideOnMobile: true, sortValue: (r) => r.target_type ?? '', cell: (r) => <span className="text-muted-foreground">{r.target_type ? r.target_type.replace(/_/g, ' ') : 'Not recorded'}</span> },
+  ]
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" /></div>
+  if (loading) return <PageSkeleton metrics={4} panels={2} />
+  if (error && !data) return <ErrorState message={error} onRetry={refresh} />
+
+  const FOLDER_LIMIT = 60
+  const entry = (r: AdminAudit) => ({
+    id: r.id,
+    name: describeAction(r.action),
+    kind: 'data' as const,
+    meta: r.actor_email || 'System',
+    date: timeAgo(r.created_at),
+    timestamp: new Date(r.created_at).getTime(),
+    onOpen: () => setOpen(r),
+    copyValue: r.target_id || undefined,
+    copyLabel: 'Target id',
+  })
+  const order: Category[] = ['documents', 'accounts', 'platform']
+  const art: Record<Category, FolderSpec['art']> = { documents: 'crimson', accounts: 'obsidian', platform: 'ember' }
+  const sub: Record<Category, string> = { documents: 'Decisions on documents and marks', accounts: 'Roles, profiles and who can see what', platform: 'Settings and support' }
+  const folders: FolderSpec[] = order.map((c) => {
+    const list = rows.filter((r) => categoryOf(r.action) === c)
+    return { id: c, label: CATEGORY_LABEL[c], art: art[c], subtitle: sub[c], meta: list.length === 0 ? 'Empty' : `${formatNumber(list.length)} ${list.length === 1 ? 'entry' : 'entries'}`, entries: list.slice(0, FOLDER_LIMIT).map(entry), emptyTitle: 'Nothing recorded here yet' }
+  })
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-heading text-2xl font-bold text-white flex items-center gap-2"><ScrollText size={24} className="text-indigo-400" /> Audit Center</h1>
-          <p className="text-sm text-white/40 mt-1">Review all administrative and system actions continuously.</p>
-        </div>
+    <>
+      <PageHeader
+        title="Audit log"
+        description="Every admin action on the platform, with who did it and what changed. Entries cannot be edited here."
+        actions={
+          <SmoothButton size="sm" variant="outline" shape="pill" onClick={exportCsv} disabled={rows.length === 0}>
+            Export CSV
+          </SmoothButton>
+        }
+      />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Metric index={0} emphasis title="Entries loaded" icon={<ScrollText />} value={rows.length} detail={`The latest ${formatNumber(data?.limit ?? 0)} at most`} />
+        <Metric index={1} title="Last 24 hours" icon={<Clock3 />} value={stats.today} detail="Actions taken today" />
+        <Metric index={2} title="People acting" icon={<Users />} value={stats.actors} detail="Distinct admins and users" />
+        <Metric index={3} title="Kinds of action" icon={<Activity />} value={stats.kinds} detail={`Most common: ${stats.top}`} />
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {[
-          { label: 'Total Tracked Events', value: totalEvents, icon: Activity, color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
-          { label: 'Events Today', value: todayEvents, icon: Flame, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
-          { label: 'Top Action', value: mostFrequentAction.action, sub: `${mostFrequentAction.count} times`, icon: Clock, color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
-        ].map((s, i) => (
-          <motion.div key={i} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} className="rounded-2xl p-5 border border-white/5 bg-white/[0.02] flex items-center gap-4">
-             <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: s.bg, color: s.color }}><s.icon size={24} /></div>
-             <div>
-               <p className="text-[10px] text-white/40 uppercase font-bold tracking-wider mb-0.5">{s.label}</p>
-               <p className="font-heading text-xl font-bold text-white capitalize leading-tight truncate max-w-[150px]">{s.value}</p>
-               {s.sub && <p className="text-[10px] text-white/30">{s.sub}</p>}
-             </div>
-          </motion.div>
-        ))}
+      <div className="mt-3">
+        <Panel index={4} title="Activity, last 14 days" subtitle="Actions recorded each day">
+          {rows.length === 0 ? <EmptyState icon={<ShieldCheck />} title="Nothing has been recorded yet" hint="Decisions and changes made by admins appear here." /> : <BarsChart title="Audit entries per day" items={days} series={[{ label: 'Entries', color: SERIES.red }]} height={170} />}
+        </Panel>
       </div>
 
-      {/* Filters */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="flex flex-col sm:flex-row gap-3 p-4 rounded-2xl bg-white/[0.01] border border-white/5">
-        <div className="flex-1 relative">
-          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
-          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search actor, target, or action..." className="w-full h-11 pl-11 pr-4 rounded-xl text-sm bg-white/[0.03] border border-white/5 text-white placeholder-white/20 focus:outline-none focus:border-indigo-500/50 focus:bg-white/[0.05] transition-all" />
-        </div>
-        <select value={filterAction} onChange={e => setFilterAction(e.target.value)} className="h-11 px-4 rounded-xl text-sm bg-white/[0.03] border border-white/5 text-white/70 focus:outline-none focus:border-indigo-500/50 cursor-pointer">
-          <option value="all">All Actions</option>
-          {actions.map(a => <option key={a} value={a}>{a.replace(/_/g, ' ').toUpperCase()}</option>)}
-        </select>
-      </motion.div>
-
-      <div className="flex items-center justify-between border-b border-white/5 pb-2">
-        <p className="text-xs font-bold text-white/30 uppercase tracking-widest pl-2">Timeline</p>
-        <p className="text-[10px] text-indigo-400/80 bg-indigo-500/10 px-2 py-0.5 rounded font-bold">{filtered.length} Results</p>
+      <div className="mt-3">
+        <Panel index={5} title="Browse by topic" subtitle="Press a folder to open its entries">
+          <FolderShelf folders={folders} />
+        </Panel>
       </div>
 
-      {/* Timeline List */}
-      <div className="relative pl-4 space-y-4 before:absolute before:inset-0 before:ml-[31px] before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-white/10 before:to-transparent">
-        {filtered.length === 0 ? (
-          <div className="text-center py-16">
-            <Shield size={40} className="mx-auto mb-4 text-white/5" />
-            <p className="text-white/40 font-medium font-heading">No audit logs match criteria</p>
-          </div>
-        ) : (
-          <AnimatePresence>
-            {filtered.map((log, i) => {
-              const Icon = actionIcons[log.action] || Shield
-              const color = actionColors[log.action] || '#6366f1'
-              
-              const dt = new Date(log.created_at)
-              const timeString = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-              const dateString = dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-
-              return (
-                <motion.div 
-                  key={log.id} 
-                  layout
-                  initial={{ opacity: 0, scale: 0.95, x: -10 }} 
-                  animate={{ opacity: 1, scale: 1, x: 0 }} 
-                  exit={{ opacity: 0, scale: 0.9, x: 10 }}
-                  transition={{ delay: Math.min(i * 0.05, 0.5) }}
-                  className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group"
-                >
-                  {/* Timeline Dot */}
-                  <div className="absolute left-[7px] md:left-1/2 md:-translate-x-1/2 flex items-center justify-center w-6 h-6 rounded-full border-4 border-[#0e0e14] bg-white z-10 scale-90 group-hover:scale-110 transition-transform shadow-[0_0_10px_rgba(255,255,255,0.1)]" style={{ backgroundColor: color }}>
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#0e0e14]" />
-                  </div>
-
-                  {/* Card Content */}
-                  <div className="w-[calc(100%-40px)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] hover:shadow-xl hover:border-white/10 transition-all flex flex-col md:flex-row gap-4 items-start group-hover:-translate-y-1">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${color}15`, color }}>
-                      <Icon size={20} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between mb-1">
-                         <p className="text-sm text-white/90 font-bold capitalize">{log.action?.replace(/_/g, ' ')}</p>
-                         <div className="text-right flex flex-col items-end">
-                            <span className="text-xs text-white/50 font-bold">{timeString}</span>
-                            <span className="text-[9px] text-white/30 uppercase">{dateString}</span>
-                         </div>
-                      </div>
-                      
-                      <div className="flex flex-col gap-1 mt-2">
-                        <div className="flex items-center gap-1.5 text-xs">
-                           <span className="text-white/30 w-12 flex-shrink-0 font-medium">Actor:</span>
-                           <span className="text-white/70 truncate px-1.5 py-0.5 rounded bg-white/5">{log.actor_email || 'system'}</span>
-                        </div>
-                        {log.target_type && (
-                          <div className="flex items-center gap-1.5 text-[11px]">
-                             <span className="text-white/30 w-12 flex-shrink-0 font-medium">Target:</span>
-                             <span className="text-white/50 uppercase tracking-widest">{log.target_type}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {log.details && Object.keys(log.details).length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-white/5">
-                          <code className="text-[10px] text-white/30 block whitespace-pre-wrap break-all font-mono leading-relaxed bg-[#0e0e14] p-2 rounded-lg border border-white/5 shadow-inner">
-                            {JSON.stringify(log.details, null, 2)}
-                          </code>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              )
-            })}
-          </AnimatePresence>
-        )}
+      <div className="mt-3">
+        <Panel index={6} title="All entries" subtitle="Search, filter and sort. Press a row to see exactly what changed.">
+          <DataTable
+            label="Audit entries"
+            rows={rows}
+            columns={columns}
+            getRowId={(r) => r.id}
+            searchText={(r) => `${r.action} ${describeAction(r.action)} ${r.actor_email ?? ''} ${r.target_type ?? ''} ${r.target_id ?? ''} ${r.details ? JSON.stringify(r.details) : ''}`}
+            searchPlaceholder="Search by action, person or id"
+            pageSize={12}
+            onRowClick={(r) => setOpen(r)}
+            initialQuery={query}
+            emptyTitle="Nothing has been recorded yet"
+            filters={[
+              { id: 'topic', label: 'All topics', options: order.map((c) => ({ value: c, label: CATEGORY_LABEL[c] })), predicate: (r, v) => categoryOf(r.action) === v },
+              { id: 'actor', label: 'Anyone', options: actors.map((a) => ({ value: a, label: a })), predicate: (r, v) => r.actor_email === v },
+              { id: 'target', label: 'Anything', options: targets.map((t) => ({ value: t, label: t.replace(/_/g, ' ') })), predicate: (r, v) => r.target_type === v },
+            ]}
+          />
+        </Panel>
       </div>
-    </div>
+
+      <DetailDialog row={open} onClose={() => setOpen(null)} />
+    </>
   )
 }

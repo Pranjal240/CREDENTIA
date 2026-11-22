@@ -10,8 +10,9 @@ export async function GET() {
 
     const { data: apps, error } = await supabaseAdmin
       .from('applications')
-      .select('company_id')
+      .select('company_id, job_title, status, created_at')
       .eq('student_id', user.id)
+      .order('created_at', { ascending: false })
 
     if (error) throw error
 

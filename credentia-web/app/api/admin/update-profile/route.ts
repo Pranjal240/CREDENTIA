@@ -1,53 +1,34 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { cookies } from 'next/headers'
-import { createServerClient } from '@supabase/ssr'
+import { audit, cleanText, requireAdmin } from '@/lib/admin'
 
+export const dynamic = 'force-dynamic'
+
+/** An admin editing a user's name or phone, or switching the account on or off. Role changes have their own route. */
 export async function POST(req: Request) {
+  const admin = await requireAdmin()
+  if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const body = await req.json().catch(() => null)
+  const userId = typeof body?.userId === 'string' ? body.userId : ''
+  const updates = body?.updates && typeof body.updates === 'object' ? body.updates : null
+  if (!userId || !updates) return NextResponse.json({ error: 'Choose a user and what to change.' }, { status: 400 })
+  if (userId === admin.userId && updates.is_active === false) return NextResponse.json({ error: 'You cannot switch off your own account.' }, { status: 400 })
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if ('full_name' in updates) patch.full_name = cleanText(updates.full_name, 120)
+  if ('phone' in updates) patch.phone = cleanText(updates.phone, 20) || null
+  if ('is_active' in updates) patch.is_active = Boolean(updates.is_active)
+  if (Object.keys(patch).length === 1) return NextResponse.json({ error: 'Nothing to change.' }, { status: 400 })
+
   try {
-    const cookieStore = cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { get(name: string) { return cookieStore.get(name)?.value } } }
-    )
-    
-    // Auth check
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    // Admin role check
-    const { data: callerProfile } = await supabaseAdmin
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (callerProfile?.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
-    const { userId, updates } = await req.json()
-    if (!userId || !updates) return NextResponse.json({ error: 'Missing userId or updates' }, { status: 400 })
-
-    const { error } = await supabaseAdmin
-      .from('profiles')
-      .update(updates)
-      .eq('id', userId)
-
+    const { error } = await supabaseAdmin.from('profiles').update(patch).eq('id', userId)
     if (error) throw error
-
-    // Log the action
-    await supabaseAdmin.from('audit_logs').insert({
-      admin_id: user.id,
-      action: 'admin_updated_user',
-      target_id: userId,
-      target_type: 'user_profile',
-      details: { updates }
-    })
-
+    const { updated_at: _ignored, ...changes } = patch
+    await audit(admin, 'admin_updated_user', 'user_profile', userId, changes)
     return NextResponse.json({ success: true })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (error) {
+    console.error('[admin/update-profile] failed:', (error as Error).message)
+    return NextResponse.json({ error: 'The user could not be saved.' }, { status: 500 })
   }
 }

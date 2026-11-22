@@ -1,120 +1,114 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
-import { Settings, Building, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
-import { ProfileAvatar } from '@/components/ProfileAvatar'
-import { useRouter } from 'next/navigation'
+import * as React from 'react'
+import { useDash } from '@/components/dash/dashboard-context'
+import { useRegistry } from '@/hooks/use-registry'
+import { Badge, ErrorState, PageHeader, PageSkeleton, Panel } from '@/components/dash/kit'
+import { Field, SelectInput, TextInput } from '@/components/dash/form'
+import { ProfileAvatar } from '@/components/dash/profile-avatar'
+import { Button } from '@/components/ui/button'
 
-export default function UniversitySettings() {
-  const router = useRouter()
-  const [profile, setProfile] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [error, setError] = useState('')
-  const [form, setForm] = useState({ university_name: '' })
+const NAAC = ['A++', 'A+', 'A', 'B++', 'B+', 'B', 'C']
 
-  useEffect(() => {
-    const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      
-      const [{ data: prof }, { data: uni }] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', session.user.id).single(),
-        supabase.from('universities').select('*').eq('id', session.user.id).single()
-      ])
-      setProfile(prof)
-      setForm({ university_name: uni?.university_name || prof?.full_name || '' })
-      setLoading(false)
-    }
-    load()
-  }, [])
+interface Form {
+  university_name: string
+  city: string
+  state: string
+  ugc_id: string
+  naac_grade: string
+}
 
-  const handleSave = async () => {
-    setSaving(true); setError(''); setSaved(false)
+export default function UniversitySettingsPage() {
+  const { userId, email, profile, displayName, setAvatar } = useDash()
+  const { approved, university, loading, error, refresh } = useRegistry()
+  const [form, setForm] = React.useState<Form | null>(null)
+  const [saving, setSaving] = React.useState(false)
+  const [notice, setNotice] = React.useState<{ tone: 'success' | 'error'; text: string } | null>(null)
+
+  React.useEffect(() => {
+    if (loading || form || !university) return
+    setForm({ university_name: university.name, city: university.city ?? '', state: university.state ?? '', ugc_id: university.ugc_id ?? '', naac_grade: university.naac_grade ?? '' })
+  }, [loading, form, university])
+
+  const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!form) return
+    setSaving(true)
+    setNotice(null)
     try {
-      const res = await fetch('/api/university/update-settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ university_name: form.university_name })
-      })
-
-      const result = await res.json()
-      if (!res.ok) throw new Error(result.error || 'Failed to save settings')
-
-      // Update local profile state so sidebar reflects the new name immediately
-      setProfile((prev: any) => prev ? { ...prev, display_name: form.university_name } : prev)
-      
-      setSaved(true)
-      router.refresh()
-      setTimeout(() => setSaved(false), 3000)
-    } catch (err: any) {
-      setError(err.message)
+      const res = await fetch('/api/university/update-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Your settings could not be saved.')
+      setNotice({ tone: 'success', text: 'Saved.' })
+      await refresh()
+    } catch (err) {
+      setNotice({ tone: 'error', text: (err as Error).message })
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" /></div>
+  if (error) return <ErrorState message={error} onRetry={refresh} />
+  if (loading || !form) return <PageSkeleton metrics={0} panels={2} />
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-white flex items-center gap-2"><Settings size={24} className="text-indigo-400" /> University Settings</h1>
-        <p className="text-sm text-white/40 mt-1">Configure your institution profile and basic information.</p>
-      </div>
+    <form onSubmit={save} className="mx-auto max-w-3xl">
+      <PageHeader title="Settings" description="Your institution's details. Students see the name when they link to you." />
 
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 space-y-4">
-        <h2 className="font-heading font-bold text-sm text-white flex items-center gap-2"><Building size={16} className="text-indigo-400" /> Institution Profile</h2>
-        
-        <div className="flex items-center gap-4 py-2">
-          <ProfileAvatar 
-            profile={profile} 
-            userId={profile?.id}
-            onUploadSuccess={(url) => setProfile({ ...profile, avatar_url: url })}
-            size="lg"
-          />
-          <div>
-            <p className="font-heading font-bold text-white">{form.university_name || 'Institution Name'}</p>
-            <p className="text-xs text-white/40">{profile?.email}</p>
+      <div className="space-y-3">
+        <Panel index={0}>
+          <div className="flex items-center gap-4">
+            <ProfileAvatar name={displayName} email={email} avatarUrl={profile?.avatar_url as string | null} userId={userId} size={64} editable onUploaded={setAvatar} />
+            <div className="min-w-0">
+              <p className="truncate text-base font-extrabold">{form.university_name || 'Your institution'}</p>
+              <p className="truncate text-sm text-muted-foreground">{email}</p>
+              <div className="mt-1.5">
+                <Badge tone={approved ? 'success' : 'warning'}>{approved ? 'Approved by an admin' : 'Waiting for admin approval'}</Badge>
+              </div>
+            </div>
           </div>
-        </div>
+        </Panel>
 
-        <div className="space-y-4 pt-2">
-          <div>
-            <label className="text-[10px] text-white/30 uppercase tracking-wider font-medium mb-1 block">Institution Name</label>
-            <input 
-              value={form.university_name} 
-              onChange={e => setForm(f => ({ ...f, university_name: e.target.value }))} 
-              placeholder="Enter your university name" 
-              className="w-full h-11 px-4 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/15 focus:outline-none focus:border-indigo-500/50 transition-colors" 
-            />
+        <Panel index={1} title="Institution">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Institution name" htmlFor="u-name" className="sm:col-span-2">
+              <TextInput id="u-name" value={form.university_name} onChange={(e) => set('university_name', e.target.value)} maxLength={160} required />
+            </Field>
+            <Field label="City" htmlFor="u-city">
+              <TextInput id="u-city" value={form.city} onChange={(e) => set('city', e.target.value)} maxLength={80} autoComplete="address-level2" />
+            </Field>
+            <Field label="State" htmlFor="u-state">
+              <TextInput id="u-state" value={form.state} onChange={(e) => set('state', e.target.value)} maxLength={80} autoComplete="address-level1" />
+            </Field>
+            <Field label="UGC identifier" htmlFor="u-ugc" hint="Helps an admin confirm your institution">
+              <TextInput id="u-ugc" value={form.ugc_id} onChange={(e) => set('ugc_id', e.target.value)} maxLength={40} />
+            </Field>
+            <Field label="NAAC grade" htmlFor="u-naac">
+              <SelectInput id="u-naac" value={form.naac_grade} onChange={(e) => set('naac_grade', e.target.value)}>
+                <option value="">Not added</option>
+                {NAAC.map((grade) => (
+                  <option key={grade} value={grade}>
+                    {grade}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
           </div>
-          <div>
-            <label className="text-[10px] text-white/30 uppercase tracking-wider font-medium mb-1 block">Account Contact (Read Only)</label>
-            <input value={profile?.email || ''} readOnly className="w-full h-11 px-4 rounded-xl text-sm bg-black/20 border border-white/5 text-white/50 cursor-not-allowed" />
-          </div>
+        </Panel>
+
+        <div className="flex flex-wrap items-center justify-end gap-3 pb-2">
+          {notice ? (
+            <p role={notice.tone === 'error' ? 'alert' : 'status'} className={notice.tone === 'error' ? 'text-sm text-destructive' : 'text-sm font-semibold text-success'}>
+              {notice.text}
+            </p>
+          ) : null}
+          <Button type="submit" variant="primary" disabled={saving}>
+            {saving ? 'Saving' : 'Save changes'}
+          </Button>
         </div>
       </div>
-
-      <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-500/5 border border-amber-500/10 text-amber-400 text-xs">
-        <AlertCircle size={14} />
-        <span>Saving will globally update your university identity.</span>
-      </div>
-
-      {error && (
-        <div className="rounded-xl px-4 py-3 text-sm flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.08)', color: '#f87171', border: '1px solid rgba(239,68,68,0.15)' }}>
-          <AlertCircle size={16} /> {error}
-        </div>
-      )}
-      <div className="flex items-center gap-4">
-        <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white disabled:opacity-50 transition-all hover:translate-y-[-1px]" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 4px 24px rgba(99,102,241,0.25)' }}>
-          {saving ? <Loader2 size={18} className="animate-spin" /> : <Settings size={18} />}
-          {saving ? 'Saving...' : 'Save Settings'}
-        </button>
-        {saved && <span className="flex items-center gap-2 text-sm text-emerald-400"><CheckCircle2 size={16} /> Update successful!</span>}
-      </div>
-    </div>
+    </form>
   )
 }

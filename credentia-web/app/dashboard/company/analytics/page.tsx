@@ -1,517 +1,158 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
-import { supabase } from '@/lib/supabase'
-import { motion } from 'framer-motion'
-import { BarChart3, Users, Shield, GraduationCap, TrendingUp, CreditCard, CheckCircle2, Sparkles, BookmarkCheck, ArrowUpRight, Search, FileText, ChevronRight, X, LayoutTemplate, BookOpen, Paperclip } from 'lucide-react'
-import { ProfileAvatar } from '@/components/ProfileAvatar'
+import * as React from 'react'
+import { BookmarkCheck, CircleCheck, Shield, TrendingUp, Users } from 'lucide-react'
+import { useTalent } from '@/hooks/use-talent'
+import { BarsChart, DonutChart, Meter, SERIES } from '@/components/dash/charts'
+import { EmptyState, ErrorState, Metric, PageHeader, PageSkeleton, Panel } from '@/components/dash/kit'
+import SmoothButton from '@/components/smoothui/components/smooth-button'
+import { Button } from '@/components/ui/button'
+import { saveCsv } from '@/lib/csv'
+import { docLabel, type DocType } from '@/lib/documents'
+import { isVerifiedStatus } from '@/lib/status'
 
+const BINS = [
+  { label: '0 to 30', test: (n: number) => n <= 30 },
+  { label: '31 to 50', test: (n: number) => n > 30 && n <= 50 },
+  { label: '51 to 70', test: (n: number) => n > 50 && n <= 70 },
+  { label: '71 to 90', test: (n: number) => n > 70 && n <= 90 },
+  { label: '91 to 100', test: (n: number) => n > 90 },
+]
 
+const COVERAGE: DocType[] = ['resume', 'police', 'aadhaar', 'degree', 'marksheet_10th', 'marksheet_12th']
 
-export default function CompanyAnalytics() {
-  const [students, setStudents] = useState<any[]>([])
-  const [savedCount, setSavedCount] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'overview' | 'roster'>('overview')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedStudent, setSelectedStudent] = useState<any>(null)
+const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0)
 
-  useEffect(() => {
-    let mounted = true
-    const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      const user = session?.user
-      if (!user || !mounted) { setLoading(false); return }
+export default function CompanyAnalyticsPage() {
+  const { talent, savedIds, loading, error, refresh } = useTalent()
+  const [applications, setApplications] = React.useState<{ status: string | null }[]>([])
 
-      // Fetch students via API to bypass RLS restrictions accurately
-      const res = await fetch('/api/company/students')
-      const { students: stuData } = await res.json()
-
-      // Map students with extracted real ATS scores
-      const mapped = (stuData || []).map((s: any) => {
-        const resumeVerif = s.verifications?.find((v: any) => v.type === 'resume')
-        const degreeVerif = s.verifications?.find((v: any) => v.type === 'degree')
-        const aiResult = resumeVerif?.ai_result || {}
-        const degreeResult = degreeVerif?.ai_result || {}
-
-        return {
-          ...s,
-          name: s.name || s.profiles?.full_name || '',
-          email: s.profiles?.email || '',
-          profile: s.profiles,
-          ats_score: aiResult.ats_score || s.ats_score || 0,
-          course: degreeResult.course || aiResult.course || s.course || '',
-          cgpa: degreeResult.grade_cgpa || aiResult.cgpa || s.cgpa || '',
-          degree_verified: s.verifications?.some((v: any) => v.type === 'degree' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          police_verified: s.verifications?.some((v: any) => v.type === 'police' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          aadhaar_verified: s.verifications?.some((v: any) => v.type === 'aadhaar' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          resume_verified: s.verifications?.some((v: any) => v.type === 'resume' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          marksheet10_verified: s.verifications?.some((v: any) => v.type === 'marksheet_10th' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          marksheet12_verified: s.verifications?.some((v: any) => v.type === 'marksheet_12th' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          passport_verified: s.verifications?.some((v: any) => v.type === 'passport' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          trust_score: s.trust_score || 0,
-          strengths: aiResult.strengths || [],
-          top_skills: aiResult.top_skills || [],
-          improvements: aiResult.improvements || [],
-        }
-      })
-
-      if (mounted) {
-        setStudents(mapped)
-        const { count } = await supabase
-          .from('saved_candidates')
-          .select('*', { count: 'exact', head: true })
-          .eq('company_id', user.id)
-        setSavedCount(count || 0)
-        setLoading(false)
-      }
-    }
-    load()
-
-    const sub = supabase.channel('company_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => { load() })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'verifications' }, () => { load() })
-      .subscribe()
-
-    return () => {
-      mounted = false
-      supabase.removeChannel(sub)
-    }
+  React.useEffect(() => {
+    fetch('/api/company/applications', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : { applications: [] }))
+      .then((data) => setApplications(data.applications ?? []))
+      .catch(() => undefined)
   }, [])
 
-  const stats = useMemo(() => {
-    const list = students
-    const total = list.length
-    const resumeV = list.filter(s => s.resume_verified).length
-    const policeV = list.filter(s => s.police_verified).length
-    const aadhaarV = list.filter(s => s.aadhaar_verified).length
-    const degreeV = list.filter(s => s.degree_verified).length
-    const mark10V = list.filter(s => s.marksheet10_verified).length
-    const mark12V = list.filter(s => s.marksheet12_verified).length
-    const passportV = list.filter(s => s.passport_verified).length
-    const avgAts = total ? Math.round(list.reduce((a, s) => a + (s.ats_score || 0), 0) / total) : 0
-    const avgTrust = total ? Math.round(list.reduce((a, s) => a + (s.trust_score || 0), 0) / total) : 0
-    const fullyVerified = list.filter(s => s.degree_verified && s.police_verified && s.aadhaar_verified).length
-    const highAts = list.filter(s => (s.ats_score || 0) >= 70).length
+  const stats = React.useMemo(() => {
+    const total = talent.length
+    const fully = talent.filter((t) => t.police_verified && t.aadhaar_verified && t.degree_verified).length
+    const high = talent.filter((t) => t.ats_score >= 70).length
+    const avgTrust = total ? Math.round(talent.reduce((s, t) => s + t.trust_score, 0) / total) : 0
+    const avgAts = total ? Math.round(talent.reduce((s, t) => s + t.ats_score, 0) / total) : 0
 
-    const atsRanges = [
-      { label: '0–30', count: list.filter(s => (s.ats_score || 0) <= 30).length, color: '#ef4444' },
-      { label: '31–50', count: list.filter(s => (s.ats_score || 0) > 30 && (s.ats_score || 0) <= 50).length, color: '#f59e0b' },
-      { label: '51–70', count: list.filter(s => (s.ats_score || 0) > 50 && (s.ats_score || 0) <= 70).length, color: '#3b82f6' },
-      { label: '71–90', count: list.filter(s => (s.ats_score || 0) > 70 && (s.ats_score || 0) <= 90).length, color: '#10b981' },
-      { label: '91–100', count: list.filter(s => (s.ats_score || 0) > 90).length, color: '#22c55e' },
-    ]
+    const courses = new Map<string, number>()
+    const years = new Map<number, number>()
+    for (const t of talent) {
+      if (t.course) courses.set(t.course, (courses.get(t.course) ?? 0) + 1)
+      if (t.graduation_year) years.set(t.graduation_year, (years.get(t.graduation_year) ?? 0) + 1)
+    }
 
-    const courseBreakdown = (Object.entries(
-      list.reduce((acc: Record<string, number>, s) => {
-        const c = (s.course || '').trim()
-        if (c && c !== 'Unknown' && c !== 'N/A') {
-          acc[c] = (acc[c] || 0) + 1
-        }
-        return acc
-      }, {})
-    ) as [string, number][]).sort((a, b) => b[1] - a[1]).slice(0, 8)
+    return {
+      total,
+      fully,
+      high,
+      avgTrust,
+      avgAts,
+      bins: BINS.map((b) => ({ label: b.label, values: [talent.filter((t) => b.test(t.ats_score)).length] })),
+      coverage: COVERAGE.map((type) => ({ type, count: talent.filter((t) => t.docs.some((d) => d.type === type && isVerifiedStatus(d.status))).length })),
+      topCourses: Array.from(courses.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, count]) => ({ label, values: [count] })),
+      years: Array.from(years.entries()).sort((a, b) => a[0] - b[0]).map(([label, count]) => ({ label: String(label), values: [count] })),
+    }
+  }, [talent])
 
-    return { total, resumeV, policeV, aadhaarV, degreeV, mark10V, mark12V, passportV, avgAts, avgTrust, fullyVerified, highAts, atsRanges, courseBreakdown }
-  }, [students])
+  const appCount = (status: string) => applications.filter((a) => (a.status || 'pending') === status).length
 
-  const filteredStudents = useMemo(() => {
-    return students.filter(s => 
-      s.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.course?.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  }, [students, searchQuery])
+  const exportCsv = () =>
+    saveCsv('talent_pool.csv', [
+      ['Name', 'Course', 'Branch', 'Graduation year', 'CGPA', 'ATS score', 'Trust score', 'Police verified', 'Aadhaar verified', 'Degree verified', 'Verified documents'],
+      ...talent.map((t) => [t.name, t.course, t.branch, t.graduation_year, t.cgpa, t.ats_score, t.trust_score, t.police_verified ? 'Yes' : 'No', t.aadhaar_verified ? 'Yes' : 'No', t.degree_verified ? 'Yes' : 'No', t.verified_docs_count]),
+    ])
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-          <span className="text-xs text-white/30 dark:text-white/30 font-medium tracking-wider">Loading Analytics...</span>
-        </div>
-      </div>
-    )
-  }
-
-  const maxAts = Math.max(...stats.atsRanges.map(r => r.count), 1)
-
-  const statCards = [
-    { label: 'Total Candidates', value: stats.total, icon: Users, accent: '#10b981', gradient: 'from-emerald-500/15 to-emerald-400/5' },
-    { label: 'Avg ATS Score', value: stats.avgAts, icon: TrendingUp, accent: '#3b82f6', gradient: 'from-blue-500/15 to-blue-400/5' },
-    { label: 'Avg Trust Score', value: `${stats.avgTrust}%`, icon: CheckCircle2, accent: '#14b8a6', gradient: 'from-teal-500/15 to-teal-400/5' },
-    { label: 'Fully Verified', value: stats.fullyVerified, icon: Sparkles, accent: '#22c55e', gradient: 'from-green-500/15 to-green-400/5' },
-    { label: 'Police Verified', value: stats.policeV, icon: Shield, accent: '#8b5cf6', gradient: 'from-violet-500/15 to-violet-400/5' },
-    { label: 'Saved by You', value: savedCount, icon: BookmarkCheck, accent: '#f59e0b', gradient: 'from-amber-500/15 to-amber-400/5' },
-  ]
+  if (loading) return <PageSkeleton metrics={4} panels={2} />
+  if (error) return <ErrorState message={error} onRetry={refresh} />
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Header & Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-xl sm:text-2xl font-bold text-text-primary flex items-center gap-2">
-            <BarChart3 size={22} className="text-emerald-500 flex-shrink-0" />
-            Talent Analytics
-          </h1>
-          <p className="text-sm text-text-muted mt-1">Insights into the available talent pool and detailed candidate roster.</p>
-        </div>
-        
-        <div className="flex items-center gap-1 bg-white/5 dark:bg-black/20 p-1 rounded-lg border border-border">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'overview' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'text-text-muted hover:text-text-primary'}`}
-          >
-            <LayoutTemplate size={16} /> Overview
-          </button>
-          <button
-            onClick={() => setActiveTab('roster')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'roster' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400' : 'text-text-muted hover:text-text-primary'}`}
-          >
-            <Users size={16} /> Roster
-          </button>
-        </div>
-      </div>
+    <>
+      <PageHeader
+        title="Analytics"
+        description="The talent pool as it stands today, counted from the verified records."
+        actions={
+          <SmoothButton size="sm" variant="outline" shape="pill" onClick={exportCsv} disabled={talent.length === 0}>
+            Export CSV
+          </SmoothButton>
+        }
+      />
 
-      {activeTab === 'overview' && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-          {/* Stat cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {statCards.map((s, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className={`rounded-xl p-3 sm:p-4 border border-border bg-gradient-to-br ${s.gradient}`}
-              >
-                <s.icon size={16} style={{ color: s.accent }} className="mb-2" />
-                <p className="font-heading text-xl sm:text-2xl font-bold text-text-primary">{s.value}</p>
-                <p className="text-[9px] text-text-muted uppercase tracking-wider font-semibold mt-0.5 leading-tight">{s.label}</p>
-              </motion.div>
-            ))}
+      {stats.total === 0 ? (
+        <Panel>
+          <EmptyState icon={<Users />} title="No public profiles yet" hint="Charts appear once students make their profile public." action={<Button href="/dashboard/company" variant="default" size="sm">Open talent search</Button>} />
+        </Panel>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Metric index={0} emphasis title="Talent pool" icon={<Users />} value={stats.total} detail="Public profiles" />
+            <Metric index={1} title="Fully verified" icon={<CircleCheck />} value={pct(stats.fully, stats.total)} format="percent" detail={`${stats.fully} students`} />
+            <Metric index={2} title="ATS 70 or above" icon={<TrendingUp />} value={pct(stats.high, stats.total)} format="percent" detail={`${stats.high} students`} />
+            <Metric index={3} title="Saved by you" icon={<BookmarkCheck />} value={savedIds.size} detail={`Average trust ${stats.avgTrust}`} />
           </div>
 
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        {/* ATS Distribution Bar Chart */}
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
-          <h2 className="font-heading font-bold text-sm text-text-primary mb-4 sm:mb-6">ATS Score Distribution</h2>
-          {stats.total === 0 ? (
-            <div className="h-48 flex items-center justify-center">
-              <p className="text-sm text-text-muted">No candidate data yet.</p>
-            </div>
-          ) : (
-            <div className="flex items-end gap-2 sm:gap-4 lg:gap-6 h-44 sm:h-48">
-              {stats.atsRanges.map((range, i) => {
-                const heightPct = maxAts > 0 ? (range.count / maxAts) * 100 : 0
-                return (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
-                    <span className="text-xs font-bold text-text-primary">{range.count}</span>
-                    <div className="w-full rounded-t-lg relative" style={{ height: '160px' }}>
-                      <motion.div
-                        initial={{ height: 0 }}
-                        animate={{ height: `${Math.max(heightPct, range.count > 0 ? 4 : 0)}%` }}
-                        transition={{ delay: 0.3 + i * 0.1, duration: 0.6, ease: 'easeOut' }}
-                        className="absolute bottom-0 w-full rounded-t-lg"
-                        style={{ background: range.color, opacity: 0.85, minHeight: range.count > 0 ? 6 : 0 }}
-                      />
-                    </div>
-                    <span className="text-[9px] sm:text-[10px] text-text-muted font-medium text-center leading-tight">{range.label}</span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Course Breakdown */}
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
-          <h2 className="font-heading font-bold text-sm text-text-primary mb-4">Top Courses in Pool</h2>
-          {stats.courseBreakdown.length === 0 ? (
-            <div className="py-8 text-center">
-              <p className="text-sm text-text-muted">No course data available yet.</p>
-              <p className="text-xs text-text-muted mt-1">Course info is extracted from resume and degree uploads.</p>
-            </div>
-          ) : (
-            <div className="space-y-2.5 sm:space-y-3">
-              {stats.courseBreakdown.map(([course, count], i) => {
-                const pct = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0
-                return (
-                  <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 + i * 0.05 }}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-text-primary opacity-80 truncate pr-2 max-w-[60%]">{course}</span>
-                      <span className="text-text-muted flex-shrink-0">{count} ({pct}%)</span>
-                    </div>
-                    <div className="h-2 w-full bg-border rounded-full overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${pct}%` }}
-                        transition={{ duration: 0.8, delay: 0.2 + i * 0.05 }}
-                        className="h-full bg-emerald-500 rounded-full"
-                      />
-                    </div>
-                  </motion.div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Verification Coverage — All 7 Types */}
-      <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
-        <h2 className="font-heading font-bold text-sm text-text-primary mb-4">Verification Coverage</h2>
-        <div className="space-y-3 sm:space-y-4">
-          {[
-            { label: 'Resume / ATS', count: stats.resumeV, color: '#3b82f6', icon: FileText },
-            { label: 'Degree Certificate', count: stats.degreeV, color: '#f59e0b', icon: GraduationCap },
-            { label: '10th Marksheet', count: stats.mark10V, color: '#60a5fa', icon: BookOpen },
-            { label: '12th Marksheet', count: stats.mark12V, color: '#a78bfa', icon: BookOpen },
-            { label: 'Other Credential', count: stats.passportV, color: '#2dd4bf', icon: Paperclip },
-            { label: 'Police Verification', count: stats.policeV, color: '#8b5cf6', icon: Shield },
-            { label: 'Aadhaar KYC', count: stats.aadhaarV, color: '#14b8a6', icon: CreditCard },
-          ].map((item, i) => {
-            const pct = stats.total > 0 ? Math.round((item.count / stats.total) * 100) : 0
-            return (
-              <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 + i * 0.05 }}
-                className="flex items-center gap-3 sm:gap-4"
-              >
-                <div className="p-1.5 rounded-lg flex-shrink-0" style={{ background: `${item.color}15` }}>
-                  <item.icon size={16} style={{ color: item.color }} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1 gap-2">
-                    <span className="text-xs sm:text-sm text-text-primary opacity-80 truncate">{item.label}</span>
-                    <span className="text-xs text-text-muted flex-shrink-0">{item.count}/{stats.total} ({pct}%)</span>
-                  </div>
-                  <div className="h-2 sm:h-2.5 w-full bg-border rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${pct}%` }}
-                      transition={{ duration: 1, delay: 0.4 + i * 0.08 }}
-                      className="h-full rounded-full"
-                      style={{ background: item.color }}
-                    />
-                  </div>
-                </div>
-              </motion.div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Talent Quality Snapshot */}
-      <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-gradient-to-br dark:from-emerald-500/5 dark:to-transparent p-4 sm:p-6">
-        <div className="flex items-center gap-2 mb-3 sm:mb-4">
-          <ArrowUpRight size={18} className="text-emerald-500" />
-          <h3 className="font-heading font-bold text-sm text-text-primary">Talent Quality Snapshot</h3>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-          {[
-            { value: stats.total > 0 ? `${Math.round((stats.highAts / stats.total) * 100)}%` : '0%', label: 'High ATS Rate' },
-            { value: stats.total > 0 ? `${Math.round((stats.fullyVerified / stats.total) * 100)}%` : '0%', label: 'Full Verify Rate' },
-            { value: stats.total > 0 ? `${Math.round((stats.policeV / stats.total) * 100)}%` : '0%', label: 'BG Check Rate' },
-            { value: `${stats.degreeV}`, label: 'Degree Verified' },
-          ].map((item, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 + i * 0.08 }}
-              className="p-3 sm:p-4 rounded-xl bg-card border border-border text-center"
-            >
-              <p className="font-heading text-xl sm:text-2xl font-bold text-text-primary">{item.value}</p>
-              <p className="text-[9px] sm:text-[10px] text-text-muted uppercase tracking-wider mt-1 leading-tight">{item.label}</p>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-      </motion.div>
-      )}
-
-      {/* ROSTER TAB */}
-      {activeTab === 'roster' && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          <div className="relative">
-            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted" />
-            <input
-              type="text"
-              placeholder="Search candidates by name or course..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 rounded-xl border border-border bg-input text-sm text-text-primary focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
-            />
+          <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[1.5fr_1fr]">
+            <Panel index={4} title="ATS score spread" subtitle={`Average ${stats.avgAts} out of 100`}>
+              <BarsChart title="Students by ATS score band" series={[{ label: 'Students', color: SERIES.red }]} items={stats.bins} />
+            </Panel>
+            <Panel index={5} title="Applications" subtitle="Where your applicants stand">
+              {applications.length === 0 ? (
+                <EmptyState icon={<Users />} title="No applications yet" hint="Applications from students appear here." />
+              ) : (
+                <DonutChart
+                  title="Applications by status"
+                  centerLabel="Applications"
+                  segments={[
+                    { label: 'Pending', value: appCount('pending'), color: SERIES.amber },
+                    { label: 'Accepted', value: appCount('accepted'), color: SERIES.green },
+                    { label: 'Declined', value: appCount('rejected'), color: SERIES.red },
+                  ]}
+                />
+              )}
+            </Panel>
           </div>
 
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-base border-b border-border">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold text-text-muted">Candidate</th>
-                    <th className="px-4 py-3 font-semibold text-text-muted">Course</th>
-                    <th className="px-4 py-3 font-semibold text-text-muted">Trust</th>
-                    <th className="px-4 py-3 font-semibold text-text-muted">ATS</th>
-                    <th className="px-4 py-3 font-semibold text-text-muted text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {filteredStudents.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-text-muted">
-                        No candidates match your search.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredStudents.map((student) => (
-                      <tr key={student.id} className="hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
-                        <td className="px-4 py-3">
-                          <div>
-                            <p className="font-medium text-text-primary">{student.name}</p>
-                            <p className="text-xs text-text-muted">{student.email}</p>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <p className="text-text-primary">{student.course || 'N/A'}</p>
-                          <p className="text-xs text-text-muted">CGPA: {student.cgpa || 'N/A'}</p>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-text-primary">{student.trust_score || 0}%</span>
-                            <div className="flex -space-x-1">
-                              {student.degree_verified && <div className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center"><GraduationCap size={10} /></div>}
-                              {student.police_verified && <div className="w-4 h-4 rounded-full bg-violet-500/20 text-violet-500 flex items-center justify-center"><Shield size={10} /></div>}
-                              {student.aadhaar_verified && <div className="w-4 h-4 rounded-full bg-teal-500/20 text-teal-500 flex items-center justify-center"><CreditCard size={10} /></div>}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                           <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold ${
-                              (student.ats_score || 0) >= 70 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' :
-                              (student.ats_score || 0) >= 40 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' :
-                              'bg-red-500/10 text-red-600 dark:text-red-400'
-                           }`}>
-                             {student.ats_score || 0}
-                           </span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => setSelectedStudent(student)}
-                            className="p-2 text-text-muted hover:text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors"
-                          >
-                            <ChevronRight size={18} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Candidate Modal */}
-      {selectedStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedStudent(null)} />
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="relative bg-card w-full max-w-xl rounded-2xl border border-border p-6 shadow-xl overflow-y-auto max-h-[85vh]">
-            <button onClick={() => setSelectedStudent(null)} className="absolute top-4 right-4 text-text-muted hover:text-text-primary"><X size={20} /></button>
-            
-            <div className="flex items-center gap-4 mb-6">
-              <ProfileAvatar profile={selectedStudent.profile} userId={selectedStudent.id} size="lg" />
-              <div>
-                <h3 className="text-xl font-bold text-text-primary">{selectedStudent.name}</h3>
-                <p className="text-sm text-text-muted">{selectedStudent.email}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="bg-base border border-border rounded-xl p-4 text-center">
-                <p className="text-xs text-text-muted uppercase tracking-wider mb-1">ATS Score</p>
-                <div className="text-3xl font-bold text-emerald-500">{selectedStudent.ats_score || 0}</div>
-              </div>
-              <div className="bg-base border border-border rounded-xl p-4 text-center">
-                <p className="text-xs text-text-muted uppercase tracking-wider mb-1">Trust Score</p>
-                <div className="text-3xl font-bold text-blue-500">{selectedStudent.trust_score || 0}%</div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h4 className="font-heading font-semibold text-text-primary border-b border-border pb-2">Academic & Details</h4>
-              <div className="grid grid-cols-2 gap-y-3 text-sm">
-                <div><span className="text-text-muted block text-xs">Course</span><span className="text-text-primary">{selectedStudent.course || 'N/A'}</span></div>
-                <div><span className="text-text-muted block text-xs">CGPA</span><span className="text-text-primary">{selectedStudent.cgpa || 'N/A'}</span></div>
-                <div><span className="text-text-muted block text-xs">Graduation Year</span><span className="text-text-primary">{selectedStudent.graduation_year || 'N/A'}</span></div>
-                <div><span className="text-text-muted block text-xs">City</span><span className="text-text-primary">{selectedStudent.city || 'N/A'}</span></div>
-              </div>
-            </div>
-
-            {/* Strengths & Skills */}
-            {(selectedStudent.strengths?.length > 0 || selectedStudent.top_skills?.length > 0) && (
-              <div className="space-y-4 mb-6">
-                <hr className="border-border" />
-                {selectedStudent.strengths?.length > 0 && (
-                  <div>
-                    <h5 className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider mb-2 flex items-center gap-1.5"><CheckCircle2 size={12} /> Key Strengths</h5>
-                    <div className="flex flex-wrap gap-1.5">
-                      {selectedStudent.strengths.map((s: string, idx: number) => (
-                        <span key={idx} className="px-2 py-1 rounded text-[10px] uppercase font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">{s}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {selectedStudent.top_skills?.length > 0 && (
-                  <div className="mt-4">
-                    <h5 className="text-[10px] font-bold text-blue-500 uppercase tracking-wider mb-2 flex items-center gap-1.5"><Sparkles size={12} /> Top Skills</h5>
-                    <div className="flex flex-wrap gap-1.5">
-                      {selectedStudent.top_skills.map((s: string, idx: number) => (
-                        <span key={idx} className="px-2 py-1 rounded text-[10px] uppercase font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">{s}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-4 mt-6">
-              <h4 className="font-heading font-semibold text-text-primary border-b border-border pb-2">Verifications</h4>
-              <div className="space-y-2">
-                {[
-                  { key: 'resume', label: 'Resume / ATS', icon: FileText, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-                  { key: 'degree', label: 'Degree Certificate', icon: GraduationCap, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-                  { key: 'marksheet_10th', label: '10th Marksheet', icon: BookOpen, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-                  { key: 'marksheet_12th', label: '12th Marksheet', icon: BookOpen, color: 'text-violet-500', bg: 'bg-violet-500/10' },
-                  { key: 'passport', label: 'Other Credential', icon: Paperclip, color: 'text-teal-500', bg: 'bg-teal-500/10' },
-                  { key: 'police', label: 'Police Verification', icon: Shield, color: 'text-violet-500', bg: 'bg-violet-500/10' },
-                  { key: 'aadhaar', label: 'Aadhaar KYC', icon: CreditCard, color: 'text-teal-500', bg: 'bg-teal-500/10' },
-                ].map((v) => {
-                  const record = selectedStudent.verifications?.find((r: any) => r.type === v.key)
-                  const isVerified = record && ['verified', 'ai_approved', 'admin_verified'].includes(record.status)
-                  const isPending = record && ['pending', 'needs_review'].includes(record.status)
-                  return (
-                    <div key={v.key} className="flex items-center justify-between p-3 rounded-xl border border-border bg-base">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${v.bg} ${v.color}`}><v.icon size={16} /></div>
-                        <span className="text-sm font-medium text-text-primary">{v.label}</span>
-                      </div>
-                      <span className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase ${
-                        isVerified ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' :
-                        isPending ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' :
-                        'bg-red-500/10 text-red-600 dark:text-red-400'
-                      }`}>
-                        {isVerified ? 'Verified' : isPending ? 'Pending' : 'Not Uploaded'}
+          <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <Panel index={6} title="Document coverage" subtitle="Share of the pool with each document verified">
+              <ul className="space-y-3.5">
+                {stats.coverage.map((item) => (
+                  <li key={item.type}>
+                    <div className="mb-1.5 flex justify-between text-xs font-semibold">
+                      <span className="inline-flex items-center gap-2">
+                        <Shield className="size-3.5 text-brand-ink" aria-hidden="true" />
+                        {docLabel(item.type)}
+                      </span>
+                      <span className="tabular text-muted-foreground">
+                        {pct(item.count, stats.total)}%, {item.count} of {stats.total}
                       </span>
                     </div>
-                  )
-                })}
-              </div>
+                    <Meter label={`${docLabel(item.type)} coverage`} value={pct(item.count, stats.total)} />
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+
+            <div className="space-y-3">
+              <Panel index={7} title="Top courses" subtitle="Where candidates are studying">
+                {stats.topCourses.length === 0 ? (
+                  <EmptyState title="No courses added yet" hint="Students add their course in Settings or through a verified degree." />
+                ) : (
+                  <BarsChart title="Students by course" series={[{ label: 'Students', color: SERIES.white }]} items={stats.topCourses} height={150} />
+                )}
+              </Panel>
+              <Panel index={8} title="Graduation years">
+                {stats.years.length === 0 ? <EmptyState title="No years added yet" /> : <BarsChart title="Students by graduation year" series={[{ label: 'Students', color: SERIES.red }]} items={stats.years} height={130} />}
+              </Panel>
             </div>
-            
-          </motion.div>
-        </div>
+          </div>
+        </>
       )}
-    </div>
+    </>
   )
 }

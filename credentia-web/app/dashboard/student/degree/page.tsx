@@ -1,683 +1,89 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  GraduationCap, FileText, BookOpen, Paperclip, Upload,
-  Check, X, Loader2, RotateCcw, AlertCircle, Sparkles, Eye, CheckCircle2, Clock, Shield
-} from 'lucide-react'
+import * as React from 'react'
+import { DocumentFlow, type FlowConfig } from '@/components/dash/document-flow'
+import { ErrorState, PageHeader, PageSkeleton, Panel, StatusBadge } from '@/components/dash/kit'
+import { DOC_META } from '@/components/dash/doc-meta'
+import { useStudentData } from '@/hooks/use-student-data'
+import { docLabel, type DocType } from '@/lib/documents'
+import { cn } from '@/lib/utils'
 
-const SLOTS = [
+const SLOTS: { type: DocType; title: string; config: FlowConfig }[] = [
   {
-    id: 'degree',
-    label: 'Degree / University Marksheet',
-    icon: GraduationCap,
-    color: '#f59e0b',
-    colorBg: 'rgba(245,158,11,0.08)',
-    colorBorder: 'rgba(245,158,11,0.25)',
-    desc: 'Final degree certificate or consolidated marksheet',
-    verifType: 'degree',
+    type: 'degree',
+    title: 'Degree certificate',
+    config: { uploadFolder: 'degrees/degree', analyzeUrl: '/api/verify-degree', verb: 'Verify degree' },
   },
   {
-    id: '10th',
-    label: '10th Class Marksheet',
-    icon: BookOpen,
-    color: '#3b82f6',
-    colorBg: 'rgba(59,130,246,0.08)',
-    colorBorder: 'rgba(59,130,246,0.25)',
-    desc: 'Secondary school (Class X) board marksheet',
-    verifType: 'marksheet_10th',
+    type: 'marksheet_10th',
+    title: '10th marksheet',
+    config: { uploadFolder: 'degrees/10th', analyzeUrl: '/api/verify-marksheet', analyzeExtra: { marksheetType: '10th' }, documentSlot: '10th', verb: 'Read marksheet' },
   },
   {
-    id: '12th',
-    label: '12th Class Marksheet',
-    icon: FileText,
-    color: '#8b5cf6',
-    colorBg: 'rgba(139,92,246,0.08)',
-    colorBorder: 'rgba(139,92,246,0.25)',
-    desc: 'Senior secondary (Class XII) board marksheet',
-    verifType: 'marksheet_12th',
+    type: 'marksheet_12th',
+    title: '12th marksheet',
+    config: { uploadFolder: 'degrees/12th', analyzeUrl: '/api/verify-marksheet', analyzeExtra: { marksheetType: '12th' }, documentSlot: '12th', verb: 'Read marksheet' },
   },
   {
-    id: 'other',
-    label: 'Any Other Degree or Credential',
-    icon: Paperclip,
-    color: '#14b8a6',
-    colorBg: 'rgba(20,184,166,0.08)',
-    colorBorder: 'rgba(20,184,166,0.25)',
-    desc: 'Diploma, certificate, or any other academic credential',
-    verifType: 'passport',
+    type: 'passport',
+    title: 'Other credential',
+    config: { uploadFolder: 'degrees/other', documentSlot: 'other', verb: 'Upload credential' },
   },
 ]
 
-type SlotStatus = 'empty' | 'selected' | 'uploading' | 'verifying' | 'success' | 'error'
-
-type SlotState = {
-  status: SlotStatus
-  file: File | null
-  fileName: string | null
-  fileSize: number | null
-  progress: number
-  result: any
-  fileUrl: string
-  error: string
-  saved: boolean
-}
-
-const initSlot = (): SlotState => ({
-  status: 'empty', file: null, fileName: null, fileSize: null,
-  progress: 0, result: null, fileUrl: '', error: '', saved: false,
-})
-
-// Animated SVG tick
-function SuccessTick() {
-  return (
-    <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-      <circle className="tick-circle" cx="20" cy="20" r="18" stroke="#10B981" strokeWidth="2" fill="rgba(16,185,129,0.08)" strokeLinecap="round" />
-      <path className="tick-path" d="M12 20.5L17.5 26L28 14" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
 export default function DegreePage() {
-  const [userId, setUserId] = useState('')
-  const [slots, setSlots] = useState<Record<string, SlotState>>(
-    Object.fromEntries(SLOTS.map(s => [s.id, initSlot()]))
-  )
-  const [dragOver, setDragOver] = useState<string | null>(null)
-  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
-  const [degreeVerifs, setDegreeVerifs] = useState<any[]>([])
-
-  useEffect(() => {
-    const init = async () => {
-      let uid: string | null = null
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) { uid = user.id }
-      else {
-        const { data: { session } } = await supabase.auth.refreshSession()
-        if (session) uid = session.user.id
-      }
-      if (uid) {
-        setUserId(uid)
-        // Fetch full verification records including document_url and ai_result
-        const { data } = await supabase.from('verifications')
-          .select('type, status, document_url, ai_result, ai_confidence')
-          .eq('student_id', uid)
-          .in('type', ['degree', 'marksheet_10th', 'marksheet_12th', 'passport'])
-        setDegreeVerifs(data || [])
-
-        // Pre-populate upload slots from existing verified documents
-        const verifTypeToSlotId: Record<string, string> = {
-          'degree': 'degree',
-          'marksheet_10th': '10th',
-          'marksheet_12th': '12th',
-          'passport': 'other',
-        }
-        if (data) {
-          for (const v of data) {
-            const slotId = verifTypeToSlotId[v.type]
-            if (slotId && v.document_url && v.status !== 'not_submitted') {
-              updateSlot(slotId, {
-                status: 'success',
-                fileUrl: v.document_url,
-                fileName: v.document_url.split('/').pop() || 'Document',
-                result: v.ai_result || { status: v.status, confidence: v.ai_confidence || 0 },
-                saved: true,
-                progress: 100,
-              })
-            }
-          }
-        }
-      }
-    }
-    init()
-  }, [])
-
-  // Degree verification stats
-  const degreeDocTypes = [
-    { type: 'degree', label: 'Degree', color: '#f59e0b' },
-    { type: 'marksheet_10th', label: '10th', color: '#3b82f6' },
-    { type: 'marksheet_12th', label: '12th', color: '#8b5cf6' },
-    { type: 'passport', label: 'Other', color: '#14b8a6' },
-  ]
-  const verifiedDegreeCount = degreeVerifs.filter(v => ['ai_approved', 'admin_verified', 'verified'].includes(v.status)).length
-  const pendingDegreeCount = degreeVerifs.filter(v => ['pending', 'needs_review'].includes(v.status)).length
-
-  const updateSlot = (id: string, patch: Partial<SlotState>) => {
-    setSlots(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }))
-  }
-
-  const validateFile = (file: File): string | null => {
-    const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']
-    if (!allowed.includes(file.type)) return 'Invalid type. Only PDF, JPG, PNG allowed.'
-    if (file.size > 10 * 1024 * 1024) return 'File is too large. Maximum size is 10MB.'
-    return null
-  }
-
-  const handleFileSelect = (slotId: string, file: File) => {
-    const err = validateFile(file)
-    if (err) {
-      updateSlot(slotId, { status: 'error', error: err })
-      setTimeout(() => updateSlot(slotId, { status: 'empty', error: '' }), 2000)
-      return
-    }
-    updateSlot(slotId, { status: 'selected', file, fileName: file.name, fileSize: file.size, error: '' })
-  }
-
-  const handleDrop = (slotId: string, e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(null)
-    const file = e.dataTransfer.files[0]
-    if (file) handleFileSelect(slotId, file)
-  }
-
-  const handleUploadAndVerify = async (slotId: string) => {
-    const slot = slots[slotId]
-    const slotDef = SLOTS.find(s => s.id === slotId)!
-    if (!slot.file || !userId) return
-
-    // Upload phase
-    updateSlot(slotId, { status: 'uploading', progress: 0 })
-
-    // Simulate progress animation
-    const progressInterval = setInterval(() => {
-      setSlots(prev => {
-        const current = prev[slotId].progress
-        if (current >= 85) { clearInterval(progressInterval); return prev }
-        return { ...prev, [slotId]: { ...prev[slotId], progress: current + Math.random() * 15 } }
-      })
-    }, 200)
-
-    try {
-      const formData = new FormData()
-      formData.append('file', slot.file)
-      formData.append('folder', `degrees/${slotId}`)
-
-      const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
-      const uploadData = await uploadRes.json()
-
-      clearInterval(progressInterval)
-      if (!uploadRes.ok || !uploadData.success) throw new Error(uploadData.error || 'Upload failed')
-
-      updateSlot(slotId, { progress: 100 })
-      await new Promise(r => setTimeout(r, 400))
-
-      // Verify phase — AI analysis only, NO database save
-      updateSlot(slotId, { status: 'verifying' })
-
-      if (slotId === 'degree') {
-        const verifyRes = await fetch('/api/verify-degree', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileUrl: uploadData.url, studentId: userId }),
-        })
-        const verifyData = await verifyRes.json()
-        if (!verifyRes.ok) throw new Error(verifyData.error || 'Verification failed')
-
-        const analysis = verifyData.analysis || verifyData
-        // Store in local state only — user must click Save
-        updateSlot(slotId, { status: 'success', result: analysis, fileUrl: uploadData.url, saved: false, progress: 100 })
-      } else if (slotId === '10th' || slotId === '12th') {
-        updateSlot(slotId, { status: 'verifying' })
-        const verifyRes = await fetch('/api/verify-marksheet', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileUrl: uploadData.url, studentId: userId, marksheetType: slotId }),
-        })
-        const verifyData = await verifyRes.json()
-        if (!verifyRes.ok) throw new Error(verifyData.error || 'Marksheet verification failed')
-
-        const analysis = verifyData.analysis || {}
-        // Store in local state only — user must click Save
-        updateSlot(slotId, { status: 'success', result: analysis, fileUrl: uploadData.url, saved: false, progress: 100 })
-      } else {
-        // 'other' slot — no AI, create a simple analysis object
-        const analysis = {
-          document_type: slotDef.label,
-          file_name: slot.file.name,
-          file_size_mb: (slot.file.size / 1024 / 1024).toFixed(2),
-          status: 'uploaded',
-          confidence: 0,
-        }
-        updateSlot(slotId, { status: 'success', result: analysis, fileUrl: uploadData.url, saved: false, progress: 100 })
-      }
-    } catch (err: any) {
-      clearInterval(progressInterval)
-      updateSlot(slotId, { status: 'error', error: err.message, progress: 0 })
-    }
-  }
-
-  // Save slot data to database — only called when user clicks "Save & Update Profile"
-  const handleSaveSlot = async (slotId: string) => {
-    const slot = slots[slotId]
-    const slotDef = SLOTS.find(s => s.id === slotId)!
-    if (!slot.fileUrl || !userId) return
-
-    updateSlot(slotId, { error: '' })
-
-    try {
-      const analysis = slot.result || {}
-      const saveStatus = slotId === 'degree'
-        ? (analysis.verified ? 'ai_approved' : 'needs_review')
-        : slotId === 'other'
-          ? 'pending'
-          : (analysis.verified !== undefined ? (analysis.verified ? 'ai_approved' : 'needs_review') : 'pending')
-
-      // Save document record (for marksheet/other slots)
-      if (slotId !== 'degree') {
-        await fetch('/api/save-document', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId,
-            documentType: slotId,
-            fileUrl: slot.fileUrl,
-            fileName: slot.fileName,
-            fileSize: slot.fileSize,
-          }),
-        })
-      }
-
-      // Save verification + sync extracted data to students table
-      const saveRes = await fetch('/api/save-verification', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentId: userId,
-          type: slotDef.verifType,
-          analysis,
-          fileUrl: slot.fileUrl,
-          status: saveStatus,
-        }),
-      })
-      const saveData = await saveRes.json()
-      if (!saveRes.ok || !saveData.success) throw new Error(saveData.error || 'Failed to save')
-
-      updateSlot(slotId, { saved: true })
-      // Refresh degree verifs status bar
-      const { data: refreshedVerifs } = await supabase.from('verifications')
-        .select('type, status')
-        .eq('student_id', userId)
-        .in('type', ['degree', 'marksheet_10th', 'marksheet_12th', 'passport'])
-      setDegreeVerifs(refreshedVerifs || [])
-    } catch (err: any) {
-      updateSlot(slotId, { error: err.message || 'Save failed' })
-    }
-  }
-
-  const resetSlot = (slotId: string) => {
-    updateSlot(slotId, initSlot())
-    if (fileInputRefs.current[slotId]) {
-      fileInputRefs.current[slotId]!.value = ''
-    }
-  }
-
-  const getZoneClass = (slotId: string) => {
-    const s = slots[slotId]
-    if (dragOver === slotId) return 'upload-zone-active'
-    if (s.status === 'success') return 'upload-zone-success'
-    if (s.status === 'error') return 'upload-zone-error'
-    if (s.status === 'empty') return 'upload-zone-empty'
-    return ''
-  }
-
-  const getStatusBadge = (status: SlotStatus, saved: boolean) => {
-    if (status === 'success') return { label: saved ? 'Uploaded ✓' : 'Saved', color: '#10b981', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.2)' }
-    if (status === 'uploading' || status === 'verifying') return { label: 'Processing...', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.2)' }
-    if (status === 'error') return { label: 'Error', color: '#ef4444', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.2)' }
-    if (status === 'selected') return { label: 'Ready', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.2)' }
-    return { label: 'Not Uploaded', color: '#64748b', bg: 'rgba(100,116,139,0.08)', border: 'rgba(100,116,139,0.15)' }
-  }
+  const { userId, byType, counts, loading, error, refresh } = useStudentData()
+  const [active, setActive] = React.useState<DocType>('degree')
+  const slot = SLOTS.find((s) => s.type === active) ?? SLOTS[0]
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-white">Degree Verification</h1>
-        <p className="text-sm mt-1 text-white/40">
-          Upload your academic credentials for AI-powered verification. All 4 slots are independent.
-        </p>
-      </div>
+    <div className="mx-auto max-w-4xl">
+      <PageHeader
+        title="Degree and marksheets"
+        description="Verify your degree certificate and add your 10th and 12th marksheets. The degree and the marksheets are read by AI. Any other credential is stored for an admin to look at. Each one counts toward your trust score."
+      />
 
-      {/* ── Degree Verification Status Bar ── */}
-      <div className="rounded-2xl p-4 sm:p-5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Shield size={16} className="text-emerald-400" />
-            <span className="text-xs font-bold text-white/70 uppercase tracking-wider">Document Verification Progress</span>
-          </div>
-          <span className="text-xs font-bold text-emerald-400">{verifiedDegreeCount}/4 verified</span>
-        </div>
-        {/* Segmented progress bar */}
-        <div className="flex gap-1.5 mb-3">
-          {degreeDocTypes.map((dt) => {
-            const v = degreeVerifs.find(vr => vr.type === dt.type)
-            const isVerified = v && ['ai_approved', 'admin_verified', 'verified'].includes(v.status)
-            const isPending = v && ['pending', 'needs_review'].includes(v.status)
-            return (
-              <motion.div
-                key={dt.type}
-                initial={{ scaleX: 0 }}
-                animate={{ scaleX: 1 }}
-                transition={{ duration: 0.6, ease: 'easeOut' }}
-                className="flex-1 h-2 rounded-full"
-                style={{
-                  background: isVerified ? dt.color : isPending ? `${dt.color}40` : 'rgba(255,255,255,0.06)',
-                  transformOrigin: 'left',
-                }}
-              />
-            )
-          })}
-        </div>
-        {/* Individual doc indicators */}
-        <div className="flex gap-3 flex-wrap">
-          {degreeDocTypes.map((dt) => {
-            const v = degreeVerifs.find(vr => vr.type === dt.type)
-            const isVerified = v && ['ai_approved', 'admin_verified', 'verified'].includes(v.status)
-            const isPending = v && ['pending', 'needs_review'].includes(v.status)
-            return (
-              <div key={dt.type} className="flex items-center gap-1.5">
-                {isVerified ? (
-                  <CheckCircle2 size={12} style={{ color: dt.color }} />
-                ) : isPending ? (
-                  <Clock size={12} className="text-amber-400" />
-                ) : (
-                  <div className="w-3 h-3 rounded-full border" style={{ borderColor: 'rgba(255,255,255,0.15)' }} />
-                )}
-                <span className={`text-[10px] font-medium ${isVerified ? 'text-white/70' : 'text-white/30'}`}>{dt.label}</span>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Upload slots grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {SLOTS.map((slot, idx) => {
-          const s = slots[slot.id]
-          const Icon = slot.icon
-          const badge = getStatusBadge(s.status, s.saved)
-          const isProcessing = s.status === 'uploading' || s.status === 'verifying'
-
-          return (
-            <motion.div
-              key={slot.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.08 }}
-              className="rounded-2xl border bg-white/[0.02] overflow-hidden"
-              style={{ borderColor: s.status === 'success' ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.08)' }}
-            >
-              {/* Slot header */}
-              <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: slot.colorBg, border: `1px solid ${slot.colorBorder}` }}
+      {loading ? (
+        <PageSkeleton metrics={0} panels={1} />
+      ) : error ? (
+        <ErrorState message={error} onRetry={refresh} />
+      ) : userId ? (
+        <div className="space-y-3">
+          <Panel title="Pick a document" subtitle={`${SLOTS.filter((s) => ['ai_approved', 'admin_verified', 'verified'].includes(byType[s.type]?.status ?? '')).length} of ${SLOTS.length} verified`}>
+            <div role="tablist" aria-label="Documents" className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {SLOTS.map((s) => {
+                const Icon = DOC_META[s.type].icon
+                const selected = s.type === active
+                return (
+                  <button
+                    key={s.type}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => setActive(s.type)}
+                    className={cn(
+                      'flex min-h-[84px] flex-col items-start justify-between gap-2 rounded-2xl border p-3 text-left transition-colors',
+                      selected ? 'border-brand/60 bg-brand/[0.12]' : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.07]',
+                    )}
                   >
-                    <Icon size={20} style={{ color: slot.color }} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-white/90 leading-tight">{slot.label}</p>
-                    <p className="text-[11px] text-white/30 mt-0.5">{slot.desc}</p>
-                  </div>
-                </div>
-                <span
-                  className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg flex-shrink-0 ml-2"
-                  style={{ background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}
-                >
-                  {badge.label}
-                </span>
-              </div>
+                    <span className="flex w-full items-center justify-between gap-2">
+                      <Icon className="size-4 text-brand-ink" aria-hidden="true" />
+                      <StatusBadge status={byType[s.type]?.status} />
+                    </span>
+                    <span className="text-sm font-bold leading-tight">{s.title}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </Panel>
 
-              {/* Drop zone */}
-              <div className="p-4">
-                {s.status === 'success' ? (
-                  /* Success state */
-                  <div className="rounded-xl p-4 flex flex-col items-center gap-3 text-center" style={{ background: s.saved ? 'rgba(16,185,129,0.04)' : 'rgba(245,158,11,0.04)' }}>
-                    {s.saved ? <SuccessTick /> : (
-                      <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
-                        <Sparkles size={20} className="text-amber-400" />
-                      </div>
-                    )}
-                    <div>
-                      <p className={`text-sm font-medium ${s.saved ? 'text-emerald-400' : 'text-amber-400'}`}>
-                        {s.saved ? 'Saved & Verified ✓' : 'Review & Save'}
-                      </p>
-                      <p className="text-xs text-white/30 mt-0.5 break-all">{s.fileName}</p>
-                      {s.fileSize && (
-                        <p className="text-[11px] text-white/20 mt-0.5">{(s.fileSize / 1024 / 1024).toFixed(2)} MB</p>
-                      )}
-                      {s.saved && (
-                        <p className="text-[11px] text-teal-400/70 mt-1">✓ Saved to My Verifications</p>
-                      )}
-                      {!s.saved && (
-                        <p className="text-[11px] text-amber-400/60 mt-1">⚠ Not saved yet — click Save below</p>
-                      )}
-                    </div>
-                    {/* Degree-specific result */}
-                    {slot.id === 'degree' && s.result && (
-                      <div className="w-full rounded-lg p-3 text-left space-y-1.5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                        {[
-                          { l: 'University', v: s.result.university_name },
-                          { l: 'Degree', v: s.result.degree },
-                          { l: 'CGPA / Grade', v: s.result.grade_cgpa },
-                          { l: 'Year', v: s.result.year_of_passing },
-                        ].filter(x => x.v).map((item, i) => (
-                          <div key={i} className="flex items-center justify-between">
-                            <span className="text-[10px] text-white/25 uppercase tracking-wider">{item.l}</span>
-                            <span className="text-xs text-white/70 font-medium">{item.v}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {/* Marksheet AI result for 10th/12th */}
-                    {(slot.id === '10th' || slot.id === '12th') && s.result && (
-                      <div className="w-full rounded-lg p-3 text-left space-y-1.5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <Sparkles size={11} style={{ color: slot.color }} />
-                          <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: slot.color }}>AI Analysis</span>
-                          <span className="text-[10px] text-white/30 ml-auto">Confidence: {s.result.confidence || 0}%</span>
-                        </div>
-                        {[
-                          { l: 'Board', v: s.result.board_name },
-                          { l: 'School', v: s.result.school_name },
-                          { l: 'Year', v: s.result.year_of_passing },
-                          { l: 'Percentage', v: s.result.percentage },
-                          { l: 'Grade', v: s.result.grade },
-                          { l: 'Result', v: s.result.result },
-                        ].filter(x => x.v).map((item, i) => (
-                          <div key={i} className="flex items-center justify-between">
-                            <span className="text-[10px] text-white/25 uppercase tracking-wider">{item.l}</span>
-                            <span className="text-xs text-white/70 font-medium">{item.v}</span>
-                          </div>
-                        ))}
-                        {s.result.subjects && s.result.subjects.length > 0 && (
-                          <div className="mt-2 pt-2 border-t border-white/5">
-                            <p className="text-[10px] text-white/25 uppercase tracking-wider mb-1.5">Subjects</p>
-                            <div className="space-y-1">
-                              {s.result.subjects.slice(0, 4).map((sub: any, i: number) => (
-                                <div key={i} className="flex items-center justify-between">
-                                  <span className="text-[11px] text-white/50">{sub.name}</span>
-                                  <span className="text-[11px] text-white/40">{sub.marks}{sub.max_marks ? `/${sub.max_marks}` : ''}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {/* Save error */}
-                    {s.error && (
-                      <div className="w-full rounded-lg px-3 py-2 text-xs flex items-center gap-1.5" style={{ background: 'rgba(239,68,68,0.08)', color: '#f87171', border: '1px solid rgba(239,68,68,0.15)' }}>
-                        <AlertCircle size={12} /> {s.error}
-                      </div>
-                    )}
-                    {/* Action buttons */}
-                    <div className="flex flex-col gap-2 w-full">
-                      {!s.saved && (
-                        <button
-                          onClick={() => handleSaveSlot(slot.id)}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90 hover:translate-y-[-1px]"
-                          style={{
-                            background: `linear-gradient(135deg, ${slot.color}, ${slot.color}cc)`,
-                            boxShadow: `0 4px 16px ${slot.color}30`,
-                          }}
-                        >
-                          <Check size={14} /> Save & Update Profile
-                        </button>
-                      )}
-                      <div className="flex gap-2">
-                        {s.fileUrl && (
-                          <a
-                            href={s.fileUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors"
-                            style={{ background: 'rgba(59,130,246,0.08)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.15)' }}
-                          >
-                            <Eye size={13} /> View
-                          </a>
-                        )}
-                        <button
-                          onClick={() => resetSlot(slot.id)}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-white/5"
-                          style={{ color: 'rgba(255,255,255,0.35)', border: '1px solid rgba(255,255,255,0.06)' }}
-                        >
-                          <RotateCcw size={13} /> Replace
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* Drop zone */
-                  <div>
-                    <div
-                      className={`rounded-xl p-6 text-center cursor-pointer transition-all duration-300 border-2 border-dashed ${getZoneClass(slot.id)}`}
-                      style={{
-                        borderColor: dragOver === slot.id ? slot.color : 'rgba(255,255,255,0.10)',
-                        background: dragOver === slot.id ? `${slot.color}08` : 'transparent',
-                      }}
-                      onDragOver={e => { e.preventDefault(); setDragOver(slot.id) }}
-                      onDragLeave={() => setDragOver(null)}
-                      onDrop={e => handleDrop(slot.id, e)}
-                      onClick={() => !isProcessing && fileInputRefs.current[slot.id]?.click()}
-                    >
-                      <input
-                        ref={el => { fileInputRefs.current[slot.id] = el }}
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        className="hidden"
-                        onChange={e => e.target.files?.[0] && handleFileSelect(slot.id, e.target.files[0])}
-                      />
-
-                      {s.status === 'empty' && (
-                        <div className="flex flex-col items-center gap-3">
-                          <div
-                            className="w-12 h-12 rounded-xl flex items-center justify-center"
-                            style={{ background: slot.colorBg }}
-                          >
-                            <Upload size={22} style={{ color: slot.color }} />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-white/70">Drop file here or <span style={{ color: slot.color }}>browse</span></p>
-                            <p className="text-xs text-white/25 mt-1">PDF, JPG, PNG — Max 10MB</p>
-                          </div>
-                        </div>
-                      )}
-
-                      {s.status === 'selected' && (
-                        <div className="flex flex-col items-center gap-2">
-                          <FileText size={28} className="text-blue-400" />
-                          <p className="text-sm font-medium text-white/80 break-all">{s.fileName}</p>
-                          <p className="text-xs text-white/30">{s.fileSize ? `${(s.fileSize / 1024 / 1024).toFixed(2)} MB` : ''}</p>
-                        </div>
-                      )}
-
-                      {isProcessing && (
-                        <div className="flex flex-col items-center gap-3">
-                          {s.status === 'uploading' ? (
-                            <>
-                              <Loader2 size={28} className="animate-spin text-blue-400" />
-                              <p className="text-sm font-medium text-white/60">Uploading...</p>
-                              {/* Progress bar */}
-                              <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
-                                <div
-                                  className="h-full rounded-full transition-all duration-300"
-                                  style={{
-                                    width: `${s.progress}%`,
-                                    background: `linear-gradient(90deg, ${slot.color}, ${slot.color}99)`,
-                                  }}
-                                />
-                              </div>
-                              <p className="text-xs text-white/30">{Math.round(s.progress)}%</p>
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles size={28} className="text-violet-400 animate-pulse" />
-                              <p className="text-sm font-medium text-white/60">
-                                {slot.id === 'degree' ? 'AI Verifying...' : 'Saving...'}
-                              </p>
-                              <p className="text-xs text-white/25">
-                                {slot.id === 'degree' ? 'Extracting document data' : 'Storing securely'}
-                              </p>
-                            </>
-                          )}
-                        </div>
-                      )}
-
-                      {s.status === 'error' && (
-                        <div className="flex flex-col items-center gap-2">
-                          <AlertCircle size={28} className="text-red-400" />
-                          <p className="text-sm font-medium text-red-400">{s.error || 'Upload failed'}</p>
-                          <p className="text-xs text-white/30">Click to try again</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Action buttons below drop zone */}
-                    {s.status === 'selected' && !isProcessing && (
-                      <div className="flex gap-2 mt-3">
-                        <button
-                          onClick={() => handleUploadAndVerify(slot.id)}
-                          className="flex-1 h-11 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 hover:translate-y-[-1px]"
-                          style={{
-                            background: `linear-gradient(135deg, ${slot.color}, ${slot.color}aa)`,
-                            boxShadow: `0 4px 20px ${slot.color}30`,
-                          }}
-                        >
-                          <Upload size={16} />
-                          {slot.id === 'degree' ? 'Upload & Verify' : 'Upload & Save'}
-                        </button>
-                        <button
-                          onClick={() => resetSlot(slot.id)}
-                          className="h-11 px-4 rounded-xl text-sm transition-colors hover:bg-white/5"
-                          style={{ color: 'rgba(255,255,255,0.35)', border: '1px solid rgba(255,255,255,0.08)' }}
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          )
-        })}
-      </div>
-
-      {/* Info card */}
-      <div className="rounded-2xl p-5 flex items-start gap-4" style={{ background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.12)' }}>
-        <Sparkles size={18} className="text-blue-400 flex-shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-semibold text-blue-300 mb-1">AI-Powered Degree Verification</p>
-          <p className="text-xs text-white/40 leading-relaxed">
-            The Degree Marksheet slot uses Groq AI to extract and verify your credentials automatically.
-            Other documents (10th, 12th, Other) are securely stored, saved to your verification profile, and count toward your Trust Score.
-            All documents are encrypted and accessible only to you, your linked university, and verified companies.
-          </p>
+          {/* Keyed by slot so switching starts a fresh upload for that document. */}
+          <div role="tabpanel" aria-label={docLabel(slot.type)}>
+            <DocumentFlow key={slot.type} type={slot.type} current={byType[slot.type]} config={slot.config} onSaved={refresh} />
+          </div>
+          <p className="sr-only">{counts.verified} documents verified in total</p>
         </div>
-      </div>
+      ) : null}
     </div>
   )
 }

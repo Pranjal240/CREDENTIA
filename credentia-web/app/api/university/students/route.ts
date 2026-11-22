@@ -1,39 +1,23 @@
 import { NextResponse } from 'next/server'
-import { createSupabaseServerClient, createAdminSupabaseClient } from '@/lib/supabase-server'
+import { getUniversityAccess } from '@/lib/university-access'
+import { loadTalent } from '@/lib/company-talent'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * The students linked to the signed in university, with their scores and
+ * document statuses. Before the institution is approved this returns nothing.
+ */
 export async function GET() {
+  const access = await getUniversityAccess()
+  if (!access) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!access.approved) return NextResponse.json({ approved: false, university: access.university, students: [] })
+
   try {
-    const supabase = createSupabaseServerClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const uid = user.id
-
-    // Verify it's a university
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', uid).single()
-    if (profile?.role !== 'university') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
-    // Use admin client to bypass RLS for verifications
-    const supabaseAdmin = createAdminSupabaseClient()
-
-    const { data, error } = await supabaseAdmin
-      .from('students')
-      .select('*, profiles(email, full_name), verifications(*)')
-      .eq('university_id', uid)
-      .order('created_at', { ascending: false })
-
-    if (error) throw error
-
-    return NextResponse.json({ students: data })
-  } catch (error: any) {
-    console.error('Error fetching university students:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const students = await loadTalent({ universityId: access.caller.userId })
+    return NextResponse.json({ approved: true, university: access.university, students })
+  } catch (error) {
+    console.error('[university/students] failed:', (error as Error).message)
+    return NextResponse.json({ error: 'The registry could not be loaded.' }, { status: 500 })
   }
 }

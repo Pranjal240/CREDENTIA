@@ -1,110 +1,234 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
-import { motion } from 'framer-motion'
-import { BookmarkCheck, Trash2, Shield, CreditCard, GraduationCap, Mail, Users, Eye, X } from 'lucide-react'
+import * as React from 'react'
+import { Bookmark, BookmarkCheck, Mail, NotebookPen, Trash2, Users } from 'lucide-react'
+import { useTalent } from '@/hooks/use-talent'
+import { CandidateDialog, VerifyMarks } from '@/components/dash/candidate'
+import { DataTable, type Column } from '@/components/dash/data-table'
+import { Dialog } from '@/components/dash/dialog'
+import { TextArea } from '@/components/dash/form'
+import { FolderShelf } from '@/components/dash/folder-shelf'
+import { PinShelf } from '@/components/dash/pin-shelf'
+import { ProfileAvatar } from '@/components/dash/profile-avatar'
+import { EmptyState, ErrorState, Metric, PageHeader, PageSkeleton, Panel } from '@/components/dash/kit'
+import SmoothButton from '@/components/smoothui/components/smooth-button'
+import { Button } from '@/components/ui/button'
+import { saveCsv } from '@/lib/csv'
+import { formatDateShort } from '@/lib/format'
+import type { Talent } from '@/lib/company-talent'
+
+interface Row {
+  id: string
+  saved_at: string
+  notes: string | null
+  talent: Talent | null
+}
 
 export default function SavedCandidatesPage() {
-  const [candidates, setCandidates] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [userId, setUserId] = useState('')
-  const [selectedStudent, setSelectedStudent] = useState<any>(null)
+  const { userId, talent, saved, savedIds, byId, loading, error, refresh, toggleSave, saveNote } = useTalent()
+  const [open, setOpen] = React.useState<Talent | null>(null)
+  const [noting, setNoting] = React.useState<Row | null>(null)
+  const [draft, setDraft] = React.useState('')
+  const [busy, setBusy] = React.useState(false)
+  const [notice, setNotice] = React.useState('')
 
-  useEffect(() => {
-    const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      setUserId(session.user.id)
-      const { data: saved } = await supabase.from('saved_candidates').select('student_id, created_at').eq('company_id', session.user.id).order('created_at', { ascending: false })
-      if (saved && saved.length > 0) {
-        const ids = saved.map((s: any) => s.student_id)
-        const { data: students } = await supabase.from('students').select('*, profiles(email)').in('id', ids)
-        const mappedStudents = (students || []).map((st: any) => ({
-          ...st,
-          email: st.profiles?.email || '',
-        }))
-        const merged = saved.map((s: any) => ({ ...s, student: mappedStudents.find((st: any) => st.id === s.student_id) })).filter((s: any) => s.student)
-        setCandidates(merged)
-      }
-      setLoading(false)
+  const rows: Row[] = React.useMemo(() => saved.map((s) => ({ id: s.student_id, saved_at: s.created_at, notes: s.notes, talent: byId.get(s.student_id) ?? null })), [saved, byId])
+  const visible = rows.filter((r) => r.talent)
+  const hidden = rows.length - visible.length
+
+  const remove = async (id: string) => {
+    setNotice('')
+    try {
+      await toggleSave(id)
+    } catch (err) {
+      setNotice((err as Error).message)
     }
-    load()
-  }, [])
-
-  const removeSaved = async (studentId: string) => {
-    const res = await fetch('/api/company/save-candidate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ companyId: userId, studentId, action: 'unsave' }),
-    })
-    if (res.ok) setCandidates(prev => prev.filter(c => c.student_id !== studentId))
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" /></div>
+  const submitNote = async () => {
+    if (!noting) return
+    setBusy(true)
+    try {
+      await saveNote(noting.id, draft)
+      setNoting(null)
+    } catch (err) {
+      setNotice((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const exportCsv = () =>
+    saveCsv('saved_candidates.csv', [
+      ['Name', 'Email', 'Course', 'Graduation year', 'CGPA', 'ATS score', 'Trust score', 'Verified documents', 'Saved on', 'Note'],
+      ...visible.map((r) => [r.talent!.name, r.talent!.email, [r.talent!.course, r.talent!.branch].filter(Boolean).join(' '), r.talent!.graduation_year, r.talent!.cgpa, r.talent!.ats_score, r.talent!.trust_score, r.talent!.verified_docs_count, formatDateShort(r.saved_at), r.notes]),
+    ])
+
+  const columns: Column<Row>[] = [
+    {
+      key: 'name',
+      header: 'Candidate',
+      sortValue: (r) => r.talent?.name ?? '',
+      cell: (r) => (
+        <span className="flex min-w-0 items-center gap-3">
+          <ProfileAvatar name={r.talent!.name} avatarUrl={r.talent!.avatar_url} size={36} />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-bold">{r.talent!.name}</span>
+            <span className="block truncate text-xs text-muted-foreground">{[r.talent!.course, r.talent!.graduation_year].filter(Boolean).join(', ') || 'Course not added'}</span>
+          </span>
+        </span>
+      ),
+    },
+    { key: 'ats', header: 'ATS', align: 'right', sortValue: (r) => r.talent?.ats_score ?? 0, cell: (r) => <span className="tabular font-bold">{r.talent!.ats_score}</span> },
+    { key: 'trust', header: 'Trust', align: 'right', hideOnMobile: true, sortValue: (r) => r.talent?.trust_score ?? 0, cell: (r) => <span className="tabular">{r.talent!.trust_score}</span> },
+    { key: 'docs', header: 'Verified', hideOnMobile: true, cell: (r) => <VerifyMarks talent={r.talent!} /> },
+    { key: 'note', header: 'Note', hideOnMobile: true, cell: (r) => (r.notes ? <span className="line-clamp-1 max-w-[220px] text-muted-foreground">{r.notes}</span> : <span className="text-muted-foreground">None</span>) },
+    { key: 'saved', header: 'Saved', hideOnMobile: true, sortValue: (r) => r.saved_at, cell: (r) => <span className="text-muted-foreground">{formatDateShort(r.saved_at)}</span> },
+    {
+      key: 'actions',
+      header: 'Actions',
+      align: 'right',
+      cell: (r) => (
+        <span className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          <SmoothButton size="icon-sm" variant="ghost" shape="pill" aria-label={`Write a note about ${r.talent!.name}`} onClick={() => { setDraft(r.notes ?? ''); setNoting(r) }}>
+            <NotebookPen aria-hidden="true" />
+          </SmoothButton>
+          {r.talent!.email ? (
+            <SmoothButton size="icon-sm" variant="ghost" shape="pill" aria-label={`Email ${r.talent!.name}`} onClick={() => (window.location.href = `mailto:${r.talent!.email}`)}>
+              <Mail aria-hidden="true" />
+            </SmoothButton>
+          ) : null}
+          <SmoothButton size="icon-sm" variant="ghost" shape="pill" aria-label={`Remove ${r.talent!.name} from saved`} onClick={() => void remove(r.id)}>
+            <Trash2 aria-hidden="true" />
+          </SmoothButton>
+        </span>
+      ),
+    },
+  ]
+
+  if (loading) return <PageSkeleton metrics={3} panels={1} />
+  if (error) return <ErrorState message={error} onRetry={refresh} />
+
+  const folder = {
+    id: 'saved',
+    label: 'Saved',
+    art: 'crimson' as const,
+    subtitle: 'Your shortlist',
+    meta: visible.length === 0 ? 'Empty' : `${visible.length} ${visible.length === 1 ? 'person' : 'people'}`,
+    emptyTitle: 'No saved candidates',
+    emptyHint: 'Save candidates from Talent search.',
+    entries: visible.map((r) => ({
+      id: r.id,
+      name: r.talent!.name,
+      kind: 'person' as const,
+      meta: [r.talent!.course, r.talent!.graduation_year].filter(Boolean).join(', '),
+      date: formatDateShort(r.saved_at),
+      timestamp: new Date(r.saved_at).getTime(),
+      status: { label: `${r.talent!.verified_docs_count} verified`, tone: r.talent!.verified_docs_count >= 3 ? ('success' as const) : r.talent!.verified_docs_count > 0 ? ('warning' as const) : ('neutral' as const) },
+      onOpen: () => setOpen(r.talent),
+      copyValue: r.talent!.email || undefined,
+      copyLabel: 'Email',
+    })),
+    actions: (
+      <Button href="/dashboard/company" size="sm" variant="primary">
+        Find candidates
+      </Button>
+    ),
+  }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-white flex items-center gap-2"><BookmarkCheck size={24} className="text-emerald-400" /> Saved Candidates</h1>
-        <p className="text-sm mt-1 text-white/40">Your bookmarked candidates for quick access and comparison.</p>
+    <>
+      <PageHeader
+        title="Saved candidates"
+        description="Your shortlist, with notes only you can see."
+        actions={
+          <SmoothButton size="sm" variant="outline" shape="pill" onClick={exportCsv} disabled={visible.length === 0}>
+            Export CSV
+          </SmoothButton>
+        }
+      />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <Metric index={0} emphasis title="Saved" icon={<BookmarkCheck />} value={visible.length} detail="On your shortlist" />
+        <Metric index={1} title="With a note" icon={<NotebookPen />} value={rows.filter((r) => r.notes).length} detail="Your own notes" />
+        <Metric index={2} title="In the talent pool" icon={<Users />} value={talent.length} detail="Public profiles" />
       </div>
 
-      {candidates.length === 0 ? (
-        <div className="text-center py-16 rounded-2xl border border-white/5 bg-white/[0.01]">
-          <Users size={40} className="mx-auto mb-4 text-white/10" />
-          <p className="text-white/50 font-medium">No saved candidates yet</p>
-          <p className="text-sm text-white/30 mt-1">Browse the Talent Search to find and bookmark candidates.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {candidates.map((c, i) => {
-            const s = c.student
-            return (
-              <motion.div key={c.student_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-                className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 flex items-center gap-4 group hover:bg-white/[0.04] transition-all"
-              >
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/20 flex items-center justify-center text-emerald-300 font-bold text-sm flex-shrink-0">{(s.name || 'C')[0].toUpperCase()}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-heading font-bold text-white text-sm">{s.name || 'Candidate'}</p>
-                  <p className="text-xs text-white/30">{s.course || 'N/A'} • Year: {s.graduation_year || '—'} • ATS: {s.ats_score || 0}</p>
-                  <div className="flex gap-1 mt-1.5">
-                    {[{ ok: s.police_verified, l: 'PCC' }, { ok: s.aadhaar_verified, l: 'KYC' }, { ok: s.degree_verified, l: 'DEG' }].map((b, j) => (
-                      <span key={j} className={`text-[7px] uppercase font-bold px-1.5 py-0.5 rounded border ${b.ok ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400' : 'border-white/5 bg-white/[0.03] text-white/20'}`}>{b.l}</span>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-xs text-white/20 hidden sm:block">Saved {new Date(c.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
-                  <button onClick={() => setSelectedStudent(s)} className="px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors"><Eye size={14} /></button>
-                  {s.email && <a href={`mailto:${s.email}`} className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white/40 hover:text-white/70 transition-colors"><Mail size={14} /></a>}
-                  <button onClick={() => removeSaved(c.student_id)} className="px-3 py-2 rounded-lg bg-red-500/5 border border-red-500/10 text-red-400/60 hover:bg-red-500/10 hover:text-red-400 transition-colors"><Trash2 size={14} /></button>
-                </div>
-              </motion.div>
-            )
-          })}
-        </div>
-      )}
+      {hidden > 0 ? (
+        <p role="status" className="mt-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-muted-foreground">
+          {hidden} saved {hidden === 1 ? 'candidate has' : 'candidates have'} made their profile private, so {hidden === 1 ? 'they are' : 'they are'} hidden here.
+        </p>
+      ) : null}
 
-      {/* Quick detail modal */}
-      {selectedStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} onClick={() => setSelectedStudent(null)}>
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-md max-h-[80vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#0e0e14] p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <p className="font-heading font-bold text-white">{selectedStudent.name || 'Candidate'}</p>
-              <button onClick={() => setSelectedStudent(null)} className="p-2 rounded-lg hover:bg-white/5 text-white/30"><X size={18} /></button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {[{ l: 'Course', v: selectedStudent.course }, { l: 'CGPA', v: selectedStudent.cgpa }, { l: 'Year', v: selectedStudent.graduation_year }, { l: 'ATS', v: selectedStudent.ats_score }, { l: 'City', v: selectedStudent.city }, { l: 'State', v: selectedStudent.state }].map((d, i) => (
-                <div key={i} className="p-3 rounded-lg bg-white/[0.03] border border-white/5">
-                  <p className="text-[9px] text-white/25 uppercase mb-0.5">{d.l}</p>
-                  <p className="text-sm text-white/80">{d.v || '—'}</p>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        </div>
-      )}
-    </div>
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1.4fr]">
+        <Panel index={3} title="Shortlist folder" subtitle="Press the folder to open it">
+          <FolderShelf folders={[folder]} />
+        </Panel>
+        {userId && visible.length > 0 ? (
+          <PinShelf
+            index={4}
+            storageKey={`credentia:pins:company:${userId}`}
+            title="Pinned candidates"
+            subtitle="Pin the people you want at the top"
+            label="Candidates"
+            max={4}
+            items={visible.map((r) => ({ id: r.id, title: r.talent!.name, meta: `ATS ${r.talent!.ats_score}, ${r.talent!.verified_docs_count} verified`, icon: <Bookmark className="size-4" /> }))}
+          />
+        ) : (
+          <Panel index={4} title="Pinned candidates">
+            <EmptyState icon={<Bookmark />} title="Nothing to pin yet" hint="Saved candidates appear here, ready to pin." />
+          </Panel>
+        )}
+      </div>
+
+      <div className="mt-3">
+        <Panel index={5} title="All saved candidates">
+          {notice ? (
+            <p role="alert" className="mb-3 text-sm text-destructive">
+              {notice}
+            </p>
+          ) : null}
+          {visible.length === 0 ? (
+            <EmptyState icon={<Users />} title="No saved candidates yet" hint="Press the bookmark on a candidate in Talent search to save them here." action={<Button href="/dashboard/company" variant="primary" size="sm">Open talent search</Button>} />
+          ) : (
+            <DataTable
+              label="Saved candidates"
+              rows={visible}
+              columns={columns}
+              getRowId={(r) => r.id}
+              searchText={(r) => `${r.talent!.name} ${r.talent!.course} ${r.talent!.branch} ${r.notes ?? ''}`}
+              searchPlaceholder="Search saved candidates"
+              pageSize={8}
+              onRowClick={(r) => setOpen(r.talent)}
+            />
+          )}
+        </Panel>
+      </div>
+
+      <CandidateDialog talent={open} saved={open ? savedIds.has(open.id) : false} onClose={() => setOpen(null)} onToggleSave={() => open && void remove(open.id)} />
+
+      <Dialog
+        open={Boolean(noting)}
+        onClose={() => setNoting(null)}
+        title={noting?.talent ? `Note about ${noting.talent.name}` : 'Note'}
+        description="Only your company can see this note."
+        size="sm"
+        footer={
+          <>
+            <Button variant="default" size="sm" onClick={() => setNoting(null)}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="sm" onClick={submitNote} disabled={busy}>
+              {busy ? 'Saving' : 'Save note'}
+            </Button>
+          </>
+        }
+      >
+        <label htmlFor="saved-note" className="sr-only">
+          Note
+        </label>
+        <TextArea id="saved-note" value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={1000} placeholder="Why you saved them, what to ask next" autoFocus />
+      </Dialog>
+    </>
   )
 }

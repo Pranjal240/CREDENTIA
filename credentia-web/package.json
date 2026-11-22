@@ -6,12 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "check:style": "node scripts/check-style-rules.mjs",
+    "check:links": "node scripts/check-links.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1019.0",
     "@aws-sdk/lib-storage": "^3.1019.0",
+    "@gsap/react": "^2.1.2",
     "@hookform/resolvers": "^5.2.2",
+    "@phosphor-icons/react": "^2.1.10",
     "@splinetool/loader": "^1.12.73",
     "@splinetool/react-spline": "^4.1.0",
     "@splinetool/runtime": "^1.12.73",
@@ -22,6 +27,8 @@
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
     "groq-sdk": "^1.1.2",
+    "gsap": "^3.15.1",
+    "lenis": "^1.3.27",
     "lucide-react": "^1.7.0",
     "next": "14.2.35",
     "next-themes": "^0.4.6",

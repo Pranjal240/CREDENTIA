@@ -1,87 +1,100 @@
 import type { Config } from 'tailwindcss'
+import plugin from 'tailwindcss/plugin'
+import animate from 'tailwindcss-animate'
+
+// Every colour reads a space separated RGB triplet from globals.css so that
+// opacity modifiers such as bg-brand/20 keep working.
+const rgb = (name: string) => `rgb(var(${name}) / <alpha-value>)`
+
+const smoothSteps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950, 1000] as const
+const smooth = Object.fromEntries(smoothSteps.map((s) => [s, rgb(`--smooth-${s}`)]))
 
 const config: Config = {
   darkMode: ['class'],
   content: [
-    './pages/**/*.{js,ts,jsx,tsx,mdx}',
-    './components/**/*.{js,ts,jsx,tsx,mdx}',
-    './app/**/*.{js,ts,jsx,tsx,mdx}',
+    './app/**/*.{ts,tsx,mdx}',
+    './components/**/*.{ts,tsx,mdx}',
+    './hooks/**/*.{ts,tsx}',
+    './lib/**/*.{ts,tsx}',
   ],
   theme: {
     extend: {
       fontFamily: {
-        heading: ['var(--font-heading)', 'system-ui', 'sans-serif'],
-        sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],
-        display: ['var(--font-display)', 'var(--font-heading)', 'system-ui', 'sans-serif'],
-        serif: ['var(--font-serif)', 'Georgia', 'serif'],
+        sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+        heading: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+        display: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+        serif: ['var(--font-sans)', 'system-ui', 'sans-serif'],
         mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       colors: {
-        base: 'rgb(var(--bg-base))',
-        card: 'rgb(var(--bg-card))',
-        elevated: 'rgb(var(--bg-elevated))',
-        input: 'rgb(var(--bg-input))',
-        border: 'rgb(var(--border-default))',
-        'border-hover': 'rgb(var(--border-hover))',
-        accent: 'rgb(var(--accent))',
-        'accent-hover': 'rgb(var(--accent-hover))',
-        teal: 'rgb(var(--teal))',
-        success: 'rgb(var(--success))',
-        warning: 'rgb(var(--warning))',
-        danger: 'rgb(var(--danger))',
-        'text-primary': 'rgb(var(--text-primary))',
-        'text-secondary': 'rgb(var(--text-secondary))',
-        'text-muted': 'rgb(var(--text-muted))',
+        background: rgb('--background'),
+        foreground: rgb('--foreground'),
+        card: { DEFAULT: rgb('--card'), foreground: rgb('--card-foreground') },
+        popover: { DEFAULT: rgb('--popover'), foreground: rgb('--popover-foreground') },
+        primary: { DEFAULT: rgb('--primary'), foreground: rgb('--primary-foreground') },
+        secondary: { DEFAULT: rgb('--secondary'), foreground: rgb('--secondary-foreground') },
+        muted: { DEFAULT: rgb('--muted'), foreground: rgb('--muted-foreground') },
+        accent: {
+          DEFAULT: rgb('--accent'),
+          foreground: rgb('--accent-foreground'),
+          hover: rgb('--brand-hover'),
+        },
+        destructive: {
+          DEFAULT: rgb('--destructive'),
+          top: rgb('--destructive-top'),
+          fg: rgb('--destructive-fg'),
+          foreground: rgb('--destructive-fg'),
+        },
+        border: rgb('--border'),
+        input: rgb('--input'),
+        ring: rgb('--ring'),
+        brand: {
+          DEFAULT: rgb('--brand'),
+          hover: rgb('--brand-hover'),
+          secondary: rgb('--brand-secondary'),
+          ink: rgb('--brand-ink'),
+        },
+        'on-brand': rgb('--on-brand'),
+        success: rgb('--success'),
+        warning: rgb('--warning'),
+        danger: rgb('--danger'),
+        smooth,
+        // There is deliberately no `base` colour: it would also turn the `text-base` font size
+        // utility into a colour and paint headings black.
       },
-      borderRadius: {
-        xl: '12px',
-        '2xl': '16px',
-        '3xl': '24px',
+      transitionTimingFunction: {
+        'out-expo': 'cubic-bezier(0.16, 1, 0.3, 1)',
+        'out-smooth': 'cubic-bezier(0.22, 1, 0.36, 1)',
       },
       animation: {
-        'float': 'float 6s ease-in-out infinite',
-        'float-slow': 'float 10s ease-in-out infinite',
-        'float-delayed': 'float 8s ease-in-out 2s infinite',
-        'pulse-glow': 'pulseGlow 3s ease-in-out infinite',
-        'slide-up': 'slideUp 0.5s cubic-bezier(0.4,0,0.2,1)',
-        'fade-in': 'fadeIn 0.4s ease-out',
-        'scale-in': 'scaleIn 0.3s cubic-bezier(0.4,0,0.2,1)',
+        'fade-in': 'fadeIn 0.4s ease-out both',
+        'slide-up': 'slideUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'scale-in': 'scaleIn 0.3s cubic-bezier(0.22, 1, 0.36, 1) both',
         'spin-slow': 'spin 4s linear infinite',
-        'bounce-in': 'bounceIn 0.6s cubic-bezier(0.68,-0.55,0.265,1.55)',
+        'pulse-soft': 'pulseSoft 2.4s ease-in-out infinite',
       },
       keyframes: {
-        float: {
-          '0%, 100%': { transform: 'translateY(0px)' },
-          '50%': { transform: 'translateY(-16px)' },
-        },
-        pulseGlow: {
-          '0%, 100%': { opacity: '1', boxShadow: '0 0 20px rgba(59,130,246,0.2)' },
-          '50%': { opacity: '0.85', boxShadow: '0 0 40px rgba(59,130,246,0.4)' },
-        },
+        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
         slideUp: {
-          '0%': { opacity: '0', transform: 'translateY(24px)' },
+          '0%': { opacity: '0', transform: 'translateY(16px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
-        fadeIn: {
-          '0%': { opacity: '0' },
-          '100%': { opacity: '1' },
-        },
         scaleIn: {
-          '0%': { opacity: '0', transform: 'scale(0.9)' },
+          '0%': { opacity: '0', transform: 'scale(0.96)' },
           '100%': { opacity: '1', transform: 'scale(1)' },
         },
-        bounceIn: {
-          '0%': { opacity: '0', transform: 'scale(0.3)' },
-          '50%': { transform: 'scale(1.05)' },
-          '70%': { transform: 'scale(0.9)' },
-          '100%': { opacity: '1', transform: 'scale(1)' },
-        },
-      },
-      backdropBlur: {
-        xs: '2px',
+        pulseSoft: { '0%, 100%': { opacity: '1' }, '50%': { opacity: '0.45' } },
       },
     },
   },
-  plugins: [require('tailwindcss-animate')],
+  plugins: [
+    animate,
+    // Input capability variants used by the SmoothUI ports (44px touch targets on touch screens).
+    plugin(({ addVariant }) => {
+      addVariant('pointer-coarse', '@media (pointer: coarse)')
+      addVariant('pointer-fine', '@media (pointer: fine)')
+    }),
+  ],
 }
+
 export default config

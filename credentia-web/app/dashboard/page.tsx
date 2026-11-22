@@ -1,15 +1,12 @@
 import { redirect } from 'next/navigation'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
+import { getCaller } from '@/lib/api-auth'
+import { roleHome } from '@/lib/dashboard-nav'
 
+export const dynamic = 'force-dynamic'
+
+/** /dashboard sends each person to the dashboard for their own role. */
 export default async function DashboardRoot() {
-  const supabase = createSupabaseServerClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user
-
-  if (!user) redirect('/login/student')
-
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  const role = profile?.role || 'student'
-
-  redirect(`/dashboard/${role}`)
+  const caller = await getCaller()
+  if (!caller) redirect('/login/student')
+  redirect(roleHome(caller.role))
 }

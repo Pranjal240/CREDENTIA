@@ -1,717 +1,420 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
-import { supabase } from '@/lib/supabase'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Filter, ChevronDown, ChevronUp, Users, Shield, GraduationCap, CreditCard, FileText, TrendingUp, Eye, X, Bookmark, BookmarkCheck, Mail, ExternalLink, CheckCircle2, LayoutGrid, List, ChevronLeft, ChevronRight, Briefcase, Building, Download, BookOpen, Paperclip } from 'lucide-react'
+import * as React from 'react'
+import { useSearchParams } from 'next/navigation'
+import { BookmarkCheck, ChevronLeft, ChevronRight, CircleCheck, Sparkles, TrendingUp, Users } from 'lucide-react'
+import AILoader from '@/components/smoothui/components/ai-loader'
+import SmoothButton from '@/components/smoothui/components/smooth-button'
+import { useTalent } from '@/hooks/use-talent'
+import { useSearch } from '@/components/search/search-context'
+import { CandidateCard, CandidateDialog, type AiMatch } from '@/components/dash/candidate'
+import { Dialog } from '@/components/dash/dialog'
+import { Field, SelectInput, TextArea, TextInput } from '@/components/dash/form'
+import { FolderShelf, type FolderSpec } from '@/components/dash/folder-shelf'
+import { LiveBriefing, useLastChange, type BriefingItem } from '@/components/dash/live-briefing'
+import { EmptyState, ErrorState, Metric, PageHeader, PageSkeleton, Panel } from '@/components/dash/kit'
+import { SearchBar } from '@/components/ui/search-bar'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import type { Talent } from '@/lib/company-talent'
 
+const PAGE_SIZE = 12
 
-export default function CompanyDashboard() {
-  const [students, setStudents] = useState<any[]>([])
-  const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
-  const [loading, setLoading] = useState(true)
-  const [userId, setUserId] = useState('')
+const SORTS = [
+  { value: 'ats', label: 'ATS score, highest first' },
+  { value: 'trust', label: 'Trust score, highest first' },
+  { value: 'cgpa', label: 'CGPA, highest first' },
+  { value: 'year', label: 'Graduation year, latest first' },
+  { value: 'name', label: 'Name, A to Z' },
+] as const
+type SortKey = (typeof SORTS)[number]['value']
 
-  // Filters
-  const [searchQuery, setSearchQuery] = useState('')
-  const [atsMin, setAtsMin] = useState(0)
-  const [atsMax, setAtsMax] = useState(100)
-  const [filterPolice, setFilterPolice] = useState(false)
-  const [filterAadhaar, setFilterAadhaar] = useState(false)
-  const [filterDegree, setFilterDegree] = useState(false)
-  const [cgpaMin, setCgpaMin] = useState('')
-  const [filterCourse, setFilterCourse] = useState('all')
-  const [filterYear, setFilterYear] = useState('all')
-  const [sortBy, setSortBy] = useState('ats_score')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-  const [showFilters, setShowFilters] = useState(false)
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [page, setPage] = useState(1)
-  const [perPage] = useState(12)
-  const [selectedStudent, setSelectedStudent] = useState<any>(null)
-  const [savingId, setSavingId] = useState<string | null>(null)
+const DOC_FILTERS = [
+  { key: 'police_verified', label: 'Police certificate' },
+  { key: 'aadhaar_verified', label: 'Aadhaar' },
+  { key: 'degree_verified', label: 'Degree' },
+] as const
 
-  // AI & Compare Features
-  const [aiJobDesc, setAiJobDesc] = useState('')
-  const [loadingAi, setLoadingAi] = useState(false)
-  const [aiMatches, setAiMatches] = useState<any[]>([])
-  const [compareIds, setCompareIds] = useState<Set<string>>(new Set())
-  const [showCompareModal, setShowCompareModal] = useState(false)
+export default function TalentSearchPage() {
+  const params = useSearchParams()
+  const search = useSearch()
+  const { talent, savedIds, byId, loading, error, refresh, toggleSave } = useTalent()
+  const updatedAt = useLastChange(loading ? null : talent)
 
-  useEffect(() => {
-    const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      setUserId(session.user.id)
+  const [query, setQuery] = React.useState(params?.get('q') ?? '')
+  const [atsMin, setAtsMin] = React.useState(0)
+  const [cgpaMin, setCgpaMin] = React.useState('')
+  const [course, setCourse] = React.useState('all')
+  const [year, setYear] = React.useState('all')
+  const [docs, setDocs] = React.useState<Record<string, boolean>>({})
+  const [sort, setSort] = React.useState<SortKey>('ats')
+  const [page, setPage] = React.useState(0)
+  const [open, setOpen] = React.useState<Talent | null>(null)
+  const [compare, setCompare] = React.useState<string[]>([])
+  const [showCompare, setShowCompare] = React.useState(false)
+  const [notice, setNotice] = React.useState('')
 
-      // Use the new API route to reliably bypass RLS and fetch public students
-      const res = await fetch('/api/company/students')
-      const { students: data } = await res.json()
+  const [jobText, setJobText] = React.useState('')
+  const [matching, setMatching] = React.useState(false)
+  const [matchError, setMatchError] = React.useState('')
+  const [matches, setMatches] = React.useState<AiMatch[]>([])
 
-      const mappedStudents = (data || []).map((s: any) => {
-        const resumeVerif = s.verifications?.find((v: any) => v.type === 'resume')
-        const degreeVerif = s.verifications?.find((v: any) => v.type === 'degree')
-        const aiResult = resumeVerif?.ai_result || {}
-        const degreeResult = degreeVerif?.ai_result || {}
+  // A search result can link straight to one candidate.
+  const wanted = params?.get('student')
+  React.useEffect(() => {
+    if (!wanted) return
+    const found = byId.get(wanted)
+    if (found) setOpen(found)
+  }, [wanted, byId])
 
-        return {
-          ...s,
-          name: s.name || s.profiles?.full_name || 'Unknown',
-          email: s.email || s.profiles?.email || '',
-          trust_score: s.trust_score || 0,
-          ats_score: aiResult.ats_score || s.ats_score || 0,
-          course: degreeResult.course || aiResult.course || s.course || '',
-          branch: degreeResult.branch || aiResult.branch || s.branch || '',
-          cgpa: s.cgpa || degreeResult.grade_cgpa || aiResult.cgpa || '',
-          graduation_year: degreeResult.year_of_passing || aiResult.graduation_year || s.graduation_year || '',
-          city: aiResult.city || s.city || '',
-          state: aiResult.state || s.state || '',
-          degree_verified: s.verifications?.some((v: any) => v.type === 'degree' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          police_verified: s.verifications?.some((v: any) => v.type === 'police' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          aadhaar_verified: s.verifications?.some((v: any) => v.type === 'aadhaar' && ['verified', 'ai_approved', 'admin_verified'].includes(v.status)),
-          verified_docs_count: (s.verifications || []).filter((v: any) => ['verified', 'ai_approved', 'admin_verified'].includes(v.status)).length,
-          percentage_10th: s.percentage_10th || null,
-          percentage_12th: s.percentage_12th || null,
-        }
-      })
+  const courses = React.useMemo(() => Array.from(new Set(talent.map((t) => t.course).filter(Boolean))).sort(), [talent])
+  const years = React.useMemo(() => Array.from(new Set(talent.map((t) => t.graduation_year).filter((y): y is number => Boolean(y)))).sort((a, b) => b - a), [talent])
 
-      setStudents(mappedStudents)
-      const { data: saved } = await supabase.from('saved_candidates').select('student_id').eq('company_id', session.user.id)
-      if (saved) setSavedIds(new Set(saved.map((s: any) => s.student_id)))
-      setLoading(false)
-    }
-    load()
-  }, [])
+  const matchById = React.useMemo(() => new Map(matches.map((m) => [m.id, m])), [matches])
 
-  // Real-time subscription for student data changes (CGPA/percentages updated by admin/university)
-  useEffect(() => {
-    const channel = supabase.channel('company_students_rt')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'students' }, (payload: any) => {
-        const updated = payload.new
-        setStudents(prev => prev.map(s => s.id === updated.id ? {
-          ...s,
-          name: updated.name ?? s.name,
-          course: updated.course ?? s.course,
-          branch: updated.branch ?? s.branch,
-          cgpa: updated.cgpa ?? s.cgpa,
-          percentage_10th: updated.percentage_10th ?? s.percentage_10th,
-          percentage_12th: updated.percentage_12th ?? s.percentage_12th,
-          trust_score: updated.trust_score ?? s.trust_score,
-          ats_score: updated.ats_score ?? s.ats_score,
-          graduation_year: updated.graduation_year ?? s.graduation_year,
-        } : s))
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload: any) => {
-        const updated = payload.new
-        // Sync profile name changes (e.g. student renamed via admin)
-        setStudents(prev => prev.map(s => s.id === updated.id ? {
-          ...s,
-          name: updated.full_name ?? s.name,
-        } : s))
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [])
-
-  const courses = useMemo(() => Array.from(new Set(students.map(s => s.course).filter(Boolean))), [students])
-  const years = useMemo(() => Array.from(new Set(students.map(s => s.graduation_year).filter(Boolean))).sort(), [students])
-
-  const filtered = useMemo(() => {
-    let result = students.filter(s => {
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase()
-        if (!(s.name?.toLowerCase().includes(q) || s.email?.toLowerCase().includes(q) || s.course?.toLowerCase().includes(q))) return false
-      }
-      const ats = s.ats_score || 0
-      if (ats < atsMin || ats > atsMax) return false
-      if (filterPolice && !s.police_verified) return false
-      if (filterAadhaar && !s.aadhaar_verified) return false
-      if (filterDegree && !s.degree_verified) return false
-      if (cgpaMin && (parseFloat(s.cgpa) || 0) < parseFloat(cgpaMin)) return false
-      if (filterCourse !== 'all' && s.course !== filterCourse) return false
-      if (filterYear !== 'all' && s.graduation_year?.toString() !== filterYear) return false
+  const results = React.useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const list = talent.filter((t) => {
+      if (q && !`${t.name} ${t.course} ${t.branch} ${t.city} ${t.state} ${t.skills.join(' ')}`.toLowerCase().includes(q)) return false
+      if (t.ats_score < atsMin) return false
+      if (cgpaMin && (t.cgpa ?? 0) < Number(cgpaMin)) return false
+      if (course !== 'all' && t.course !== course) return false
+      if (year !== 'all' && String(t.graduation_year) !== year) return false
+      for (const doc of DOC_FILTERS) if (docs[doc.key] && !t[doc.key]) return false
       return true
     })
-
-    if (aiMatches.length > 0) {
-      result.sort((a: any, b: any) => {
-        const matchA = aiMatches.find(m => m.id === a.id)
-        const matchB = aiMatches.find(m => m.id === b.id)
-        if (matchA && !matchB) return -1
-        if (!matchA && matchB) return 1
-        if (matchA && matchB) return matchB.match_score - matchA.match_score
-        return 0
-      })
-    } else {
-      result.sort((a: any, b: any) => {
-        let aVal = a[sortBy], bVal = b[sortBy]
-        if (sortBy === 'name') { aVal = aVal?.toLowerCase() || ''; bVal = bVal?.toLowerCase() || '' }
-        if (['ats_score', 'cgpa', 'trust_score', 'graduation_year'].includes(sortBy)) { aVal = parseFloat(aVal) || 0; bVal = parseFloat(bVal) || 0 }
-        if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
-        if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
-        return 0
-      })
+    const by: Record<SortKey, (a: Talent, b: Talent) => number> = {
+      ats: (a, b) => b.ats_score - a.ats_score,
+      trust: (a, b) => b.trust_score - a.trust_score,
+      cgpa: (a, b) => (b.cgpa ?? 0) - (a.cgpa ?? 0),
+      year: (a, b) => (b.graduation_year ?? 0) - (a.graduation_year ?? 0),
+      name: (a, b) => a.name.localeCompare(b.name),
     }
-    return result
-  }, [students, searchQuery, atsMin, atsMax, filterPolice, filterAadhaar, filterDegree, cgpaMin, filterCourse, filterYear, sortBy, sortDir, aiMatches])
-
-  const totalPages = Math.ceil(filtered.length / perPage)
-  const paginated = filtered.slice((page - 1) * perPage, page * perPage)
-
-  const toggleSave = async (studentId: string) => {
-    setSavingId(studentId)
-    try {
-      const res = await fetch('/api/company/save-candidate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyId: userId, studentId, action: savedIds.has(studentId) ? 'unsave' : 'save' }),
-      })
-      if (res.ok) {
-        setSavedIds(prev => {
-          const next = new Set(prev)
-          if (next.has(studentId)) next.delete(studentId); else next.add(studentId)
-          return next
-        })
+    return [...list].sort((a, b) => {
+      if (matches.length > 0) {
+        const ma = matchById.get(a.id)
+        const mb = matchById.get(b.id)
+        if (ma && !mb) return -1
+        if (!ma && mb) return 1
+        if (ma && mb) return mb.match_score - ma.match_score
       }
-    } catch {}
-    setSavingId(null)
+      return by[sort](a, b)
+    })
+  }, [talent, query, atsMin, cgpaMin, course, year, docs, sort, matches, matchById])
+
+  React.useEffect(() => setPage(0), [query, atsMin, cgpaMin, course, year, docs, sort, matches])
+
+  const pageCount = Math.max(1, Math.ceil(results.length / PAGE_SIZE))
+  const current = Math.min(page, pageCount - 1)
+  const shown = results.slice(current * PAGE_SIZE, current * PAGE_SIZE + PAGE_SIZE)
+
+  const save = async (id: string) => {
+    try {
+      await toggleSave(id)
+      setNotice('')
+    } catch (err) {
+      setNotice((err as Error).message)
+    }
   }
 
-  const handleAiMatch = async () => {
-    if (!aiJobDesc.trim()) return
-    setLoadingAi(true)
-    setAiMatches([])
+  const findMatches = async () => {
+    setMatching(true)
+    setMatchError('')
+    setMatches([])
     try {
       const res = await fetch('/api/company/ai-match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobDescription: aiJobDesc, students: filtered })
+        body: JSON.stringify({ jobDescription: jobText, ids: results.slice(0, 80).map((t) => t.id) }),
       })
-      const data = await res.json()
-      if (data.matches) setAiMatches(data.matches)
-    } catch (e) { console.error(e) }
-    setLoadingAi(false)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Matching did not finish.')
+      setMatches(data.matches ?? [])
+      if ((data.matches ?? []).length === 0) setMatchError('Nobody in the current results fits that role. Try loosening the filters.')
+    } catch (err) {
+      setMatchError((err as Error).message)
+    } finally {
+      setMatching(false)
+    }
   }
 
-  const toggleCompare = (id: string) => {
-    setCompareIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else if (next.size < 3) next.add(id)
-      return next
-    })
+  const toggleCompare = (id: string) => setCompare((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < 3 ? [...prev, id] : prev))
+
+  const fully = talent.filter((t) => t.police_verified && t.aadhaar_verified && t.degree_verified)
+  const avgAts = talent.length ? Math.round(talent.reduce((sum, t) => sum + t.ats_score, 0) / talent.length) : 0
+
+  const entry = (t: Talent) => ({
+    id: t.id,
+    name: t.name,
+    kind: 'person' as const,
+    meta: [t.course, t.graduation_year].filter(Boolean).join(', '),
+    status: { label: `${t.verified_docs_count} verified`, tone: t.verified_docs_count >= 3 ? ('success' as const) : t.verified_docs_count > 0 ? ('warning' as const) : ('neutral' as const) },
+    onOpen: () => setOpen(t),
+    copyValue: t.email || undefined,
+    copyLabel: 'Email',
+    details: [
+      { label: 'ATS score', value: String(t.ats_score) },
+      { label: 'Trust score', value: String(t.trust_score) },
+      ...(t.cgpa ? [{ label: 'CGPA', value: String(t.cgpa) }] : []),
+    ],
+  })
+
+  const folderBase: Omit<FolderSpec, 'meta'>[] = [
+    { id: 'saved', label: 'Saved', art: 'crimson', subtitle: 'Candidates you bookmarked', entries: talent.filter((t) => savedIds.has(t.id)).map(entry), emptyTitle: 'No saved candidates', emptyHint: 'Press the bookmark on a candidate to keep them here.' },
+    { id: 'verified', label: 'Fully verified', art: 'obsidian', subtitle: 'Police, Aadhaar and degree all verified', entries: fully.map(entry), emptyTitle: 'Nobody yet', emptyHint: 'Candidates appear here once all three documents are verified.' },
+    { id: 'ats', label: 'ATS 70 and above', art: 'ember', subtitle: 'Strong resumes', entries: talent.filter((t) => t.ats_score >= 70).map(entry), emptyTitle: 'Nobody yet', emptyHint: 'Candidates appear here when their resume scores 70 or more.' },
+  ]
+  const folders: FolderSpec[] = folderBase.map((folder) => ({ ...folder, meta: folder.entries.length === 0 ? 'Empty' : `${folder.entries.length} ${folder.entries.length === 1 ? 'person' : 'people'}` }))
+
+  const reset = () => {
+    setQuery('')
+    setAtsMin(0)
+    setCgpaMin('')
+    setCourse('all')
+    setYear('all')
+    setDocs({})
+    setSort('ats')
   }
 
-  const handleExportProfile = (student: any) => {
-    const dataStr = JSON.stringify({
-      id: student.id,
-      name: student.name,
-      email: student.email,
-      course: student.course,
-      branch: student.branch,
-      graduation_year: student.graduation_year,
-      cgpa: student.cgpa,
-      ats_score: student.ats_score,
-      trust_score: student.trust_score || 0,
-      verifications: {
-        degree: student.degree_verified,
-        police: student.police_verified,
-        aadhaar: student.aadhaar_verified
-      },
-      skills: student.skills || [],
-      city: student.city,
-      state: student.state
-    }, null, 2)
-    const blob = new Blob([dataStr], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a"); link.setAttribute("href", encodeURI(url)); link.setAttribute("download", `${student.name ? student.name.replace(/\s+/g, '_') : 'candidate'}_profile.json`); document.body.appendChild(link); link.click(); document.body.removeChild(link)
+  if (loading) return <PageSkeleton metrics={4} panels={2} />
+  if (error) return <ErrorState message={error} onRetry={refresh} />
+
+  const weekAgo = Date.now() - 7 * 86_400_000
+  const fresh = talent.filter((t) => t.created_at && new Date(t.created_at).getTime() > weekAgo)
+  const strongUnsaved = fully.filter((t) => t.ats_score >= 70 && !savedIds.has(t.id)).sort((a, b) => b.ats_score - a.ats_score)
+  const briefing: BriefingItem[] = []
+  if (fresh.length > 0) briefing.push({ id: 'fresh', tone: 'good', title: `${fresh.length} new ${fresh.length === 1 ? 'profile' : 'profiles'} this week`, detail: 'Students who just made their profile public. Sort by trust score to see the best first.' })
+  if (strongUnsaved.length > 0) {
+    briefing.push({ id: 'strong', tone: 'tip', title: `${strongUnsaved.length} fully verified ${strongUnsaved.length === 1 ? 'student has' : 'students have'} an ATS score of 70 or more and ${strongUnsaved.length === 1 ? 'is' : 'are'} not saved`, detail: `Start with ${strongUnsaved[0].name}, ATS ${strongUnsaved[0].ats_score}.` })
   }
+  if (savedIds.size === 0 && talent.length > 0) briefing.push({ id: 'shortlist', tone: 'tip', title: 'Build a shortlist', detail: 'Press the bookmark on a candidate to save them. Saved candidates stay in the Saved folder, with notes.' })
+  if (talent.length > 0) briefing.push({ id: 'match', tone: 'tip', title: 'Rank candidates for a role', detail: 'Paste a job description in Match candidates to a role and AI orders the people in your results.' })
+  const notFully = talent.length - fully.length
+  if (notFully > 0 && talent.length > 0) briefing.push({ id: 'verified', tone: 'alert', title: `${notFully} of ${talent.length} candidates are not fully verified yet`, detail: 'Turn on the document filters to see only students whose police certificate, Aadhaar and degree are verified.' })
 
-  const policeVerCount = students.filter(s => s.police_verified).length
-  const avgAts = students.length ? Math.round(students.reduce((a, s) => a + (s.ats_score || 0), 0) / students.length) : 0
-  const avgTrust = students.length ? Math.round(students.reduce((a, s) => a + (s.trust_score || 0), 0) / students.length) : 0
-
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="flex flex-col items-center gap-3"><div className="w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" /><span className="text-xs text-white/30 tracking-wider">LOADING TALENT POOL...</span></div></div>
+  const compared = compare.map((id) => byId.get(id)).filter((t): t is Talent => Boolean(t))
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row items-start lg:items-end justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/5 border border-emerald-500/20 flex items-center justify-center text-emerald-400"><Briefcase size={28} /></div>
-          <div>
-            <h1 className="font-heading text-3xl font-bold text-white mb-1">Talent Discovery</h1>
-            <p className="text-sm text-white/40">Browse verified candidates with AI-powered credential analysis.</p>
-          </div>
-        </div>
+    <>
+      <PageHeader title="Talent search" description="Students who chose to make their profile public, with every score and document status read from their verified files." />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Metric index={0} emphasis title="Available talent" icon={<Users />} value={talent.length} detail="Public profiles" />
+        <Metric index={1} title="Fully verified" icon={<CircleCheck />} value={fully.length} detail="Police, Aadhaar and degree" />
+        <Metric index={2} title="Average ATS score" icon={<TrendingUp />} value={avgAts} suffix="out of 100" detail="Across the pool" />
+        <Metric index={3} title="Saved" icon={<BookmarkCheck />} value={savedIds.size} detail="Your shortlist" />
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        {[
-          { label: 'Available Talent', value: students.length, icon: Users, accent: '#10b981', gradient: 'from-emerald-500/15 to-emerald-400/5' },
-          { label: 'Police Verified', value: policeVerCount, icon: Shield, accent: '#8b5cf6', gradient: 'from-violet-500/15 to-violet-400/5' },
-          { label: 'Avg ATS Score', value: avgAts, icon: TrendingUp, accent: '#3b82f6', gradient: 'from-blue-500/15 to-blue-400/5' },
-          { label: 'Avg Trust Score', value: `${avgTrust}%`, icon: CheckCircle2, accent: '#14b8a6', gradient: 'from-teal-500/15 to-teal-400/5' },
-          { label: 'Saved', value: savedIds.size, icon: BookmarkCheck, accent: '#f59e0b', gradient: 'from-amber-500/15 to-amber-400/5' },
-        ].map((stat, i) => (
-          <motion.div key={i} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }} className={`rounded-2xl p-5 border border-white/5 bg-gradient-to-br ${stat.gradient}`}>
-            <stat.icon size={18} style={{ color: stat.accent }} className="mb-3" />
-            <p className="font-heading text-2xl font-bold text-white">{stat.value}</p>
-            <p className="text-[10px] font-semibold tracking-wider uppercase text-white/30 mt-1">{stat.label}</p>
-          </motion.div>
-        ))}
-      </div>
+      <LiveBriefing items={briefing} updatedAt={updatedAt} className="mt-3" />
 
-      {/* AI Matchmaker */}
-      <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-transparent overflow-hidden shadow-lg shadow-emerald-500/5 p-1 relative">
-        <div className="bg-[#0e0e14] rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row gap-4 sm:gap-6 items-start sm:items-center relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[80px] pointer-events-none rounded-full" />
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0 text-xl shadow-inner">
-            ✨
-          </div>
-          <div className="flex-1 w-full">
-            <h3 className="font-heading font-bold text-white text-sm mb-2 flex items-center gap-2">
-              AI Job Matcher <span className="px-2 py-0.5 rounded text-[9px] uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 font-bold">Beta</span>
-            </h3>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input 
-                value={aiJobDesc}
-                onChange={e => setAiJobDesc(e.target.value)}
-                placeholder="Describe ideal hire (e.g. 'Frontend Dev with high ATS and React skills')..." 
-                className="flex-1 h-11 px-4 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-emerald-500/50 transition-all font-medium"
-                onKeyDown={e => e.key === 'Enter' && handleAiMatch()}
-              />
-              <div className="flex gap-2 w-full sm:w-auto">
-                <button 
-                  onClick={handleAiMatch} 
-                  disabled={loadingAi || !aiJobDesc}
-                  className="flex-1 sm:flex-none px-6 h-11 rounded-xl bg-emerald-500 text-black font-bold text-sm hover:bg-emerald-400 transition-colors disabled:opacity-50 whitespace-nowrap shadow-lg shadow-emerald-500/20"
-                >
-                  {loadingAi ? 'Matching...' : 'Find Matches'}
-                </button>
-                {aiMatches.length > 0 && (
-                  <button onClick={() => {setAiMatches([]); setAiJobDesc('')}} className="px-4 h-11 rounded-xl bg-white/5 border border-white/10 text-white/50 hover:bg-white/10 hover:text-white transition-colors">Clear</button>
-                )}
-              </div>
+      <div className="mt-3">
+        <Panel index={4} title="Match candidates to a role" subtitle="Describe the role and AI ranks the candidates in your current results">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+            <div className="min-w-0 flex-1">
+              <label htmlFor="job-text" className="sr-only">
+                Role description
+              </label>
+              <TextArea id="job-text" value={jobText} onChange={(e) => setJobText(e.target.value)} maxLength={3000} placeholder="For example: a frontend developer with React and TypeScript, a CGPA above 7.5, graduating in 2026" className="min-h-[88px]" />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="primary" onClick={findMatches} disabled={matching || jobText.trim().length < 8}>
+                <Sparkles className="size-4" aria-hidden="true" />
+                {matching ? 'Matching' : 'Find matches'}
+              </Button>
+              {matches.length > 0 ? (
+                <Button variant="default" onClick={() => { setMatches([]); setJobText('') }}>
+                  Clear
+                </Button>
+              ) : null}
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Search & Filters */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden">
-        <div className="p-4 flex flex-col sm:flex-row gap-3">
-          <div className="flex-1 relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
-            <input value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setPage(1) }} placeholder="Search candidates by name, email, or course..." className="w-full h-11 pl-10 pr-4 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:outline-none focus:border-emerald-500/50 transition-colors" />
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => setShowFilters(!showFilters)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition-colors">
-              <Filter size={16} /> Filters {showFilters ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            </button>
-            <div className="flex rounded-xl border border-white/10 overflow-hidden">
-              <button onClick={() => setViewMode('grid')} className={`px-3 py-2 transition-colors ${viewMode === 'grid' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-white/5 text-white/40'}`}><LayoutGrid size={16} /></button>
-              <button onClick={() => setViewMode('list')} className={`px-3 py-2 transition-colors ${viewMode === 'list' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-white/5 text-white/40'}`}><List size={16} /></button>
+          {matching ? (
+            <div className="mt-3" role="status">
+              <AILoader variant="bar" label="Reading the role and the candidates" showElapsed />
             </div>
-          </div>
-        </div>
-
-        <AnimatePresence>
-          {showFilters && (
-            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-              <div className="px-4 pb-4 space-y-4" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                {/* ATS slider */}
-                <div className="pt-4">
-                  <label className="text-[9px] text-white/25 uppercase tracking-wider mb-2 block">ATS Score Range: {atsMin} – {atsMax}</label>
-                  <div className="flex gap-4 items-center">
-                    <input type="range" min={0} max={100} value={atsMin} onChange={e => { setAtsMin(Number(e.target.value)); setPage(1) }} className="flex-1 accent-emerald-500" />
-                    <input type="range" min={0} max={100} value={atsMax} onChange={e => { setAtsMax(Number(e.target.value)); setPage(1) }} className="flex-1 accent-emerald-500" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                  {/* Verification checkboxes */}
-                  <div className="space-y-2">
-                    <label className="text-[9px] text-white/25 uppercase tracking-wider block">Required Verifications</label>
-                    {[
-                      { label: 'Police ✓', checked: filterPolice, set: setFilterPolice },
-                      { label: 'Aadhaar ✓', checked: filterAadhaar, set: setFilterAadhaar },
-                      { label: 'Degree ✓', checked: filterDegree, set: setFilterDegree },
-                    ].map((cb, i) => (
-                      <label key={i} className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={cb.checked} onChange={e => { cb.set(e.target.checked); setPage(1) }} className="rounded accent-emerald-500 w-3.5 h-3.5" />
-                        <span className="text-xs text-white/60">{cb.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <div>
-                    <label className="text-[9px] text-white/25 uppercase tracking-wider mb-1 block">Min CGPA</label>
-                    <input type="number" step="0.1" min="0" max="10" value={cgpaMin} onChange={e => { setCgpaMin(e.target.value); setPage(1) }} placeholder="0.0" className="w-full h-9 px-2 rounded-lg text-xs bg-white/5 border border-white/10 text-white/70 focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="text-[9px] text-white/25 uppercase tracking-wider mb-1 block">Course</label>
-                    <select value={filterCourse} onChange={e => { setFilterCourse(e.target.value); setPage(1) }} className="w-full h-9 px-2 rounded-lg text-xs bg-white/5 border border-white/10 text-white/70 focus:outline-none">
-                      <option value="all">All</option>{courses.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[9px] text-white/25 uppercase tracking-wider mb-1 block">Year</label>
-                    <select value={filterYear} onChange={e => { setFilterYear(e.target.value); setPage(1) }} className="w-full h-9 px-2 rounded-lg text-xs bg-white/5 border border-white/10 text-white/70 focus:outline-none">
-                      <option value="all">All</option>{years.map(y => <option key={y} value={y?.toString()}>{y}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[9px] text-white/25 uppercase tracking-wider mb-1 block">Sort By</label>
-                    <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="w-full h-9 px-2 rounded-lg text-xs bg-white/5 border border-white/10 text-white/70 focus:outline-none">
-                      <option value="ats_score">ATS Score</option><option value="cgpa">CGPA</option><option value="name">Name</option><option value="trust_score">Trust Score</option><option value="graduation_year">Year</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+          ) : null}
+          {matchError ? (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              {matchError}
+            </p>
+          ) : null}
+          {matches.length > 0 ? <p className="mt-3 text-xs font-semibold text-muted-foreground">{matches.length} matches, highest first. Each card says why.</p> : null}
+        </Panel>
       </div>
 
-      {/* Results count */}
-      <div className="flex items-center justify-between px-1">
-        <p className="text-xs text-white/30">{filtered.length} candidate{filtered.length !== 1 ? 's' : ''} found</p>
-        <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')} className="text-xs text-white/30 hover:text-white/60 flex items-center gap-1 transition-colors">
-          {sortDir === 'desc' ? '↓ Highest first' : '↑ Lowest first'}
-        </button>
-      </div>
-
-      {/* Candidates Grid/List */}
-      {paginated.length === 0 ? (
-        <div className="text-center py-16 rounded-2xl border border-white/5 bg-white/[0.01]">
-          <Users size={40} className="mx-auto mb-4 text-white/10" />
-          <p className="text-white/50 font-medium">No candidates match your filters</p>
-          <p className="text-sm text-white/30 mt-1">Try adjusting your search criteria.</p>
-        </div>
-      ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {paginated.map((s, i) => {
-            const aiMatch = aiMatches.find(m => m.id === s.id)
-            return (
-            <motion.div key={s.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
-              className={`group rounded-2xl border bg-white/[0.02] p-5 hover:bg-white/[0.04] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${aiMatch ? 'border-emerald-500/40 shadow-emerald-500/10' : 'border-white/10 hover:border-white/15'}`}
-            >
-              {/* Top row */}
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/20 flex items-center justify-center text-emerald-300 font-bold text-sm">{(s.name || 'C')[0].toUpperCase()}</div>
-                  <div>
-                    <p className="font-heading font-bold text-white group-hover:text-emerald-300 transition-colors text-sm">{s.name || 'Candidate'}</p>
-                    <p className="text-[11px] text-white/30">{s.course || 'N/A'} • {s.graduation_year || '—'}</p>
-                  </div>
-                </div>
-                <button onClick={(e) => { e.stopPropagation(); toggleSave(s.id) }} disabled={savingId === s.id} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
-                  {savedIds.has(s.id) ? <BookmarkCheck size={18} className="text-emerald-400" /> : <Bookmark size={18} className="text-white/20 hover:text-white/50" />}
-                </button>
-              </div>
-
-              {aiMatch && (
-                <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-emerald-500/10 to-transparent border border-emerald-500/20">
-                  <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1 mb-1">✨ AI Match ({aiMatch.match_score}%)</p>
-                  <p className="text-xs text-white/70 leading-relaxed font-medium">{aiMatch.reason}</p>
-                </div>
-              )}
-
-              {/* ATS gauge */}
-              <div className="flex items-center gap-3 mb-4">
-                <div className="relative w-12 h-12">
-                  <svg className="w-12 h-12 -rotate-90"><circle cx="24" cy="24" r="20" stroke="rgba(255,255,255,0.04)" strokeWidth="4" fill="none" /><circle cx="24" cy="24" r="20" stroke={`hsl(${(s.ats_score || 0) * 1.2}, 70%, 50%)`} strokeWidth="4" fill="none" strokeDasharray={`${2 * Math.PI * 20}`} strokeDashoffset={`${2 * Math.PI * 20 * (1 - (s.ats_score || 0) / 100)}`} strokeLinecap="round" /></svg>
-                  <span className="absolute inset-0 flex items-center justify-center font-bold text-xs text-white">{s.ats_score || 0}</span>
-                </div>
-                <div>
-                  <p className="text-xs text-white/50">ATS Score</p>
-                  <p className="text-xs text-white/25">{s.cgpa ? `CGPA: ${s.cgpa}` : ''}</p>
-                </div>
-              </div>
-
-              {/* Badges */}
-              <div className="flex gap-1.5 mb-4">
-                {[
-                  { ok: s.police_verified, label: 'PCC', icon: Shield },
-                  { ok: s.aadhaar_verified, label: 'KYC', icon: CreditCard },
-                  { ok: s.degree_verified, label: 'DEG', icon: GraduationCap },
-                ].map((b, j) => (
-                  <span key={j} className={`text-[8px] uppercase font-bold px-2 py-1 rounded-lg flex items-center gap-1 border ${b.ok ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400' : 'border-white/5 bg-white/[0.03] text-white/20'}`}>
-                    <b.icon size={10} /> {b.label}
-                  </span>
+      <div className="mt-3">
+        <Panel index={5} title="Filters">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Field label="Search" className="md:col-span-2 xl:col-span-2">
+              <SearchBar value={query} onChange={setQuery} placeholder="Name, course, skill or place" onAskAI={(text) => search.open({ query: text })} />
+            </Field>
+            <Field label={`Minimum ATS score: ${atsMin}`} htmlFor="ats-min">
+              <input id="ats-min" type="range" min={0} max={100} step={5} value={atsMin} onChange={(e) => setAtsMin(Number(e.target.value))} className="h-11 w-full accent-[rgb(var(--brand))]" />
+            </Field>
+            <Field label="Minimum CGPA" htmlFor="cgpa-min">
+              <TextInput id="cgpa-min" type="number" inputMode="decimal" min={0} max={10} step={0.1} value={cgpaMin} onChange={(e) => setCgpaMin(e.target.value)} placeholder="For example 7.5" />
+            </Field>
+            <Field label="Course" htmlFor="f-course">
+              <SelectInput id="f-course" value={course} onChange={(e) => setCourse(e.target.value)}>
+                <option value="all">All courses</option>
+                {courses.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+            <Field label="Graduation year" htmlFor="f-year">
+              <SelectInput id="f-year" value={year} onChange={(e) => setYear(e.target.value)}>
+                <option value="all">All years</option>
+                {years.map((y) => (
+                  <option key={y} value={String(y)}>
+                    {y}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+            <Field label="Sort by" htmlFor="f-sort">
+              <SelectInput id="f-sort" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+                {SORTS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+            <fieldset className="min-w-0">
+              <legend className="mb-1.5 text-xs font-bold text-foreground/85">Must be verified</legend>
+              <div className="flex flex-wrap gap-1.5">
+                {DOC_FILTERS.map((doc) => (
+                  <label
+                    key={doc.key}
+                    className={cn('inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-xs font-bold transition-colors', docs[doc.key] ? 'border-brand/60 bg-brand/15 text-brand-ink' : 'border-white/10 text-foreground/80 hover:bg-white/[0.06]')}
+                  >
+                    <input type="checkbox" className="sr-only" checked={Boolean(docs[doc.key])} onChange={(e) => setDocs((prev) => ({ ...prev, [doc.key]: e.target.checked }))} />
+                    {doc.label}
+                  </label>
                 ))}
               </div>
+            </fieldset>
+          </div>
+          <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/10 pt-3">
+            <p className="text-xs font-semibold text-muted-foreground" aria-live="polite">
+              {results.length} {results.length === 1 ? 'candidate' : 'candidates'} found
+            </p>
+            <SmoothButton size="sm" variant="ghost" shape="pill" onClick={reset}>
+              Reset filters
+            </SmoothButton>
+          </div>
+          {notice ? (
+            <p role="alert" className="mt-2 text-xs text-destructive">
+              {notice}
+            </p>
+          ) : null}
+        </Panel>
+      </div>
 
-              {/* Actions */}
-              <div className="flex gap-2">
-                <button onClick={() => setSelectedStudent(s)} className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors">View Profile</button>
-                {s.email && <a href={`mailto:${s.email}`} className="py-2.5 px-3 rounded-xl bg-white/5 border border-white/10 text-white/40 hover:text-white/70 hover:bg-white/10 transition-colors"><Mail size={14} /></a>}
-              </div>
+      <div className="mt-3">
+        {results.length === 0 ? (
+          <Panel>
+            <EmptyState icon={<Users />} title={talent.length === 0 ? 'No public profiles yet' : 'No candidate matches these filters'} hint={talent.length === 0 ? 'Students appear here once they make their profile public.' : 'Loosen a filter or clear the search.'} action={talent.length > 0 ? <Button variant="default" size="sm" onClick={reset}>Reset filters</Button> : undefined} />
+          </Panel>
+        ) : (
+          <>
+            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {shown.map((t, i) => (
+                <li key={t.id} className="min-w-0">
+                  <CandidateCard talent={t} index={i} saved={savedIds.has(t.id)} match={matchById.get(t.id)} comparing={compare.includes(t.id)} onOpen={() => setOpen(t)} onToggleSave={() => void save(t.id)} onToggleCompare={() => toggleCompare(t.id)} />
+                </li>
+              ))}
+            </ul>
+            {pageCount > 1 ? (
+              <nav className="mt-4 flex items-center justify-center gap-3" aria-label="Pages of candidates">
+                <SmoothButton size="sm" variant="outline" shape="pill" disabled={current === 0} onClick={() => setPage(current - 1)} aria-label="Previous page">
+                  <ChevronLeft aria-hidden="true" />
+                  Previous
+                </SmoothButton>
+                <span className="text-xs font-semibold text-muted-foreground">
+                  Page {current + 1} of {pageCount}
+                </span>
+                <SmoothButton size="sm" variant="outline" shape="pill" disabled={current >= pageCount - 1} onClick={() => setPage(current + 1)} aria-label="Next page">
+                  Next
+                  <ChevronRight aria-hidden="true" />
+                </SmoothButton>
+              </nav>
+            ) : null}
+          </>
+        )}
+      </div>
 
-              <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
-                <label className="flex items-center gap-2 cursor-pointer group/cb">
-                  <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${compareIds.has(s.id) ? 'bg-emerald-500 border-emerald-500' : 'bg-white/5 border-white/20 group-hover/cb:border-emerald-500/50'}`}>
-                    {compareIds.has(s.id) && <CheckCircle2 size={12} className="text-black" />}
-                  </div>
-                  <span className={`text-[11px] font-semibold transition-colors ${compareIds.has(s.id) ? 'text-emerald-400' : 'text-white/40 group-hover/cb:text-white/60'}`}>Compare</span>
-                </label>
-              </div>
-            </motion.div>
-          )})}
+      <div className="mt-3">
+        <Panel index={6} title="Shortlists" subtitle="Press a folder to open the people inside it">
+          <FolderShelf folders={folders} />
+        </Panel>
+      </div>
+
+      <CandidateDialog talent={open} saved={open ? savedIds.has(open.id) : false} onClose={() => setOpen(null)} onToggleSave={() => open && void save(open.id)} />
+
+      {compare.length > 0 ? (
+        <div className="fixed inset-x-0 bottom-[92px] z-[55] flex justify-center px-4 lg:bottom-8">
+          <div className="glass-strong flex items-center gap-3 rounded-2xl py-1.5 pl-5 pr-1.5">
+            <p className="text-sm font-bold">
+              {compare.length} of 3 selected
+            </p>
+            <Button size="sm" variant="primary" disabled={compare.length < 2} onClick={() => setShowCompare(true)}>
+              Compare
+            </Button>
+            <SmoothButton size="sm" variant="ghost" shape="pill" onClick={() => setCompare([])}>
+              Clear
+            </SmoothButton>
+          </div>
         </div>
-      ) : (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-[#0e0e14]">
-                <tr>
-                  {['Candidate', 'Course / Year', 'ATS', 'CGPA', 'Verifications', 'Actions'].map((h, i) => (
-                    <th key={i} className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-widest text-white/40 border-b border-white/5">{h}</th>
+      ) : null}
+
+      <Dialog open={showCompare} onClose={() => setShowCompare(false)} title="Compare candidates" description="Side by side, from their verified records" size="lg">
+        <div className="overflow-x-auto scrollbar-thin" data-lenis-prevent>
+          <table className="w-full min-w-[520px] text-sm">
+            <thead>
+              <tr>
+                <th scope="col" className="w-36 py-2 pr-3 text-left text-xs font-semibold text-muted-foreground">
+                  Measure
+                </th>
+                {compared.map((t) => (
+                  <th key={t.id} scope="col" className="px-3 py-2 text-left text-sm font-extrabold">
+                    {t.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/10">
+              {[
+                { label: 'Course', value: (t: Talent) => [t.course, t.branch].filter(Boolean).join(' ') || 'Not added' },
+                { label: 'Graduation year', value: (t: Talent) => t.graduation_year ?? 'Not added' },
+                { label: 'ATS score', value: (t: Talent) => t.ats_score },
+                { label: 'Trust score', value: (t: Talent) => t.trust_score },
+                { label: 'CGPA', value: (t: Talent) => t.cgpa ?? 'Not added' },
+                { label: '10th percentage', value: (t: Talent) => (t.percentage_10th ? `${t.percentage_10th}%` : 'Not added') },
+                { label: '12th percentage', value: (t: Talent) => (t.percentage_12th ? `${t.percentage_12th}%` : 'Not added') },
+                { label: 'Police certificate', value: (t: Talent) => (t.police_verified ? 'Verified' : 'Not verified') },
+                { label: 'Aadhaar', value: (t: Talent) => (t.aadhaar_verified ? 'Verified' : 'Not verified') },
+                { label: 'Degree', value: (t: Talent) => (t.degree_verified ? 'Verified' : 'Not verified') },
+                { label: 'Documents verified', value: (t: Talent) => t.verified_docs_count },
+              ].map((row) => (
+                <tr key={row.label}>
+                  <th scope="row" className="py-2.5 pr-3 text-left text-xs font-semibold text-muted-foreground">
+                    {row.label}
+                  </th>
+                  {compared.map((t) => (
+                    <td key={t.id} className="px-3 py-2.5 font-semibold">
+                      {row.value(t)}
+                    </td>
                   ))}
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {paginated.map((s) => {
-                  const aiMatch = aiMatches.find(m => m.id === s.id)
-                  return (
-                  <tr key={s.id} className={`transition-colors group ${aiMatch ? 'bg-emerald-500/[0.03] hover:bg-emerald-500/[0.05]' : 'hover:bg-white/[0.02]'}`}>
-                    <td className="px-5 py-3 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/20 flex items-center justify-center text-emerald-300 text-xs font-bold">{(s.name || 'C')[0].toUpperCase()}</div>
-                      <div><p className="font-medium text-white/80">{s.name || 'Candidate'}</p><p className="text-[10px] text-white/30">{s.email || '—'}</p></div>
-                    </td>
-                    <td className="px-5 py-3 text-white/60">{s.course || '—'} <span className="text-white/30">•</span> {s.graduation_year || '—'}</td>
-                    <td className="px-5 py-3"><span className="font-bold" style={{ color: `hsl(${(s.ats_score || 0) * 1.2}, 70%, 50%)` }}>{s.ats_score || 0}</span></td>
-                    <td className="px-5 py-3 text-white/60">{s.cgpa || '—'}</td>
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="flex gap-1">
-                          {[{ ok: s.police_verified, l: 'P' }, { ok: s.aadhaar_verified, l: 'A' }, { ok: s.degree_verified, l: 'D' }].map((b, j) => (
-                            <span key={j} className={`text-[8px] font-bold w-5 h-5 rounded flex items-center justify-center ${b.ok ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/15 border border-white/5'}`}>{b.l}</span>
-                          ))}
-                        </div>
-                        <span className="text-[10px] text-white/30">{s.verified_docs_count || 0}</span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 flex items-center gap-2">
-                      <button onClick={() => setSelectedStudent(s)} className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg hover:bg-emerald-500/20 transition-colors">View</button>
-                      <button onClick={() => toggleSave(s.id)} className="p-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-white/30">
-                        {savedIds.has(s.id) ? <BookmarkCheck size={16} className="text-emerald-400" /> : <Bookmark size={16} />}
-                      </button>
-                      <label className="cursor-pointer p-1.5 rounded-lg hover:bg-white/10 transition-colors">
-                        <input type="checkbox" checked={compareIds.has(s.id)} onChange={() => toggleCompare(s.id)} className="accent-emerald-500 rounded" />
-                      </label>
-                    </td>
-                  </tr>
-                )})}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 rounded-lg text-xs bg-white/5 border border-white/10 text-white/50 disabled:opacity-30 hover:bg-white/10 transition-colors"><ChevronLeft size={14} /></button>
-          {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map(p => (
-            <button key={p} onClick={() => setPage(p)} className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${page === p ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'}`}>{p}</button>
-          ))}
-          <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 rounded-lg text-xs bg-white/5 border border-white/10 text-white/50 disabled:opacity-30 hover:bg-white/10 transition-colors"><ChevronRight size={14} /></button>
-        </div>
-      )}
-
-      {/* Detail Modal */}
-      {selectedStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} onClick={() => setSelectedStudent(null)}>
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#0e0e14] p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-300 font-bold text-xl">{(selectedStudent.name || 'C')[0].toUpperCase()}</div>
-                <div>
-                  <p className="font-heading font-bold text-lg text-white">{selectedStudent.name || 'Candidate'}</p>
-                  <p className="text-xs text-white/40">{selectedStudent.email || 'No email'}</p>
-                </div>
-              </div>
-              <button onClick={() => setSelectedStudent(null)} className="p-2 rounded-lg hover:bg-white/5 text-white/30"><X size={20} /></button>
-            </div>
-
-            {/* ATS + Trust */}
-            <div className="grid grid-cols-2 gap-3 mb-5">
-              <div className="p-4 rounded-xl bg-white/[0.03] border border-white/5 text-center">
-                <p className="text-[9px] text-white/25 uppercase tracking-wider mb-1">ATS Score</p>
-                <p className="font-heading text-3xl font-bold" style={{ color: `hsl(${(selectedStudent.ats_score || 0) * 1.2}, 70%, 50%)` }}>{selectedStudent.ats_score || 0}</p>
-              </div>
-              <div className="p-4 rounded-xl bg-white/[0.03] border border-white/5 text-center">
-                <p className="text-[9px] text-white/25 uppercase tracking-wider mb-1">Trust Score</p>
-                <p className="font-heading text-3xl font-bold text-teal-400">{selectedStudent.trust_score || 0}%</p>
-              </div>
-            </div>
-
-            {/* Details */}
-            <div className="grid grid-cols-2 gap-2.5 mb-5">
-              {[
-                { l: 'Course', v: selectedStudent.course },
-                { l: 'Branch', v: selectedStudent.branch },
-                { l: 'CGPA', v: selectedStudent.cgpa },
-                { l: '10th %', v: selectedStudent.percentage_10th ? `${selectedStudent.percentage_10th}%` : null },
-                { l: '12th %', v: selectedStudent.percentage_12th ? `${selectedStudent.percentage_12th}%` : null },
-                { l: 'Year', v: selectedStudent.graduation_year },
-                { l: 'City', v: selectedStudent.city },
-                { l: 'State', v: selectedStudent.state },
-              ].map((d, i) => (
-                <div key={i} className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                  <p className="text-[9px] text-white/25 uppercase tracking-wider mb-0.5">{d.l}</p>
-                  <p className="text-sm text-white/80 font-medium">{d.v || '—'}</p>
-                </div>
               ))}
-            </div>
-
-            {/* Verifications */}
-            <h4 className="text-xs font-bold text-white/40 uppercase tracking-wider mb-2">Verifications <span className="text-emerald-400/60 ml-2">{selectedStudent.verified_docs_count || 0} docs verified</span></h4>
-            <div className="space-y-2 mb-5">
-              {[
-                { key: 'resume', label: 'Resume / ATS', icon: FileText, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-                { key: 'degree', label: 'Degree Certificate', icon: GraduationCap, color: 'text-amber-400', bg: 'bg-amber-500/10' },
-                { key: 'marksheet_10th', label: '10th Marksheet', icon: BookOpen, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-                { key: 'marksheet_12th', label: '12th Marksheet', icon: BookOpen, color: 'text-violet-400', bg: 'bg-violet-500/10' },
-                { key: 'passport', label: 'Other Credential', icon: Paperclip, color: 'text-teal-400', bg: 'bg-teal-500/10' },
-                { key: 'police', label: 'Police Verification', icon: Shield, color: 'text-violet-400', bg: 'bg-violet-500/10' },
-                { key: 'aadhaar', label: 'Aadhaar KYC', icon: CreditCard, color: 'text-teal-400', bg: 'bg-teal-500/10' },
-              ].map((item, i) => {
-                const record = (selectedStudent.verifications || []).find((r: any) => r.type === item.key)
-                const isVerified = record && ['verified', 'ai_approved', 'admin_verified'].includes(record.status)
-                const isPending = record && ['pending', 'needs_review'].includes(record.status)
-                return (
-                  <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/5">
-                    <div className={`p-1.5 rounded-lg ${item.bg}`}><item.icon size={14} className={item.color} /></div>
-                    <span className="text-sm text-white/70 flex-1">{item.label}</span>
-                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg ${
-                      isVerified ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                      isPending ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                      'bg-white/5 text-white/30 border border-white/5'
-                    }`}>
-                      {isVerified ? 'Verified ✓' : isPending ? 'Pending' : 'Not Uploaded'}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-wrap gap-3">
-              <button onClick={() => toggleSave(selectedStudent.id)} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all shadow-lg" style={{ background: savedIds.has(selectedStudent.id) ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.05)', color: savedIds.has(selectedStudent.id) ? '#34d399' : 'rgba(255,255,255,0.6)', border: `1px solid ${savedIds.has(selectedStudent.id) ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.1)'}` }}>
-                {savedIds.has(selectedStudent.id) ? <><BookmarkCheck size={16} /> Saved</> : <><Bookmark size={16} /> Save Candidate</>}
-              </button>
-              {selectedStudent.email && (
-                <a href={`mailto:${selectedStudent.email}`} className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-colors shadow-lg">
-                  <Mail size={16} /> Contact
-                </a>
-              )}
-              <button onClick={() => handleExportProfile(selectedStudent)} className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm bg-teal-500/10 border border-teal-500/20 text-teal-400 hover:bg-teal-500/20 transition-colors shadow-lg">
-                <Download size={16} /> Export JSON
-              </button>
-            </div>
-          </motion.div>
+            </tbody>
+          </table>
         </div>
-      )}
-
-      {/* Compare Floating Action Button */}
-      <AnimatePresence>
-        {compareIds.size > 0 && (
-          <motion.div initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40">
-            <div className="flex items-center gap-4 bg-emerald-950/90 border border-emerald-500/30 backdrop-blur-md pl-6 pr-2 py-2 rounded-full shadow-2xl shadow-emerald-500/20">
-              <p className="text-sm font-bold text-white whitespace-nowrap"><span className="text-emerald-400">{compareIds.size}</span> / 3 Selected</p>
-              <button 
-                onClick={() => setShowCompareModal(true)} 
-                disabled={compareIds.size < 2} 
-                className="px-5 py-2.5 bg-emerald-500 text-black font-bold text-sm rounded-full disabled:opacity-50 transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
-              >
-                Compare Candidates
-              </button>
-              <button onClick={() => setCompareIds(new Set())} className="p-2.5 rounded-full hover:bg-white/10 text-white/50 hover:text-white transition-colors"><X size={16} /></button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Compare Modal */}
-      <AnimatePresence>
-        {showCompareModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setShowCompareModal(false)}>
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-2xl border border-emerald-500/30 bg-[#0e0e14] shadow-2xl shadow-emerald-500/10" onClick={e => e.stopPropagation()}>
-              <div className="sticky top-0 z-10 p-6 border-b border-white/10 bg-[#0e0e14]/90 backdrop-blur-md flex items-center justify-between">
-                <div>
-                  <h2 className="font-heading font-bold text-2xl text-white">Compare Candidates</h2>
-                  <p className="text-xs text-white/50 mt-1">Side-by-side analysis of key metrics</p>
-                </div>
-                <button onClick={() => setShowCompareModal(false)} className="p-2 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors"><X size={24} /></button>
-              </div>
-
-              <div className="p-6">
-                <div className="grid gap-6 grid-flow-col auto-cols-fr">
-                  {students.filter(s => compareIds.has(s.id)).map(student => (
-                    <div key={student.id} className="rounded-2xl border border-white/5 bg-white/[0.02] p-6 relative overflow-hidden group">
-                      <div className="absolute top-0 right-0 p-4">
-                        <button onClick={() => toggleCompare(student.id)} className="text-white/20 hover:text-red-400 transition-colors"><X size={16} /></button>
-                      </div>
-                      
-                      {/* Compare Identity */}
-                      <div className="flex flex-col items-center text-center mb-6">
-                         <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border-2 border-emerald-500/30 flex items-center justify-center text-emerald-300 font-bold text-3xl mb-4 shadow-lg shadow-emerald-500/20">{(student.name || 'C')[0].toUpperCase()}</div>
-                         <h3 className="font-heading font-bold text-lg text-white mb-1">{student.name || 'Candidate'}</h3>
-                         <p className="text-xs font-semibold text-emerald-400">{student.course || '—'} <span className="text-white/30">•</span> {student.graduation_year || '—'}</p>
-                      </div>
-
-                      {/* Compare Metrics Blocks */}
-                      <div className="space-y-4">
-                        <div className="p-4 rounded-xl bg-white/[0.03] border border-white/5 text-center flex items-center justify-between">
-                          <span className="text-xs text-white/40 font-bold uppercase tracking-wider">ATS Score</span>
-                          <span className="text-xl font-heading font-bold" style={{ color: `hsl(${(student.ats_score || 0) * 1.2}, 70%, 50%)` }}>{student.ats_score || 0}</span>
-                        </div>
-                        <div className="p-4 rounded-xl bg-white/[0.03] border border-white/5 text-center flex items-center justify-between">
-                          <span className="text-xs text-white/40 font-bold uppercase tracking-wider">CGPA</span>
-                          <span className="text-xl font-heading font-bold text-teal-400">{student.cgpa || '0.0'}</span>
-                        </div>
-                      </div>
-
-                      <div className="mt-6">
-                        <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-3 border-b border-white/5 pb-2">Verifications <span className="text-emerald-400/50 ml-1">{student.verified_docs_count || 0} verified</span></h4>
-                        <div className="space-y-2">
-                          {[
-                            { key: 'resume', label: 'Resume', icon: FileText },
-                            { key: 'degree', label: 'Degree', icon: GraduationCap },
-                            { key: 'marksheet_10th', label: '10th', icon: BookOpen },
-                            { key: 'marksheet_12th', label: '12th', icon: BookOpen },
-                            { key: 'police', label: 'Police', icon: Shield },
-                            { key: 'aadhaar', label: 'Aadhaar', icon: CreditCard },
-                          ].map((v, i) => {
-                            const record = (student.verifications || []).find((r: any) => r.type === v.key)
-                            const ok = record && ['verified', 'ai_approved', 'admin_verified'].includes(record.status)
-                            return (
-                              <div key={i} className="flex items-center justify-between">
-                                <span className="text-xs text-white/60 flex items-center gap-2"><v.icon size={12} className={ok ? 'text-emerald-400' : 'text-white/20'} /> {v.label}</span>
-                                {ok ? <span className="text-emerald-400"><CheckCircle2 size={16} /></span> : <span className="text-white/20"><X size={16} /></span>}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="mt-8 pt-6 border-t border-white/5 flex gap-2">
-                        <button onClick={() => { setShowCompareModal(false); setSelectedStudent(student) }} className="flex-1 py-2 rounded-xl text-xs font-bold text-white bg-white/5 hover:bg-white/10 transition-colors">View Full</button>
-                        <button onClick={() => toggleSave(student.id)} className="flex-1 py-2 rounded-xl text-xs font-bold transition-colors border" style={{ background: savedIds.has(student.id) ? 'transparent' : 'rgba(16,185,129,0.1)', color: savedIds.has(student.id) ? '#34d399' : '#10b981', borderColor: savedIds.has(student.id) ? 'transparent' : 'rgba(16,185,129,0.2)' }}>
-                           {savedIds.has(student.id) ? 'Saved' : 'Save'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </div>
+      </Dialog>
+    </>
   )
 }

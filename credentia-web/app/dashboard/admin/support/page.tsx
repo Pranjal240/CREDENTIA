@@ -1,593 +1,316 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  MessageCircle, Search, Send, Paperclip, Loader2,
-  CheckCheck, Clock, FileText, Image as ImageIcon,
-  Headphones, Archive, CheckCircle2, User, X, ArrowLeft,
-  Trash2, Plus, RotateCcw
-} from 'lucide-react'
+import * as React from 'react'
+import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
+import { ArrowLeft, CheckCheck, Headphones, Inbox, MailOpen, MessageSquare, Paperclip, Reply, Send, Trash2 } from 'lucide-react'
+import SmoothButton from '@/components/smoothui/components/smooth-button'
+import { CopyButton } from '@/components/ui/copy-button'
+import { SearchBar } from '@/components/ui/search-bar'
+import { useAdminResource } from '@/hooks/use-admin'
+import { ConfirmDialog } from '@/components/dash/confirm-dialog'
+import { useSearch } from '@/components/search/search-context'
+import { TextArea } from '@/components/dash/form'
+import { Badge, EmptyState, ErrorState, Metric, PageHeader, PageSkeleton, Segmented, StatusBadge } from '@/components/dash/kit'
+import { ProfileAvatar } from '@/components/dash/profile-avatar'
+import { RoleBadge } from '@/components/dash/role-badge'
+import { adminPost } from '@/lib/admin-client'
+import { formatDateTime, formatNumber, timeAgo } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import type { SupportConversation, SupportMessage } from '@/lib/admin-types'
 
-type Conversation = {
-  id: string
-  user_id: string
-  user_role: string
-  user_name: string
-  user_email: string
-  status: string
-  subject: string
-  last_message_at: string
-  created_at: string
-  unread_count: number
-  last_message_preview: string
-  last_message_role: string
-  total_messages: number
-}
+const VIEWS = ['Open', 'Unread', 'Resolved', 'All'] as const
+type View = (typeof VIEWS)[number]
 
-type Message = {
-  id: string
-  conversation_id: string
-  sender_id: string
-  sender_role: string
-  content: string
-  file_url?: string
-  file_name?: string
-  file_type?: string
-  is_read: boolean
-  created_at: string
-}
+type ThreadData = { conversation: Omit<SupportConversation, 'unread_count' | 'preview' | 'preview_role'>; messages: SupportMessage[] }
 
-export default function AdminSupportPage() {
-  const [adminId, setAdminId] = useState('')
-  const [conversations, setConversations] = useState<Conversation[]>([])
-  const [selectedConv, setSelectedConv] = useState<Conversation | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState('')
-  const [sending, setSending] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [loadingMsgs, setLoadingMsgs] = useState(false)
-  const [search, setSearch] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const [showMobileChat, setShowMobileChat] = useState(false)
-  const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('all')
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+/** One conversation: the messages, the reply box and the actions. It is remounted for each conversation. */
+function ThreadView({ id, onBack, onChanged, onDeleted }: { id: string; onBack: () => void; onChanged: () => void; onDeleted: () => void }) {
+  const { data, setData, loading, error, refresh } = useAdminResource<ThreadData>(`/api/admin/support?conversation=${encodeURIComponent(id)}`, { tables: ['support_messages'], pollMs: 20_000 })
+  const [text, setText] = React.useState('')
+  const [sending, setSending] = React.useState(false)
+  const [actionError, setActionError] = React.useState('')
+  const [confirmDelete, setConfirmDelete] = React.useState(false)
+  const [busy, setBusy] = React.useState<'status' | 'delete' | null>(null)
+  const box = React.useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setAdminId(session.user.id)
-        loadConversations(session.user.id)
-      }
-    })
-  }, [])
+  const conversation = data?.conversation
+  const messages = React.useMemo(() => data?.messages ?? [], [data])
+  const unreadFromPerson = messages.filter((m) => m.sender_role !== 'admin' && !m.is_read).length
 
-  const loadConversations = async (uid: string) => {
-    setLoading(true)
-    const res = await fetch(`/api/chat/conversations?userId=${uid}&role=admin`)
-    const data = await res.json()
-    if (data.conversations) setConversations(data.conversations)
-    setLoading(false)
-  }
-
-  const selectConversation = async (conv: Conversation) => {
-    setSelectedConv(conv)
-    setShowMobileChat(true)
-    setLoadingMsgs(true)
-
-    const res = await fetch(`/api/chat/messages?conversationId=${conv.id}`)
-    const data = await res.json()
-    if (data.messages) setMessages(data.messages)
-    setLoadingMsgs(false)
-
-    // Mark as read
-    await fetch('/api/chat/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversationId: conv.id, readerRole: 'admin' }),
-    })
-
-    setConversations(prev =>
-      prev.map(c => c.id === conv.id ? { ...c, unread_count: 0 } : c)
-    )
-
-    setTimeout(() => inputRef.current?.focus(), 300)
-  }
-
-  // Real-time subscription for admin
-  useEffect(() => {
-    const channel = supabase
-      .channel('admin-support')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'support_messages',
-      }, (payload: any) => {
-        const newMsg = payload.new as Message
-        if (selectedConv && newMsg.conversation_id === selectedConv.id) {
-          setMessages(prev => {
-            if (prev.some(m => m.id === newMsg.id)) return prev
-            return [...prev, newMsg]
-          })
-          if (newMsg.sender_role !== 'admin') {
-            fetch('/api/chat/messages', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ conversationId: newMsg.conversation_id, readerRole: 'admin' }),
-            })
-          }
-        }
-        if (adminId) loadConversations(adminId)
+  // Opening a thread means the admin has read it.
+  React.useEffect(() => {
+    if (unreadFromPerson === 0) return
+    adminPost('/api/admin/support', { action: 'read', conversationId: id })
+      .then(() => {
+        setData((prev) => (prev ? { ...prev, messages: prev.messages.map((m) => (m.sender_role !== 'admin' ? { ...m, is_read: true } : m)) } : prev))
+        onChanged()
       })
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'support_conversations',
-      }, () => {
-        if (adminId) loadConversations(adminId)
-      })
-      .subscribe()
+      .catch(() => undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unreadFromPerson, id])
 
-    return () => { supabase.removeChannel(channel) }
-  }, [selectedConv, adminId])
+  React.useEffect(() => {
+    const el = box.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [messages.length, loading])
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  const sendMessage = async () => {
-    if (!input.trim() || !selectedConv || !adminId) return
+  const send = async () => {
+    const content = text.trim()
+    if (!content || sending) return
     setSending(true)
+    setActionError('')
     try {
-      await fetch('/api/chat/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: adminId,
-          userRole: 'admin',
-          userName: 'Support Agent',
-          userEmail: '',
-          content: input.trim(),
-          conversationId: selectedConv.id,
-        }),
-      })
-      setInput('')
+      const { message } = await adminPost<{ message: SupportMessage }>('/api/admin/support', { action: 'reply', conversationId: id, content })
+      setData((prev) => (prev ? { ...prev, messages: [...prev.messages, message] } : prev))
+      setText('')
+      onChanged()
     } catch (err) {
-      console.error(err)
+      setActionError((err as Error).message)
     } finally {
       setSending(false)
     }
   }
 
-  const handleFileUpload = async (file: File) => {
-    if (!selectedConv || !adminId) return
-    if (file.size > 10 * 1024 * 1024) { alert('File too large. Maximum 10MB.'); return }
-    setUploading(true)
+  const toggleStatus = async () => {
+    if (!conversation) return
+    const next = conversation.status === 'resolved' ? 'open' : 'resolved'
+    setBusy('status')
+    setActionError('')
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('folder', 'chat-attachments')
-      const res = await fetch('/api/upload', { method: 'POST', body: formData })
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({ error: 'Upload failed' }))
-        throw new Error(errData.error || `Upload failed (HTTP ${res.status})`)
-      }
-      const data = await res.json()
-      if (data.success && data.url) {
-        await fetch('/api/chat/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: adminId, userRole: 'admin', userName: 'Support Agent', userEmail: '',
-            content: `📎 ${file.name}`,
-            conversationId: selectedConv.id,
-            fileUrl: data.url, fileName: file.name, fileType: file.type,
-          }),
-        })
-      } else {
-        throw new Error(data.error || 'Upload did not return a URL')
-      }
-    } catch (err: any) {
-      console.error('Upload error:', err)
-      alert(`File upload failed: ${err.message || 'Unknown error'}. Please try again.`)
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
-  }
-
-  const updateConversationStatus = async (convId: string, status: string) => {
-    await fetch('/api/chat/conversations', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversationId: convId, status }),
-    })
-    setConversations(prev =>
-      prev.map(c => c.id === convId ? { ...c, status } : c)
-    )
-    if (selectedConv?.id === convId) {
-      setSelectedConv(prev => prev ? { ...prev, status } : null)
-    }
-  }
-
-  const deleteConversation = async (convId: string) => {
-    if (!confirm('Delete this conversation permanently? All messages will be lost.')) return
-    try {
-      const res = await fetch('/api/chat/conversations', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversationId: convId }),
-      })
-      if (res.ok) {
-        setConversations(prev => prev.filter(c => c.id !== convId))
-        if (selectedConv?.id === convId) {
-          setSelectedConv(null)
-          setMessages([])
-          setShowMobileChat(false)
-        }
-      }
+      await adminPost('/api/admin/support', { action: 'status', conversationId: id, status: next })
+      setData((prev) => (prev ? { ...prev, conversation: { ...prev.conversation, status: next } } : prev))
+      onChanged()
     } catch (err) {
-      console.error('Delete error:', err)
+      setActionError((err as Error).message)
+    } finally {
+      setBusy(null)
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
+  const remove = async () => {
+    setBusy('delete')
+    setActionError('')
+    try {
+      await adminPost('/api/admin/support', { action: 'delete', conversationId: id })
+      setConfirmDelete(false)
+      onDeleted()
+    } catch (err) {
+      setActionError((err as Error).message)
+    } finally {
+      setBusy(null)
+    }
   }
 
-  const formatTime = (dateStr: string) => new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr)
-    const today = new Date()
-    if (d.toDateString() === today.toDateString()) return 'Today'
-    const y = new Date(today); y.setDate(y.getDate() - 1)
-    if (d.toDateString() === y.toDateString()) return 'Yesterday'
-    return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
-  }
-
-  const relativeTime = (dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime()
-    const m = Math.floor(diff / 60000)
-    if (m < 1) return 'Just now'
-    if (m < 60) return `${m}m ago`
-    const h = Math.floor(m / 60)
-    if (h < 24) return `${h}h ago`
-    return `${Math.floor(h / 24)}d ago`
-  }
-
-  // Filter conversations
-  const filteredConvs = conversations.filter(c => {
-    if (filter === 'open' && c.status !== 'open') return false
-    if (filter === 'resolved' && c.status !== 'resolved') return false
-    if (c.status === 'archived' && filter === 'all') return false
-    if (search && !(c.user_name + c.user_email + c.subject).toLowerCase().includes(search.toLowerCase())) return false
-    return true
-  })
-
-  const totalUnread = conversations.reduce((acc, c) => acc + c.unread_count, 0)
-
-  const roleColors: Record<string, { bg: string; text: string; label: string }> = {
-    student: { bg: 'rgba(59,130,246,0.1)', text: '#3b82f6', label: 'Student' },
-    company: { bg: 'rgba(245,158,11,0.1)', text: '#f59e0b', label: 'Company' },
-    university: { bg: 'rgba(139,92,246,0.1)', text: '#8b5cf6', label: 'University' },
-  }
-
-  const groupedMessages: { date: string; msgs: Message[] }[] = []
-  messages.forEach(msg => {
-    const d = formatDate(msg.created_at)
-    const last = groupedMessages[groupedMessages.length - 1]
-    if (last && last.date === d) last.msgs.push(msg)
-    else groupedMessages.push({ date: d, msgs: [msg] })
-  })
+  if (loading && !data) return <div className="grid flex-1 place-items-center"><div className="skeleton h-24 w-3/4" /></div>
+  if (error && !data) return <ErrorState message={error} onRetry={refresh} />
+  if (!conversation) return null
 
   return (
-    <div className="h-[calc(100vh-80px)] flex rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-
-      {/* ── Left Panel: Conversations List ── */}
-      <div className={`w-full md:w-[340px] lg:w-[380px] flex-shrink-0 flex flex-col ${showMobileChat ? 'hidden md:flex' : 'flex'}`} style={{ borderRight: '1px solid rgba(255,255,255,0.06)' }}>
-        {/* Header */}
-        <div className="px-4 py-3.5 flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)' }}>
-              <Headphones size={18} className="text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h1 className="font-heading text-base sm:text-lg font-bold text-white">Support Inbox</h1>
-              <p className="text-[10px] text-white/30 uppercase tracking-wider">
-                {totalUnread > 0 ? `${totalUnread} unread` : 'All caught up'} • {conversations.length} conversations
-              </p>
-            </div>
+    <>
+      <header className="flex flex-wrap items-center gap-3 border-b border-white/10 px-4 py-3">
+        <SmoothButton size="icon-sm" variant="ghost" shape="pill" className="lg:hidden" aria-label="Back to the conversations" onClick={onBack}>
+          <ArrowLeft aria-hidden="true" />
+        </SmoothButton>
+        <ProfileAvatar name={conversation.user_name} email={conversation.user_email} size={40} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="truncate text-sm font-extrabold">{conversation.user_name || conversation.user_email || 'Someone'}</h2>
+            <RoleBadge role={conversation.user_role} />
+            <StatusBadge status={conversation.status} />
           </div>
-          <div className="relative mb-2.5">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search conversations..."
-              className="w-full h-9 pl-9 pr-4 rounded-xl text-xs bg-white/5 border border-white/8 text-white placeholder-white/20 focus:outline-none focus:border-blue-500/40"
-            />
-          </div>
-          {/* Filter tabs */}
-          <div className="flex gap-1.5">
-            {(['all', 'open', 'resolved'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className="px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all"
-                style={{
-                  background: filter === f ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.03)',
-                  color: filter === f ? '#60a5fa' : 'rgba(255,255,255,0.3)',
-                  border: `1px solid ${filter === f ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.04)'}`,
-                }}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
+          <p className="truncate text-xs text-muted-foreground">{conversation.subject || 'No subject'}</p>
         </div>
-
-        {/* Conversations List */}
-        <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.08) transparent' } as any}>
-          {loading ? (
-            <div className="flex items-center justify-center h-32">
-              <Loader2 size={20} className="animate-spin text-blue-400" />
-            </div>
-          ) : filteredConvs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 gap-2 text-center px-6">
-              <MessageCircle size={24} className="text-white/10" />
-              <p className="text-xs text-white/25">No conversations found</p>
-            </div>
-          ) : (
-            filteredConvs.map((conv) => {
-              const role = roleColors[conv.user_role] || { bg: 'rgba(100,116,139,0.1)', text: '#64748b', label: conv.user_role }
-              const isSelected = selectedConv?.id === conv.id
-              return (
-                <div key={conv.id} className="relative group">
-                  <motion.button
-                    onClick={() => selectConversation(conv)}
-                    className="w-full text-left px-4 py-3 transition-all hover:bg-white/[0.03]"
-                    style={{
-                      background: isSelected ? 'rgba(59,130,246,0.06)' : 'transparent',
-                      borderBottom: '1px solid rgba(255,255,255,0.03)',
-                      borderLeft: isSelected ? '3px solid #3b82f6' : '3px solid transparent',
-                    }}
-                    whileHover={{ x: 2 }}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold" style={{ background: role.bg, color: role.text }}>
-                        {(conv.user_name || 'U')[0].toUpperCase()}
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-white/90 truncate">{conv.user_name || 'User'}</span>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider flex-shrink-0" style={{ background: role.bg, color: role.text }}>
-                            {role.label}
-                          </span>
-                        </div>
-                        <p className="text-xs text-white/35 truncate mt-0.5">{conv.last_message_preview || conv.subject || 'No messages'}</p>
-                      </div>
-
-                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <span className="text-[9px] text-white/20">{relativeTime(conv.last_message_at)}</span>
-                        {conv.unread_count > 0 && (
-                          <span className="w-5 h-5 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center">
-                            {conv.unread_count}
-                          </span>
-                        )}
-                        {conv.status === 'resolved' && (
-                          <CheckCircle2 size={12} className="text-emerald-400" />
-                        )}
-                      </div>
-                    </div>
-                  </motion.button>
-                  {/* Delete button on hover */}
-                  <button
-                    onClick={() => deleteConversation(conv.id)}
-                    className="absolute right-2 top-2 p-1.5 rounded-lg bg-red-500/10 text-red-400/60 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20 hover:text-red-400"
-                    title="Delete conversation"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              )
-            })
-          )}
+        <div className="flex flex-wrap items-center gap-2">
+          {conversation.user_email ? <CopyButton value={conversation.user_email} /> : null}
+          <Link href={`/dashboard/admin/users?q=${encodeURIComponent(conversation.user_email || conversation.user_name || '')}`} className="text-xs font-bold text-brand-ink hover:underline">
+            Open the account
+          </Link>
+          <SmoothButton size="xs" variant="outline" shape="pill" loading={busy === 'status'} onClick={toggleStatus}>
+            <CheckCheck aria-hidden="true" />
+            {conversation.status === 'resolved' ? 'Reopen' : 'Mark resolved'}
+          </SmoothButton>
+          <SmoothButton size="icon-sm" variant="ghost" color="destructive" shape="pill" aria-label="Delete this conversation" onClick={() => setConfirmDelete(true)}>
+            <Trash2 aria-hidden="true" />
+          </SmoothButton>
         </div>
-      </div>
+      </header>
 
-      {/* ── Right Panel: Chat View ── */}
-      <div className={`flex-1 flex flex-col min-w-0 ${!showMobileChat ? 'hidden md:flex' : 'flex'}`}>
-        {selectedConv ? (
-          <>
-            {/* Chat Header */}
-            <div className="px-3 sm:px-5 py-3 flex items-center gap-2 sm:gap-3 flex-shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
-              <button
-                onClick={() => setShowMobileChat(false)}
-                className="md:hidden p-1.5 rounded-lg hover:bg-white/5 text-white/40 flex-shrink-0"
-              >
-                <ArrowLeft size={18} />
-              </button>
-              <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{
-                background: (roleColors[selectedConv.user_role] || {}).bg || 'rgba(100,116,139,0.1)',
-                color: (roleColors[selectedConv.user_role] || {}).text || '#64748b',
-              }}>
-                {(selectedConv.user_name || 'U')[0].toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white truncate">{selectedConv.user_name || 'User'}</p>
-                <p className="text-[10px] text-white/30 truncate">{selectedConv.user_email} • {(roleColors[selectedConv.user_role] || {}).label || selectedConv.user_role}</p>
-              </div>
-              <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-                {selectedConv.status !== 'resolved' ? (
-                  <button
-                    onClick={() => updateConversationStatus(selectedConv.id, 'resolved')}
-                    className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-400 transition-colors hover:bg-emerald-500/10"
-                    style={{ border: '1px solid rgba(16,185,129,0.2)' }}
-                  >
-                    <CheckCircle2 size={12} /> <span className="hidden sm:inline">Resolve</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => updateConversationStatus(selectedConv.id, 'open')}
-                    className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-blue-400 transition-colors hover:bg-blue-500/10"
-                    style={{ border: '1px solid rgba(59,130,246,0.2)' }}
-                  >
-                    <RotateCcw size={12} /> <span className="hidden sm:inline">Reopen</span>
-                  </button>
-                )}
-                <button
-                  onClick={() => deleteConversation(selectedConv.id)}
-                  className="p-1.5 rounded-lg text-red-400/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                  title="Delete conversation"
-                >
-                  <Trash2 size={16} />
-                </button>
-                <button
-                  onClick={() => updateConversationStatus(selectedConv.id, 'archived')}
-                  className="p-1.5 rounded-lg text-white/20 hover:text-white/40 hover:bg-white/5 transition-colors"
-                  title="Archive"
-                >
-                  <Archive size={16} />
-                </button>
-              </div>
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-4 space-y-1" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.08) transparent' } as any}>
-              {loadingMsgs ? (
-                <div className="flex items-center justify-center h-full">
-                  <Loader2 size={24} className="animate-spin text-blue-400" />
-                </div>
-              ) : messages.length === 0 ? (
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-xs text-white/20">No messages in this conversation</p>
-                </div>
-              ) : (
-                groupedMessages.map((group, gi) => (
-                  <div key={gi}>
-                    <div className="flex items-center gap-3 my-3">
-                      <div className="flex-1 h-px bg-white/5" />
-                      <span className="text-[10px] text-white/20 font-medium uppercase tracking-wider">{group.date}</span>
-                      <div className="flex-1 h-px bg-white/5" />
-                    </div>
-                    {group.msgs.map((msg, mi) => {
-                      const isAdmin = msg.sender_role === 'admin'
-                      return (
-                        <motion.div
-                          key={msg.id}
-                          initial={{ opacity: 0, y: 6 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className={`flex mb-2 ${isAdmin ? 'justify-end' : 'justify-start'}`}
-                        >
-                          <div
-                            className="max-w-[85%] sm:max-w-[70%] rounded-2xl px-3 sm:px-4 py-2.5"
-                            style={{
-                              background: isAdmin
-                                ? 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(16,185,129,0.08))'
-                                : 'rgba(255,255,255,0.05)',
-                              border: isAdmin
-                                ? '1px solid rgba(16,185,129,0.15)'
-                                : '1px solid rgba(255,255,255,0.06)',
-                              borderBottomRightRadius: isAdmin ? '6px' : '16px',
-                              borderBottomLeftRadius: isAdmin ? '16px' : '6px',
-                            }}
-                          >
-                            {!isAdmin && (
-                              <p className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{
-                                color: (roleColors[msg.sender_role] || {}).text || '#64748b'
-                              }}>
-                                {msg.sender_role}
-                              </p>
-                            )}
-                            {isAdmin && (
-                              <p className="text-[9px] font-bold uppercase tracking-wider mb-1 text-emerald-400">You</p>
-                            )}
-                            {msg.file_url && (
-                              <a
-                                href={msg.file_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 mb-1.5 px-2.5 py-2 rounded-lg hover:bg-white/5"
-                                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
-                              >
-                                {msg.file_type?.startsWith('image/')
-                                  ? <ImageIcon size={14} className="text-blue-400 flex-shrink-0" />
-                                  : <FileText size={14} className="text-blue-400 flex-shrink-0" />}
-                                <span className="text-[11px] text-blue-300 truncate">{msg.file_name || 'File'}</span>
-                              </a>
-                            )}
-                            <p className="text-[13px] text-white/80 leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
-                            <div className={`flex items-center gap-1.5 mt-1 ${isAdmin ? 'justify-end' : ''}`}>
-                              <span className="text-[9px] text-white/15">{formatTime(msg.created_at)}</span>
-                              {isAdmin && (msg.is_read ? <CheckCheck size={10} className="text-emerald-400" /> : <Clock size={10} className="text-white/15" />)}
-                            </div>
-                          </div>
-                        </motion.div>
-                      )
-                    })}
-                  </div>
-                ))
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Reply Input */}
-            <div className="px-3 sm:px-5 py-3 flex-shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="p-2 sm:p-2.5 rounded-xl text-white/30 hover:text-white/60 hover:bg-white/5 transition-colors flex-shrink-0"
-                >
-                  {uploading ? <Loader2 size={18} className="animate-spin" /> : <Paperclip size={18} />}
-                </button>
-                <input ref={fileInputRef} type="file" className="hidden" onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
-
-                <input
-                  ref={inputRef}
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Reply to message..."
-                  className="flex-1 min-w-0 h-10 sm:h-11 px-3 sm:px-4 rounded-xl text-sm bg-white/5 border border-white/8 text-white placeholder-white/20 focus:outline-none focus:border-emerald-500/40"
-                  disabled={sending}
-                />
-
-                <motion.button
-                  onClick={sendMessage}
-                  disabled={!input.trim() || sending}
-                  className="h-10 sm:h-11 px-3 sm:px-5 rounded-xl text-sm font-bold flex items-center gap-1.5 transition-all disabled:opacity-20 flex-shrink-0"
-                  style={{
-                    background: input.trim() ? 'linear-gradient(135deg, #10b981, #059669)' : 'rgba(255,255,255,0.05)',
-                    color: input.trim() ? 'white' : 'rgba(255,255,255,0.2)',
-                  }}
-                  whileHover={input.trim() ? { scale: 1.02 } : {}}
-                  whileTap={input.trim() ? { scale: 0.96 } : {}}
-                >
-                  {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                  <span className="hidden sm:inline">Send</span>
-                </motion.button>
-              </div>
-            </div>
-          </>
+      <div ref={box} data-lenis-prevent className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4 scrollbar-thin" role="log" aria-label="Messages">
+        {messages.length === 0 ? (
+          <EmptyState icon={<MessageSquare />} title="No messages in this conversation" />
         ) : (
-          /* Empty state */
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8">
-            <div className="w-20 h-20 rounded-2xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.1), rgba(99,102,241,0.1))' }}>
-              <MessageCircle size={36} className="text-blue-400/50" />
-            </div>
-            <p className="text-lg font-heading font-bold text-white/30">Select a conversation</p>
-            <p className="text-xs text-white/15 max-w-xs">
-              Choose a conversation from the left panel to view and respond to support messages from students, companies, and universities.
-            </p>
-          </div>
+          messages.map((m) => {
+            const mine = m.sender_role === 'admin'
+            return (
+              <div key={m.id} className={cn('flex', mine ? 'justify-end' : 'justify-start')}>
+                <div className={cn('max-w-[min(34rem,88%)] rounded-2xl px-3.5 py-2.5', mine ? 'border border-brand/40 bg-brand/20' : 'glass-flat')}>
+                  <p className="mb-1 text-[11px] font-bold text-muted-foreground">{mine ? 'You' : conversation.user_name || 'Them'}</p>
+                  <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{m.content}</p>
+                  {m.file_url ? (
+                    <a href={m.file_url} target="_blank" rel="noreferrer noopener" className="mt-2 inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.05] px-3 text-xs font-bold hover:border-brand/50">
+                      <Paperclip className="size-3.5" aria-hidden="true" />
+                      {m.file_name || 'Attachment'}
+                    </a>
+                  ) : null}
+                  <time dateTime={m.created_at} className="mt-1.5 block text-[11px] text-muted-foreground">
+                    {formatDateTime(m.created_at)}
+                  </time>
+                </div>
+              </div>
+            )
+          })
         )}
       </div>
-    </div>
+
+      <footer className="border-t border-white/10 p-3">
+        {actionError ? (
+          <p role="alert" className="mb-2 text-sm font-semibold text-destructive">
+            {actionError}
+          </p>
+        ) : null}
+        <div className="flex items-end gap-2">
+          <TextArea
+            aria-label="Your reply"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault()
+                void send()
+              }
+            }}
+            maxLength={2000}
+            placeholder="Write a reply. Press Ctrl and Enter to send."
+            className="max-h-40 min-h-[48px] flex-1"
+            rows={2}
+          />
+          <SmoothButton variant="solid" color="accent" shape="pill" loading={sending} disabled={!text.trim()} onClick={() => void send()}>
+            <Send aria-hidden="true" />
+            Send
+          </SmoothButton>
+        </div>
+        <p className="mt-1.5 text-[11px] text-muted-foreground">They are notified when you reply.</p>
+      </footer>
+
+      <ConfirmDialog open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Delete this conversation?" description={conversation.user_name || conversation.user_email || undefined} confirmLabel="Delete" destructive busy={busy === 'delete'} error={actionError} onConfirm={() => void remove()}>
+        <p>The conversation and every message in it are removed for good. This is written to the audit log and cannot be undone.</p>
+      </ConfirmDialog>
+    </>
+  )
+}
+
+export default function AdminSupportPage() {
+  const params = useSearchParams()
+  const search = useSearch()
+  const { data, loading, error, refresh } = useAdminResource<{ conversations: SupportConversation[]; unread: number }>('/api/admin/support', { tables: ['support_conversations', 'support_messages'], pollMs: 30_000 })
+  const [view, setView] = React.useState<View>('Open')
+  const [query, setQuery] = React.useState('')
+  const [active, setActive] = React.useState<string | null>(null)
+
+  const wanted = params?.get('conversation')
+  React.useEffect(() => {
+    if (wanted) setActive(wanted)
+  }, [wanted])
+
+  const conversations = React.useMemo(() => data?.conversations ?? [], [data])
+  const stats = React.useMemo(
+    () => ({
+      open: conversations.filter((c) => c.status === 'open').length,
+      unread: data?.unread ?? 0,
+      needsReply: conversations.filter((c) => c.status === 'open' && c.preview_role !== 'admin').length,
+      resolved: conversations.filter((c) => c.status === 'resolved').length,
+    }),
+    [conversations, data],
+  )
+
+  const shown = React.useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return conversations.filter((c) => {
+      if (view === 'Open' && c.status !== 'open') return false
+      if (view === 'Unread' && c.unread_count === 0) return false
+      if (view === 'Resolved' && c.status !== 'resolved') return false
+      return !q || `${c.user_name ?? ''} ${c.user_email ?? ''} ${c.subject ?? ''} ${c.preview}`.toLowerCase().includes(q)
+    })
+  }, [conversations, view, query])
+
+  if (loading) return <PageSkeleton metrics={4} panels={1} />
+  if (error && !data) return <ErrorState message={error} onRetry={refresh} />
+
+  return (
+    <>
+      <PageHeader title="Support inbox" description="Conversations from students, companies and universities. Peon hands people to you here when it cannot help." />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Metric index={0} emphasis title="Open" icon={<Inbox />} value={stats.open} detail="Conversations in progress" />
+        <Metric index={1} title="Unread messages" icon={<MailOpen />} value={stats.unread} detail="Not opened by an admin" />
+        <Metric index={2} title="Waiting for your reply" icon={<Reply />} value={stats.needsReply} detail="They wrote last" />
+        <Metric index={3} title="Resolved" icon={<CheckCheck />} value={stats.resolved} detail="Closed conversations" />
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[23rem_minmax(0,1fr)]">
+        <section className={cn('glass-flat rise flex h-[min(40rem,calc(100dvh-13rem))] min-h-[26rem] min-w-0 flex-col rounded-[20px]', active ? 'hidden lg:flex' : 'flex')} style={{ '--i': 4 } as React.CSSProperties} aria-label="Conversations">
+          <div className="space-y-2.5 border-b border-white/10 p-3">
+            <SearchBar value={query} onChange={setQuery} placeholder="Search conversations" onAskAI={(q) => search.open({ query: q })} />
+            <Segmented<View> options={VIEWS} value={view} onChange={setView} label="Show conversations" />
+          </div>
+          <div data-lenis-prevent className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 scrollbar-thin">
+            {conversations.length === 0 ? (
+              <EmptyState icon={<Headphones />} title="No conversations yet" hint="When someone asks Peon for a person, or writes to support, the conversation appears here." />
+            ) : shown.length === 0 ? (
+              <EmptyState icon={<Inbox />} title="Nothing in this view" hint="Try another view or clear the search." />
+            ) : (
+              <ul className="space-y-1">
+                {shown.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => setActive(c.id)}
+                      aria-current={active === c.id ? 'true' : undefined}
+                      className={cn('flex w-full items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors', active === c.id ? 'border-brand/50 bg-brand/10' : 'border-transparent hover:bg-white/[0.04]')}
+                    >
+                      <ProfileAvatar name={c.user_name} email={c.user_email} size={38} />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-baseline justify-between gap-2">
+                          <span className={cn('truncate text-sm', c.unread_count > 0 ? 'font-extrabold' : 'font-bold')}>{c.user_name || c.user_email || 'Someone'}</span>
+                          <time dateTime={c.last_message_at ?? undefined} className="shrink-0 text-[11px] text-muted-foreground">
+                            {timeAgo(c.last_message_at)}
+                          </time>
+                        </span>
+                        <span className="mt-0.5 flex items-center gap-1.5">
+                          <RoleBadge role={c.user_role} className="shrink-0 !px-1.5 !py-0.5 !text-[10px]" />
+                          <span className="truncate text-xs text-muted-foreground">{c.preview_role === 'admin' ? `You: ${c.preview}` : c.preview}</span>
+                        </span>
+                        {c.status === 'resolved' ? <Badge className="mt-1.5" tone="success">Resolved</Badge> : null}
+                      </span>
+                      {c.unread_count > 0 ? <span className="tabular mt-0.5 grid min-w-5 shrink-0 place-items-center rounded-md bg-brand px-1.5 py-0.5 text-[11px] font-extrabold text-on-brand">{formatNumber(c.unread_count)}</span> : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+
+        <section className={cn('glass-flat rise h-[min(40rem,calc(100dvh-13rem))] min-h-[26rem] min-w-0 flex-col rounded-[20px] lg:flex', active ? 'flex' : 'hidden')} style={{ '--i': 5 } as React.CSSProperties} aria-label="Conversation">
+          {active ? (
+            <ThreadView
+              key={active}
+              id={active}
+              onBack={() => setActive(null)}
+              onChanged={() => void refresh()}
+              onDeleted={() => {
+                setActive(null)
+                void refresh()
+              }}
+            />
+          ) : (
+            <div className="grid flex-1 place-items-center">
+              <EmptyState icon={<MessageSquare />} title="Choose a conversation" hint="Pick one on the left to read it and reply." />
+            </div>
+          )}
+        </section>
+      </div>
+    </>
   )
 }

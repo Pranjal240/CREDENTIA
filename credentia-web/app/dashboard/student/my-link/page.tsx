@@ -1,134 +1,156 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-import { motion } from 'framer-motion'
-import { Link2, Copy, Check, QrCode, ExternalLink, Eye, Share2 } from 'lucide-react'
+import * as React from 'react'
+import QRCode from 'react-qr-code'
+import { EnvelopeSimple, LinkedinLogo, WhatsappLogo } from '@phosphor-icons/react'
+import { ExternalLink, Eye, Link2 } from 'lucide-react'
+import { useStudentData } from '@/hooks/use-student-data'
+import { EmptyState, ErrorState, Metric, PageHeader, PageSkeleton, Panel } from '@/components/dash/kit'
+import { Switch } from '@/components/dash/form'
+import { Button } from '@/components/ui/button'
+import { CopyButton } from '@/components/ui/copy-button'
 
 export default function MyLinkPage() {
-  const [token, setToken] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [generating, setGenerating] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const [views, setViews] = useState(0)
-  const [isPublic, setIsPublic] = useState(false)
+  const { student, loading, error, refresh } = useStudentData()
+  const [origin, setOrigin] = React.useState('')
+  const [busy, setBusy] = React.useState<'generate' | 'visibility' | null>(null)
+  const [message, setMessage] = React.useState('')
 
-  useEffect(() => {
-    const load = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
-      const { data } = await supabase.from('students').select('share_token, profile_views, profile_is_public').eq('id', session.user.id).single()
-      if (data?.share_token) { setToken(data.share_token); setViews(data.profile_views || 0); setIsPublic(data.profile_is_public) }
-      setLoading(false)
-    }
-    load()
-  }, [])
+  React.useEffect(() => setOrigin(window.location.origin), [])
 
-  const generateLink = async () => {
-    setGenerating(true)
+  const token = student?.share_token ?? ''
+  const isPublic = student?.profile_is_public === true
+  const url = token && origin ? `${origin}/verify/${token}` : ''
+
+  const generate = async () => {
+    setBusy('generate')
+    setMessage('')
     try {
       const res = await fetch('/api/generate-link', { method: 'POST' })
-      if (!res.ok) throw new Error('Failed')
-      const data = await res.json()
-      setToken(data.token)
-    } catch {}
-    setGenerating(false)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.success) throw new Error(data.error || 'The link could not be created.')
+      await refresh()
+    } catch (err) {
+      setMessage((err as Error).message)
+    } finally {
+      setBusy(null)
+    }
   }
 
-  const fullUrl = token ? `${window.location.origin}/verify/${token}` : ''
-
-  const copyLink = () => {
-    navigator.clipboard.writeText(fullUrl)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const setVisibility = async (next: boolean) => {
+    setBusy('visibility')
+    setMessage('')
+    try {
+      const res = await fetch('/api/student/update-profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile_is_public: next }) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'That could not be changed.')
+      await refresh()
+    } catch (err) {
+      setMessage((err as Error).message)
+    } finally {
+      setBusy(null)
+    }
   }
 
-  const shareLinks = [
-    { label: 'WhatsApp', href: `https://wa.me/?text=Check%20my%20verified%20credentials%3A%20${encodeURIComponent(fullUrl)}`, color: '#25D366' },
-    { label: 'LinkedIn', href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(fullUrl)}`, color: '#0077B5' },
-    { label: 'Email', href: `mailto:?subject=My%20Verified%20Credentials&body=${encodeURIComponent(fullUrl)}`, color: 'rgb(var(--accent))' },
-  ]
+  if (loading) return <PageSkeleton metrics={0} panels={2} />
+  if (error) return <ErrorState message={error} onRetry={refresh} />
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>
+  const shareText = encodeURIComponent(`Check my verified credentials: ${url}`)
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div>
-        <h1 className="font-heading text-2xl font-bold" style={{ color: 'rgb(var(--text-primary))' }}>My Verified Link</h1>
-        <p className="text-sm mt-1" style={{ color: 'rgb(var(--text-secondary))' }}>Share one link with every company you apply to</p>
-      </div>
+    <>
+      <PageHeader title="My link" description="One link and QR code that shows your verified documents to anyone you send it to. It works only while your profile is public." />
 
-      {token ? (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
-          {/* Link card */}
-          <div className="rounded-2xl p-6 border" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgb(var(--accent)), rgb(var(--teal)))' }}>
-                <Link2 size={20} className="text-white" />
-              </div>
-              <div>
-                <p className="font-heading font-bold text-sm" style={{ color: 'rgb(var(--text-primary))' }}>Your Verified Profile</p>
-                <p className="text-xs" style={{ color: 'rgb(var(--text-muted))' }}>Anyone with this link can view your credentials</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="flex-1 px-4 py-3 rounded-xl text-sm truncate" style={{ background: 'rgb(var(--bg-elevated))', color: 'rgb(var(--accent))' }}>
-                {fullUrl}
-              </div>
-              <button onClick={copyLink} className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-all" style={{ background: copied ? 'rgb(var(--success))' : 'linear-gradient(135deg, rgb(var(--accent)), rgb(var(--accent-hover)))', color: 'white' }}>
-                {copied ? <Check size={18} /> : <Copy size={18} />}
-              </button>
-            </div>
-
-            {/* Company Access Status Indicator */}
-            <div className={`mt-5 p-4 rounded-xl border flex items-center justify-between shadow-sm ${isPublic ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-500'}`}>
-               <div className="flex items-center gap-3">
-                 {isPublic ? <Check size={20} className="text-emerald-500" /> : <Eye size={20} className="text-amber-500" />}
-                 <div>
-                   <p className="font-heading font-bold text-sm">Company Portal Status</p>
-                   <p className="text-xs opacity-80">{isPublic ? 'Your profile has been approved by the Admin and is visible to partnered Companies.' : 'Your profile is currently under Admin review and is not yet visible to Companies.'}</p>
-                 </div>
-               </div>
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div className="rounded-2xl p-5 border flex items-center gap-4" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
-            <Eye size={20} style={{ color: 'rgb(var(--accent))' }} />
-            <div>
-              <p className="font-heading font-bold" style={{ color: 'rgb(var(--text-primary))' }}>{views}</p>
-              <p className="text-xs" style={{ color: 'rgb(var(--text-muted))' }}>Profile views</p>
-            </div>
-          </div>
-
-          {/* Share buttons */}
-          <div className="rounded-2xl p-5 border" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
-            <p className="font-heading font-bold text-sm mb-3" style={{ color: 'rgb(var(--text-primary))' }}>Share via</p>
-            <div className="flex gap-3">
-              {shareLinks.map((s, i) => (
-                <a key={i} href={s.href} target="_blank" rel="noreferrer" className="flex-1 py-3 rounded-xl text-center text-sm font-medium text-white transition-all hover:opacity-90" style={{ background: s.color }}>
-                  {s.label}
-                </a>
-              ))}
-            </div>
-          </div>
-
-          {/* Preview */}
-          <a href={fullUrl} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 py-3 text-sm font-medium" style={{ color: 'rgb(var(--accent))' }}>
-            <ExternalLink size={16} /> Preview Your Public Profile
-          </a>
-        </motion.div>
+      {!token ? (
+        <Panel>
+          <EmptyState
+            icon={<Link2 />}
+            title="You do not have a link yet"
+            hint="Create one to share your verified credentials. Your profile becomes public when you do, and you can switch that off at any time."
+            action={
+              <Button variant="primary" onClick={generate} disabled={busy === 'generate'}>
+                {busy === 'generate' ? 'Creating' : 'Create my link'}
+              </Button>
+            }
+          />
+          {message ? (
+            <p role="alert" className="pb-4 text-center text-sm text-destructive">
+              {message}
+            </p>
+          ) : null}
+        </Panel>
       ) : (
-        <div className="rounded-2xl p-10 border text-center" style={{ background: 'rgb(var(--bg-card))', borderColor: 'rgba(var(--border-default), 0.5)' }}>
-          <Link2 size={48} className="mx-auto mb-4" style={{ color: 'rgb(var(--text-muted))' }} />
-          <h2 className="font-heading font-bold mb-2" style={{ color: 'rgb(var(--text-primary))' }}>No Link Generated Yet</h2>
-          <p className="text-sm mb-6" style={{ color: 'rgb(var(--text-secondary))' }}>Generate a shareable link to showcase all your verified credentials in one place.</p>
-          <button onClick={generateLink} disabled={generating} className="px-6 py-3 rounded-xl font-bold text-white flex items-center justify-center gap-2 mx-auto disabled:opacity-50" style={{ background: 'linear-gradient(135deg, rgb(var(--accent)), rgb(var(--accent-hover)))' }}>
-            {generating ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Link2 size={18} /> Generate My Link</>}
-          </button>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.5fr_1fr]">
+          <div className="min-w-0 space-y-3">
+            <Panel index={0} title="Your verified profile" subtitle="Anyone with this link can see the documents you have verified">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="flex min-h-11 min-w-0 flex-1 items-center rounded-xl border border-white/10 bg-white/[0.05] px-3.5">
+                  <span className="truncate font-mono text-xs text-foreground/90" aria-label="Your profile link">
+                    {url || 'Preparing your link'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CopyButton value={url} />
+                  <Button href={url || undefined} target="_blank" rel="noreferrer" variant="default" size="sm" disabled={!url}>
+                    <ExternalLink className="size-4" aria-hidden="true" />
+                    Preview
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center gap-2">
+                <span className="mr-1 text-xs font-bold text-muted-foreground">Share through</span>
+                <Button href={`https://wa.me/?text=${shareText}`} target="_blank" rel="noreferrer" variant="default" size="sm">
+                  <WhatsappLogo className="size-4" aria-hidden="true" />
+                  WhatsApp
+                </Button>
+                <Button href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`} target="_blank" rel="noreferrer" variant="default" size="sm">
+                  <LinkedinLogo className="size-4" aria-hidden="true" />
+                  LinkedIn
+                </Button>
+                <Button href={`mailto:?subject=${encodeURIComponent('My verified credentials')}&body=${shareText}`} variant="default" size="sm">
+                  <EnvelopeSimple className="size-4" aria-hidden="true" />
+                  Email
+                </Button>
+              </div>
+            </Panel>
+
+            <Panel index={1} title="Who can see your profile">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 text-sm">
+                  <p className="font-bold">{isPublic ? 'Public' : 'Private'}</p>
+                  <p className="mt-1 leading-relaxed text-muted-foreground">
+                    {isPublic
+                      ? 'Your link works, and companies can find you in talent search. Switch this off to hide your profile everywhere.'
+                      : 'Your link shows a not found page and companies cannot find you. Switch this on when you are ready to be seen.'}
+                  </p>
+                </div>
+                <Switch checked={isPublic} onChange={setVisibility} label="Make my profile public" disabled={busy === 'visibility'} />
+              </div>
+              {message ? (
+                <p role="alert" className="mt-3 text-sm text-destructive">
+                  {message}
+                </p>
+              ) : null}
+            </Panel>
+          </div>
+
+          <div className="min-w-0 space-y-3">
+            <Panel index={2} title="QR code" subtitle="Scan to open your profile">
+              <div className="grid place-items-center py-2">
+                {url ? (
+                  <div className="rounded-2xl bg-white p-3" role="img" aria-label="QR code for your profile link">
+                    <QRCode value={url} size={168} bgColor="#FFFFFF" fgColor="#000000" />
+                  </div>
+                ) : (
+                  <div className="skeleton size-[192px]" aria-hidden="true" />
+                )}
+              </div>
+            </Panel>
+            <Metric index={3} title="Profile views" icon={<Eye />} value={student?.profile_views ?? 0} detail="Each time the link is opened" />
+          </div>
         </div>
       )}
-    </div>
+    </>
   )
 }

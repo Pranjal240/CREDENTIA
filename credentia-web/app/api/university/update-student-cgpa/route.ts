@@ -1,61 +1,43 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { revalidatePath } from 'next/cache'
+import { getUniversityAccess } from '@/lib/university-access'
 
+export const dynamic = 'force-dynamic'
+
+/**
+ * Lets an approved university correct the CGPA of one of its own students. The
+ * university comes from the session, the student must be linked to it, and the
+ * change is written to the audit log.
+ */
 export async function POST(req: Request) {
+  const access = await getUniversityAccess()
+  if (!access) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!access.approved) return NextResponse.json({ error: 'Your institution is waiting for approval.' }, { status: 403 })
+
+  const body = await req.json().catch(() => null)
+  const studentId = typeof body?.studentId === 'string' ? body.studentId : ''
+  const cgpa = Number(body?.cgpa)
+  if (!studentId || !Number.isFinite(cgpa) || cgpa < 0 || cgpa > 10) return NextResponse.json({ error: 'Enter a CGPA between 0 and 10.' }, { status: 400 })
+
   try {
-    const { universityId, studentId, cgpa } = await req.json()
-    if (!universityId || !studentId) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
-    }
+    const { data: student } = await supabaseAdmin.from('students').select('id, university_id, cgpa').eq('id', studentId).maybeSingle()
+    if (!student || student.university_id !== access.caller.userId) return NextResponse.json({ error: 'That student is not linked to your university.' }, { status: 403 })
 
-    // Verify the student is linked to this university
-    const { data: student } = await supabaseAdmin
-      .from('students')
-      .select('university_id')
-      .eq('id', studentId)
-      .single()
-
-    if (!student) {
-      return NextResponse.json({ error: 'Student not found' }, { status: 404 })
-    }
-
-    // Also check profiles.linked_university_id
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('linked_university_id')
-      .eq('id', studentId)
-      .single()
-
-    const linkedUniId = student.university_id || profile?.linked_university_id
-    if (linkedUniId !== universityId) {
-      return NextResponse.json({ error: 'Student is not linked to your university' }, { status: 403 })
-    }
-
-    const { error } = await supabaseAdmin.from('students').update({
-      cgpa: cgpa?.toString() || null,
-      updated_at: new Date().toISOString(),
-    }).eq('id', studentId)
-
+    const { error } = await supabaseAdmin.from('students').update({ cgpa, updated_at: new Date().toISOString() }).eq('id', studentId)
     if (error) throw error
 
-    // Audit log
     await supabaseAdmin.from('audit_logs').insert({
-      admin_id: universityId,
+      actor_id: access.caller.userId,
+      actor_email: access.caller.email,
       action: 'university_edit_cgpa',
-      target_id: studentId,
       target_type: 'student',
-      metadata: { cgpa }
+      target_id: studentId,
+      details: { from: student.cgpa ?? null, to: cgpa },
     })
 
-    // Revalidate all portals that display student CGPA
-    revalidatePath('/dashboard/student', 'layout')
-    revalidatePath('/dashboard/company', 'page')
-    revalidatePath('/dashboard/admin', 'page')
-    revalidatePath('/dashboard/university', 'page')
-
-    return NextResponse.json({ success: true })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true, cgpa })
+  } catch (error) {
+    console.error('[university/update-student-cgpa] failed:', (error as Error).message)
+    return NextResponse.json({ error: 'The CGPA could not be saved.' }, { status: 500 })
   }
 }

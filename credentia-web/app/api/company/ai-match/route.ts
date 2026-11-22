@@ -1,59 +1,73 @@
 import { NextResponse } from 'next/server'
-import Groq from 'groq-sdk'
+import { getCallerWithRole } from '@/lib/api-auth'
+import { aiAvailable, generateJSON } from '@/lib/ai-text'
+import { loadTalent } from '@/lib/company-talent'
+import { rateLimit } from '@/lib/rate-limit'
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
+export const dynamic = 'force-dynamic'
+export const maxDuration = 30
 
+const SYSTEM = `You are a recruiter's assistant for Credentia. Read the job description and choose the best candidates from the list.
+Reply with one JSON object and nothing else: {"matches":[{"id":"...","match_score":0-100,"reason":"one short sentence"}]}
+Rules:
+- Use only ids from the candidate list. Never invent a candidate.
+- Judge by course, branch, skills, CGPA, ATS score, graduation year and verified documents. Say what actually fits. Do not make up facts.
+- Order by match_score, highest first. Return at most 8 matches. Return fewer, or an empty list, when nobody fits.
+- The reason is plain words, with no dashes.`
+
+/**
+ * Ranks public candidates against a job description. The caller names the
+ * candidates it is looking at, the server reads their details itself, and only
+ * ids it knows can come back.
+ */
 export async function POST(req: Request) {
-  try {
-    const { jobDescription, students } = await req.json()
-    
-    if (!students || !Array.isArray(students) || !jobDescription) {
-      return NextResponse.json({ error: 'Missing JD or student data' }, { status: 400 })
-    }
+  const caller = await getCallerWithRole(['company'])
+  if (!caller) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!aiAvailable()) return NextResponse.json({ error: 'AI matching is not available right now.' }, { status: 503 })
+  if (!rateLimit(`ai-match:${caller.userId}`, 10, 60_000)) return NextResponse.json({ error: 'Please wait a moment before matching again.' }, { status: 429 })
 
-    // Shrink data to save tokens but retain identity 'id'
-    const candidates = students.map(s => ({
+  const body = await req.json().catch(() => null)
+  const jobDescription = typeof body?.jobDescription === 'string' ? body.jobDescription.trim().slice(0, 3000) : ''
+  if (jobDescription.length < 8) return NextResponse.json({ error: 'Describe the role in a few words.' }, { status: 400 })
+  const wanted: string[] | undefined = Array.isArray(body?.ids) ? body.ids.filter((id: unknown): id is string => typeof id === 'string').slice(0, 80) : undefined
+
+  try {
+    const pool = await loadTalent(wanted ? { ids: wanted } : {})
+    if (pool.length === 0) return NextResponse.json({ matches: [] })
+
+    const candidates = pool.slice(0, 80).map((s) => ({
       id: s.id,
       course: s.course,
       branch: s.branch,
-      skills: s.skills || '',
-      cgpa: s.cgpa || 0,
-      ats: s.ats_score || 0,
+      skills: s.skills,
+      cgpa: s.cgpa,
+      ats: s.ats_score,
       year: s.graduation_year,
-      v_deg: s.degree_verified,
-      v_pol: s.police_verified
+      state: s.state,
+      verified: { degree: s.degree_verified, police: s.police_verified, aadhaar: s.aadhaar_verified },
     }))
 
-    const systemPrompt = `You are an elite AI Recruiter Matchmaker. 
-    Analyze the provided Job Description ("user query") and find the top candidates from the JSON list provided.
-    
-    RETURN ONLY A VALID JSON OBJECT containing an array named "matches".
-    Format:
-    {
-      "matches": [
-        { "id": "uuid-here", "match_score": 95, "reason": "1-sentence punchy reason why they are a great fit." }
-      ]
-    }
-    Sort the "matches" array from highest match_score to lowest. Return a maximum of 5 matches.`
-
-    const result = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Job Description:\n${jobDescription}\n\nCandidates:\n${JSON.stringify(candidates)}` }
-      ],
-      temperature: 0.1,
-      max_tokens: 1500,
-      response_format: { type: 'json_object' }
+    const { data } = await generateJSON<{ matches?: { id?: unknown; match_score?: unknown; reason?: unknown }[] }>({
+      system: SYSTEM,
+      user: `Job description:\n${jobDescription}\n\nCandidates:\n${JSON.stringify(candidates)}`,
+      maxTokens: 900,
+      timeoutMs: 20_000,
     })
 
-    const resultText = result.choices[0].message.content || '{"matches":[]}'
-    const data = JSON.parse(resultText)
+    const known = new Set(candidates.map((c) => c.id))
+    const matches = (Array.isArray(data.matches) ? data.matches : [])
+      .filter((m): m is { id: string; match_score: number; reason: string } => typeof m.id === 'string' && known.has(m.id))
+      .map((m) => ({
+        id: m.id,
+        match_score: Math.max(0, Math.min(100, Math.round(Number(m.match_score) || 0))),
+        reason: String(m.reason ?? '').replace(/[\u2013\u2014]/g, ',').replace(/--+/g, ',').slice(0, 220),
+      }))
+      .sort((a, b) => b.match_score - a.match_score)
+      .slice(0, 8)
 
-    return NextResponse.json(data)
-
-  } catch (error: any) {
-    console.error('AI Match Error:', error)
-    return NextResponse.json({ error: error.message || 'Failed to match' }, { status: 500 })
+    return NextResponse.json({ matches })
+  } catch (error) {
+    console.error('[company/ai-match] failed:', (error as Error).message)
+    return NextResponse.json({ error: 'Matching did not finish. Please try again.' }, { status: 502 })
   }
 }

@@ -1,446 +1,213 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import * as React from 'react'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
-import { motion, AnimatePresence } from 'framer-motion'
-import { FileText, Shield, CreditCard, GraduationCap, Link2, TrendingUp, Eye, CheckCircle2, Clock, AlertCircle, ArrowRight, Sparkles, ExternalLink, X, Download, ChevronDown, ChevronUp, Building, FolderOpen, Settings } from 'lucide-react'
+import { BookOpen, CircleCheck, CreditCard, Eye, FileText, GraduationCap, Headphones, Home, Link2, Shield, TrendingUp } from 'lucide-react'
+import { useDash } from '@/components/dash/dashboard-context'
+import { useStudentData } from '@/hooks/use-student-data'
+import { DonutChart, Meter, SERIES } from '@/components/dash/charts'
+import { ErrorState, EmptyState, Metric, PageHeader, PageSkeleton, Panel, StatusBadge } from '@/components/dash/kit'
+import { FolderShelf } from '@/components/dash/folder-shelf'
+import { PinShelf } from '@/components/dash/pin-shelf'
+import { QuickAccess } from '@/components/dash/quick-access'
+import { buildDocFolders } from '@/components/dash/doc-folders'
+import { DOC_META } from '@/components/dash/doc-meta'
+import { usePeonPanel } from '@/components/peon/peon-provider'
+import { Button } from '@/components/ui/button'
+import { CORE_DOC_TYPES, DOC_ROUTE, docLabel, type DocType } from '@/lib/documents'
+import { formatDateShort, timeAgo } from '@/lib/format'
+import { isVerifiedStatus, statusInfo } from '@/lib/status'
 
-export default function StudentDashboard() {
-  const [student, setStudent] = useState<any>(null)
-  const [verifications, setVerifications] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [expandedCard, setExpandedCard] = useState<string | null>(null)
-  const [universityName, setUniversityName] = useState<string | null>(null)
-  const [docCount, setDocCount] = useState(0)
-  const [userId, setUserId] = useState('')
+export default function StudentDashboardPage() {
+  const { displayName } = useDash()
+  const peon = usePeonPanel()
+  const { userId, student, verifications, byType, counts, loading, error, refresh } = useStudentData()
 
-  useEffect(() => {
-    const load = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const uid = user.id
-      setUserId(uid)
-      const [{ data: s }, { data: v }] = await Promise.all([
-        supabase.from('students').select('*, profiles(linked_university_id)').eq('id', uid).single(),
-        supabase.from('verifications').select('*').eq('student_id', uid).order('updated_at', { ascending: false }),
-      ])
-      setStudent(s)
-      setVerifications(v || [])
-      // Count documents with an actual uploaded file
-      const uploadedDocs = (v || []).filter((d: any) => d.document_url && d.status !== 'not_submitted').length
-      setDocCount(uploadedDocs)
-      // Fetch university name if linked
-      const uniId = s?.university_id || s?.profiles?.linked_university_id
-      if (uniId) {
-        const { data: uni } = await supabase.from('profiles').select('full_name').eq('id', uniId).single()
-        setUniversityName(uni?.full_name || null)
-      }
-      setLoading(false)
-    }
-    load()
+  const folders = React.useMemo(() => buildDocFolders(verifications), [verifications])
+  const uploaded = verifications.filter((v) => v.status !== 'not_submitted')
+  const activity = [...uploaded].sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()).slice(0, 6)
+  const ats = Number(byType.resume?.ai_result?.ats_score ?? student?.ats_score ?? 0) || 0
+  const trust = student?.trust_score ?? 0
+  const next = CORE_DOC_TYPES.find((type) => !isVerifiedStatus(byType[type]?.status))
+  const firstName = displayName.split(/\s+/)[0]
 
-    // Realtime: re-fetch when verifications OR student row changes
-    const channel = supabase
-      .channel('student-dashboard-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'verifications' }, () => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (!session) return
-          supabase.from('verifications').select('*').eq('student_id', session.user.id).order('updated_at', { ascending: false })
-            .then(({ data: v }) => { if (v) setVerifications(v) })
-        })
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'students' }, () => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (!session) return
-          supabase.from('students').select('*, profiles(linked_university_id)').eq('id', session.user.id).single()
-            .then(({ data: s }) => { if (s) setStudent(s) })
-        })
-      })
-      .subscribe()
+  // The details that count toward completion, in the same order the score uses them.
+  const missing = [
+    { label: 'Your name', value: student?.name, href: '/dashboard/student/settings' },
+    { label: 'Course', value: student?.course, href: '/dashboard/student/settings' },
+    { label: 'Branch', value: student?.branch, href: '/dashboard/student/settings' },
+    { label: 'City', value: student?.city, href: '/dashboard/student/settings' },
+    { label: 'CGPA', value: student?.cgpa, href: '/dashboard/student/settings' },
+    { label: 'Graduation year', value: student?.graduation_year, href: '/dashboard/student/settings' },
+    { label: 'Your resume', value: byType.resume && byType.resume.status !== 'not_submitted' ? 'yes' : '', href: '/dashboard/student/resume' },
+  ].filter((item) => !item.value)
 
-    return () => { supabase.removeChannel(channel) }
-  }, [])
-
-  const getStatus = (type: string) => {
-    const v = verifications.find(x => x.type === type)
-    if (!v || v.status === 'not_submitted') return { label: 'Upload Now', color: '#6366f1', bgColor: 'rgba(99,102,241,0.08)', icon: AlertCircle, ready: false, status: 'not_submitted' }
-    if (v.status === 'pending' || v.status === 'needs_review') return { label: 'Pending Review', color: '#f59e0b', bgColor: 'rgba(245,158,11,0.08)', icon: Clock, ready: false, status: v.status }
-    if (v.status === 'ai_approved' || v.status === 'admin_verified' || v.status === 'verified') return { label: 'Verified ✓', color: '#22c55e', bgColor: 'rgba(34,197,94,0.08)', icon: CheckCircle2, ready: true, status: v.status }
-    if (v.status === 'rejected') return { label: 'Rejected', color: '#ef4444', bgColor: 'rgba(239,68,68,0.08)', icon: AlertCircle, ready: false, status: v.status }
-    return { label: 'Not Submitted', color: '#ef4444', bgColor: 'rgba(239,68,68,0.08)', icon: AlertCircle, ready: false, status: v.status }
-  }
-
-  const getVerification = (type: string) => verifications.find(x => x.type === type)
-
-  const verifiedCount = verifications.filter(v => ['ai_approved', 'admin_verified', 'verified'].includes(v.status) && ['resume', 'police', 'aadhaar', 'degree', 'marksheet_10th', 'marksheet_12th', 'passport'].includes(v.type)).length
-  const totalDocs = verifications.length
-  const trustScore = student?.trust_score ?? 0
-  const completionPercentage = Math.min(100, Math.max(0, Math.round((verifiedCount / 7) * 100)))
-
-  const tasks = [
-    { type: 'resume', label: 'Resume Analysis', desc: 'Get your ATS score with AI-powered analysis', icon: FileText, href: '/dashboard/student/resume', accent: '#3b82f6', gradient: 'from-blue-600/20 to-blue-400/5' },
-    { type: 'police', label: 'Police Verification', desc: 'Upload PCC or paste verification link', icon: Shield, href: '/dashboard/student/police', accent: '#8b5cf6', gradient: 'from-violet-600/20 to-violet-400/5' },
-    { type: 'aadhaar', label: 'Aadhaar Verification', desc: 'Privacy-first identity card verification', icon: CreditCard, href: '/dashboard/student/aadhaar', accent: '#14b8a6', gradient: 'from-teal-600/20 to-teal-400/5' },
-    { type: 'degree', label: 'Degree Verification', desc: 'Upload degree certificate for AI check', icon: GraduationCap, href: '/dashboard/student/degree', accent: '#f59e0b', gradient: 'from-amber-600/20 to-amber-400/5' },
-  ]
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
-          <span className="text-xs text-white/30 tracking-wider">LOADING DASHBOARD...</span>
-        </div>
-      </div>
-    )
-  }
-
-  const renderAnalysisDetail = (type: string, v: any) => {
-    // 1) Handle Degree unconditionally so badges ALWAYS show up
-    if (type === 'degree') {
-      const getVStatus = (t: string) => {
-        const doc = verifications.find(x => x.type === t)
-        if (!doc) return 'Missing'
-        if (['verified', 'ai_approved', 'admin_verified'].includes(doc.status)) return 'Verified'
-        return 'Pending'
-      }
-      
-      const r = v?.ai_result
-      const hasData = v && r
-
-      return (
-        <div className="space-y-3">
-          {hasData ? (
-            <>
-              <div className="flex items-center gap-2">{r.verified ? <CheckCircle2 size={16} className="text-green-400" /> : <AlertCircle size={16} className="text-red-400" />}<span className="text-sm font-medium text-white/80">{r.verified ? 'Degree Verified' : 'Inconclusive'}</span><span className="text-xs text-white/30 ml-auto">Confidence: {r.confidence || v.ai_confidence}%</span></div>
-              <div className="grid grid-cols-2 gap-3 text-xs mb-4">
-                {[{ l: 'University', v: r.university_name }, { l: 'Degree', v: r.degree }, { l: 'Course', v: r.course }, { l: 'Year', v: r.year_of_passing }, { l: 'CGPA/Grade', v: r.grade_cgpa }, { l: 'Roll No.', v: r.roll_number }].filter(x => x.v).map((x, i) => <div key={i}><p className="text-white/25 uppercase tracking-wider text-[9px] mb-0.5">{x.l}</p><p className="text-white/70 font-medium">{typeof x.v === 'object' ? JSON.stringify(x.v) : String(x.v)}</p></div>)}
-              </div>
-            </>
-          ) : (
-             <p className="text-sm text-white/30 mb-2 mt-1">No University Degree uploaded yet.</p>
-          )}
-          
-          <div className="pt-2 border-t border-white/5">
-            <p className="text-[10px] text-white/30 uppercase tracking-wider mb-2">Linked Credentials Status</p>
-            <div className="flex flex-wrap gap-2">
-              {[{k: 'marksheet_10th', l: '10th'}, {k:'marksheet_12th', l: '12th'}, {k:'passport', l: 'Other'}].map(c => {
-                const st = getVStatus(c.k)
-                return (
-                  <span key={c.k} className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${st === 'Verified' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : st === 'Missing' ? 'bg-white/5 text-white/30 border border-white/10' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
-                    {c.l}: {st}
-                  </span>
-                )
-              })}
-            </div>
-            <p className="text-[10px] text-white/40 mt-3 flex items-center gap-1.5"><AlertCircle size={10} className="text-amber-400"/> Click below to upload & check status of all credentials.</p>
-          </div>
-        </div>
-      )
-    }
-
-    // 2) For others, break early if no result
-    if (!v || !v.ai_result) return <p className="text-sm text-white/30">No analysis data available yet.</p>
-    const r = v.ai_result
-
-    if (type === 'resume') {
-      return (
-        <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="relative w-20 h-20">
-              <svg className="w-20 h-20 -rotate-90"><circle cx="40" cy="40" r="34" stroke="rgba(255,255,255,0.06)" strokeWidth="5" fill="none" /><circle cx="40" cy="40" r="34" stroke={r.ats_score >= 70 ? '#22c55e' : r.ats_score >= 50 ? '#f59e0b' : '#ef4444'} strokeWidth="5" fill="none" strokeDasharray={`${2*Math.PI*34}`} strokeDashoffset={`${2*Math.PI*34*(1-(r.ats_score||0)/100)}`} strokeLinecap="round" /></svg>
-              <span className="absolute inset-0 flex items-center justify-center font-bold text-lg text-white">{r.ats_score || 0}</span>
-            </div>
-            <div><p className="text-sm text-white/80 font-medium">ATS Score</p><p className="text-xs text-white/30">{r.summary || 'Resume analyzed successfully'}</p></div>
-          </div>
-          {Array.isArray(r.strengths) && r.strengths.length > 0 && (
-            <div><p className="text-xs font-bold text-green-400 mb-1">✅ Strengths</p><ul className="space-y-1">{r.strengths.slice(0,3).map((s: string, i: number) => <li key={i} className="text-xs text-white/50 flex gap-2"><CheckCircle2 size={12} className="mt-0.5 text-green-400 shrink-0" />{s}</li>)}</ul></div>
-          )}
-          {Array.isArray(r.improvements) && r.improvements.length > 0 && (
-            <div><p className="text-xs font-bold text-amber-400 mb-1">💡 Improvements</p><ul className="space-y-1">{r.improvements.slice(0,3).map((s: string, i: number) => <li key={i} className="text-xs text-white/50 flex gap-2"><AlertCircle size={12} className="mt-0.5 text-amber-400 shrink-0" />{s}</li>)}</ul></div>
-          )}
-          {Array.isArray(r.keywords_found) && r.keywords_found.length > 0 && (
-            <div><p className="text-xs font-bold text-blue-400 mb-1">🔑 Keywords</p><div className="flex flex-wrap gap-1.5">{r.keywords_found.slice(0,8).map((k: string, i: number) => <span key={i} className="px-2 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-300">{k}</span>)}</div></div>
-          )}
-        </div>
-      )
-    }
-    if (type === 'police') {
-      return (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">{r.is_police_certificate ? <CheckCircle2 size={16} className="text-green-400" /> : <AlertCircle size={16} className="text-red-400" />}<span className="text-sm font-medium text-white/80">{r.is_police_certificate ? 'Valid Certificate' : 'Not Recognized'}</span><span className="text-xs text-white/30 ml-auto">Confidence: {r.confidence || v.ai_confidence}%</span></div>
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            {[{ l: 'Certificate #', v: r.certificate_number }, { l: 'Authority', v: r.issuing_authority }, { l: 'District', v: r.district }, { l: 'State', v: r.state }, { l: 'Issued', v: r.issue_date }, { l: 'Name', v: r.applicant_name }].filter(x => x.v).map((x, i) => <div key={i}><p className="text-white/25 uppercase tracking-wider text-[9px] mb-0.5">{x.l}</p><p className="text-white/70 font-medium">{String(x.v)}</p></div>)}
-          </div>
-        </div>
-      )
-    }
-    if (type === 'aadhaar') {
-      return (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">{r.verified ? <CheckCircle2 size={16} className="text-green-400" /> : <AlertCircle size={16} className="text-red-400" />}<span className="text-sm font-medium text-white/80">{r.verified ? 'Aadhaar Verified' : 'Inconclusive'}</span><span className="text-xs text-white/30 ml-auto">Confidence: {r.confidence || v.ai_confidence}%</span></div>
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            {[{ l: 'Name', v: r.name }, { l: 'DOB', v: r.dob }, { l: 'Gender', v: r.gender }, { l: 'State', v: r.state }, { l: 'Aadhaar', v: r.aadhaar_last4 ? `XXXX-XXXX-${r.aadhaar_last4}` : null }].filter(x => x.v).map((x, i) => <div key={i}><p className="text-white/25 uppercase tracking-wider text-[9px] mb-0.5">{x.l}</p><p className="text-white/70 font-medium">{typeof x.v === 'object' ? JSON.stringify(x.v) : String(x.v)}</p></div>)}
-          </div>
-        </div>
-      )
-    }
-
-    return null
-  }
+  if (loading) return <PageSkeleton metrics={4} panels={2} />
+  if (error) return <ErrorState message={error} onRetry={refresh} />
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-3xl font-bold text-white mb-1">Student Dashboard</h1>
-          <p className="text-sm text-white/40">Track your verification progress and manage your digital credentials.</p>
-        </div>
-        {/* Progress bar */}
-        <div className="bg-white/[0.03] border border-white/10 rounded-xl p-4 w-full sm:w-72">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-white/50">Profile Completion</span>
-            <span className="text-xs font-bold text-emerald-400">{completionPercentage}%</span>
-          </div>
-          <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
-            <motion.div initial={{ width: 0 }} animate={{ width: `${completionPercentage}%` }} transition={{ duration: 1, ease: 'easeOut' }} className="h-full bg-gradient-to-r from-blue-500 to-emerald-400 rounded-full" />
-          </div>
-          <p className="text-[10px] text-white/25 mt-1.5">{verifiedCount} of 7 documents verified</p>
-        </div>
-      </div>
-
-      {/* ── Stat Cards ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'ATS Score', value: getVerification('resume')?.ai_result?.ats_score || student?.ats_score || '—', icon: TrendingUp, suffix: getVerification('resume')?.ai_result?.ats_score || student?.ats_score ? '/100' : '', gradient: 'from-blue-600/20 to-blue-400/5', iconColor: '#60a5fa', border: 'rgba(59,130,246,0.15)' },
-          { label: 'Verified', value: verifiedCount, icon: CheckCircle2, suffix: ` doc${verifiedCount !== 1 ? 's' : ''}`, gradient: 'from-emerald-600/20 to-emerald-400/5', iconColor: '#34d399', border: 'rgba(34,197,94,0.15)' },
-          { label: 'Profile Views', value: student?.profile_views || 0, icon: Eye, suffix: '', gradient: 'from-violet-600/20 to-violet-400/5', iconColor: '#a78bfa', border: 'rgba(139,92,246,0.15)' },
-          { label: 'Trust Score', value: trustScore, icon: Shield, suffix: '%', gradient: 'from-teal-600/20 to-teal-400/5', iconColor: '#2dd4bf', border: 'rgba(20,184,166,0.15)' },
-        ].map((stat, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.06 }}
-            className={`relative rounded-2xl p-5 overflow-hidden bg-gradient-to-br ${stat.gradient}`}
-            style={{ border: `1px solid ${stat.border}` }}
-          >
-            <div className="flex items-start justify-between mb-3">
-              <stat.icon size={20} style={{ color: stat.iconColor }} />
-            </div>
-            <p className="font-heading text-2xl font-bold text-white">
-              {stat.value}
-              <span className="text-sm font-normal text-white/25 ml-0.5">{stat.suffix}</span>
-            </p>
-            <p className="text-[11px] mt-1 text-white/30 uppercase tracking-wider font-medium">{stat.label}</p>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* ── My University + My Documents quick cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* My University */}
-        <Link href="/dashboard/student/settings"
-          className="group flex items-center gap-4 p-4 rounded-2xl transition-all hover:translate-y-[-2px]"
-          style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.08), rgba(139,92,246,0.04))', border: '1px solid rgba(99,102,241,0.15)' }}
-        >
-          <div className="w-11 h-11 rounded-xl bg-indigo-500/10 flex items-center justify-center flex-shrink-0">
-            <Building size={20} className="text-indigo-400" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] text-white/30 uppercase tracking-wider font-medium">My University</p>
-            <p className="text-sm font-semibold text-white/90 truncate mt-0.5">
-              {universityName || (
-                <span className="text-amber-400/70">Not linked — click to set up</span>
-              )}
-            </p>
-          </div>
-          {universityName ? (
-            <span className="flex items-center gap-1.5 text-[10px] text-emerald-400 flex-shrink-0">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 realtime-dot" /> Active
-            </span>
+    <>
+      <PageHeader
+        title={`Hi ${firstName}`}
+        description="Your verification progress and trust score, updated as results come in."
+        actions={
+          next ? (
+            <Button href={DOC_ROUTE[next]} variant="primary" size="sm">
+              Verify your {docLabel(next).toLowerCase()}
+            </Button>
           ) : (
-            <Settings size={14} className="text-white/15 flex-shrink-0" />
-          )}
-        </Link>
+            <Button href="/dashboard/student/my-link" variant="primary" size="sm">
+              Share your profile
+            </Button>
+          )
+        }
+      />
 
-        {/* My Documents */}
-        <Link href="/dashboard/student/saved"
-          className="group flex items-center gap-4 p-4 rounded-2xl transition-all hover:translate-y-[-2px]"
-          style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.08), rgba(251,191,36,0.04))', border: '1px solid rgba(245,158,11,0.15)' }}
-        >
-          <div className="w-11 h-11 rounded-xl bg-amber-500/10 flex items-center justify-center flex-shrink-0">
-            <FolderOpen size={20} className="text-amber-400" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] text-white/30 uppercase tracking-wider font-medium">My Documents</p>
-            <p className="text-sm font-semibold text-white/90 mt-0.5">
-              {docCount > 0 ? `${docCount} document${docCount !== 1 ? 's' : ''} uploaded` : 'Upload documents →'}
-            </p>
-          </div>
-          <ArrowRight size={14} className="text-white/15 group-hover:text-amber-400 transition-colors flex-shrink-0" />
-        </Link>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Metric index={0} emphasis title="Trust score" icon={<Shield />} value={trust} suffix="out of 100" detail={`${counts.verified} of ${verifications.length || 7} documents verified`} />
+        <Metric index={1} title="ATS score" icon={<FileText />} value={ats} suffix="out of 100" detail={ats ? 'From your latest resume' : 'Upload a resume to get one'} />
+        <Metric index={2} title="Documents verified" icon={<CircleCheck />} value={counts.verified} suffix={`of ${verifications.length || 7}`} detail={counts.pending ? `${counts.pending} waiting for review` : 'Nothing waiting'} />
+        <Metric index={3} title="Profile views" icon={<Eye />} value={student?.profile_views ?? 0} detail={student?.profile_is_public ? 'Your profile is public' : 'Your profile is private'} />
       </div>
 
-      {/* ── Verification Checklist with Expandable Details ── */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles size={16} className="text-blue-400" />
-          <h2 className="font-heading font-bold text-white text-sm">Verification Checklist</h2>
-          <span className="text-xs text-white/20 ml-auto">Click to expand details</span>
-        </div>
-
-        <div className="space-y-3">
-          {tasks.map((task, i) => {
-            const status = getStatus(task.type)
-            const v = getVerification(task.type)
-            const isExpanded = expandedCard === task.type
-            return (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 + i * 0.06 }}
-                className="rounded-2xl overflow-hidden"
-                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
-              >
-                {/* Main row - always visible */}
-                <div
-                  className="flex items-center gap-4 p-4 cursor-pointer group transition-all hover:bg-white/[0.02]"
-                  onClick={() => setExpandedCard(isExpanded ? null : task.type)}
-                >
-                  <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:scale-110" style={{ background: `${task.accent}15`, color: task.accent }}>
-                    <task.icon size={20} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-white/90 group-hover:text-white transition-colors">{task.label}</p>
-                    <p className="text-xs text-white/30 mt-0.5">{task.desc}</p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider" style={{ background: status.bgColor, color: status.color }}>
-                      {status.label}
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[1.4fr_1fr]">
+        <Panel index={4} title="Verification progress" subtitle="The four documents that make up your trust score">
+          <ul className="divide-y divide-white/10">
+            {CORE_DOC_TYPES.map((type) => {
+              const Icon = DOC_META[type].icon
+              const row = byType[type]
+              return (
+                <li key={type}>
+                  <Link href={DOC_ROUTE[type]} className="flex min-h-[60px] items-center gap-3 rounded-xl px-1 py-2.5 transition-colors hover:bg-white/[0.04]">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-brand/30 bg-brand/10 text-brand-ink">
+                      <Icon className="size-[18px]" aria-hidden="true" />
                     </span>
-                    {isExpanded ? <ChevronUp size={14} className="text-white/30" /> : <ChevronDown size={14} className="text-white/30" />}
-                  </div>
-                </div>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold">{docLabel(type)}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {row && row.status !== 'not_submitted' ? `Updated ${timeAgo(row.updated_at)}` : DOC_META[type].description}
+                      </span>
+                    </span>
+                    <StatusBadge status={row?.status} />
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </Panel>
 
-                {/* Expandable detail section */}
-                <AnimatePresence>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="px-4 pb-4 space-y-3" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                        <div className="pt-4">
-                          {task.type === 'degree' ? renderAnalysisDetail(task.type, v) : (
-                            v ? renderAnalysisDetail(task.type, v) : (
-                              <p className="text-sm text-white/30">No verification data yet. Upload your document to get started.</p>
-                            )
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-2 pt-2">
-                          <Link href={task.href} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all hover:translate-y-[-1px]" style={{ background: `${task.accent}15`, color: task.accent, border: `1px solid ${task.accent}30` }}>
-                            {v ? 'Re-upload / View' : 'Upload Now'} <ArrowRight size={12} />
-                          </Link>
-                          {v?.document_url && (
-                            <a href={v.document_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white/5 text-white/60 border border-white/10 hover:bg-white/10 transition-colors">
-                              <ExternalLink size={12} /> View Uploaded File
-                            </a>
-                          )}
-                          {v && (
-                            <span suppressHydrationWarning className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[10px] text-white/25 border border-white/5">
-                              <Clock size={10} /> {v.updated_at ? new Date(v.updated_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            )
-          })}
-        </div>
+        <Panel index={5} title="Documents by status" subtitle="All of your documents">
+          <DonutChart
+            title="Documents by status"
+            centerLabel="Documents"
+            segments={[
+              { label: 'Verified', value: counts.verified, color: SERIES.green },
+              { label: 'Waiting for review', value: counts.pending, color: SERIES.amber },
+              { label: 'Rejected', value: counts.rejected, color: SERIES.red },
+              { label: 'Not submitted', value: counts.notSubmitted, color: SERIES.white },
+            ]}
+          />
+        </Panel>
       </div>
 
-      {/* ── Verified Link CTA ── */}
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
-        <Link
-          href="/dashboard/student/my-link"
-          className="group flex items-center justify-between p-5 rounded-2xl transition-all duration-300 hover:translate-y-[-2px]"
-          style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.08))', border: '1px solid rgba(59,130,246,0.12)' }}
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-11 h-11 rounded-xl bg-blue-500/10 flex items-center justify-center"><Link2 size={20} className="text-blue-400" /></div>
-            <div>
-              <p className="font-heading font-bold text-sm text-white">Generate Verified Link</p>
-              <p className="text-xs text-white/30 mt-0.5">Share one link with every company you apply to</p>
-            </div>
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Panel index={6} title="Profile completion" subtitle="Filled details and verified documents">
+          <div className="flex items-end justify-between gap-3">
+            <span className="text-3xl font-extrabold tracking-tight">{student?.profile_complete_pct ?? 0}%</span>
+            <Link href="/dashboard/student/settings" className="text-xs font-semibold text-brand-ink hover:underline">
+              Edit your details
+            </Link>
           </div>
-          <ArrowRight size={18} className="text-white/20 group-hover:text-blue-400 transition-all group-hover:translate-x-1" />
-        </Link>
-      </motion.div>
+          <Meter className="mt-3" label="Profile completion" value={student?.profile_complete_pct ?? 0} />
+          <div className="mt-5">
+            <h3 className="mb-2 text-xs font-extrabold text-foreground/80">{missing.length ? 'Still missing' : 'Everything is filled in'}</h3>
+            {missing.length ? (
+              <ul className="space-y-1.5">
+                {missing.map((item) => (
+                  <li key={item.label}>
+                    <Link href={item.href} className="flex min-h-9 items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-sm transition-colors hover:bg-white/[0.07]">
+                      <span className="font-semibold">{item.label}</span>
+                      <span className="text-xs font-semibold text-brand-ink">Add</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">Your details are complete. Verify every document to reach 100.</p>
+            )}
+          </div>
+        </Panel>
 
-      {/* ── Quick Links ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Link href="/dashboard/student/saved" className="group flex items-center gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all">
-          <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center"><CheckCircle2 size={16} className="text-emerald-400" /></div>
-          <div><p className="text-sm font-medium text-white/80 group-hover:text-white">View All Verifications</p><p className="text-[11px] text-white/25">See detailed reports for each document</p></div>
-          <ArrowRight size={14} className="text-white/10 ml-auto group-hover:text-white/30" />
-        </Link>
-        <Link href="/dashboard/student/settings" className="group flex items-center gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all">
-          <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center"><TrendingUp size={16} className="text-blue-400" /></div>
-          <div><p className="text-sm font-medium text-white/80 group-hover:text-white">Profile Settings</p><p className="text-[11px] text-white/25">Edit your details and preferences</p></div>
-          <ArrowRight size={14} className="text-white/10 ml-auto group-hover:text-white/30" />
-        </Link>
-      </div>
-
-      {/* ── Recent Activity ── */}
-      <div className="mt-8">
-        <h2 className="font-heading font-bold text-white text-sm mb-4">Recent Activity</h2>
-        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
-          {verifications.length === 0 ? (
-            <div className="text-center py-8">
-              <Clock size={32} className="mx-auto text-white/10 mb-2" />
-              <p className="text-sm text-white/40">No activity yet. Start your first verification above.</p>
-            </div>
+        <Panel index={7} title="Recent activity" subtitle="Your latest document results">
+          {activity.length === 0 ? (
+            <EmptyState icon={<TrendingUp />} title="No activity yet" hint="Upload your first document to start building your profile." action={<Button href="/dashboard/student/resume" variant="primary" size="sm">Upload a resume</Button>} />
           ) : (
-            <div className="space-y-4">
-              {verifications.sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()).slice(0, 6).map((v, i) => (
-                <div key={i} className="flex gap-4 relative">
-                  {i !== Math.min(verifications.length, 6) - 1 && (
-                    <div className="absolute left-[11px] top-6 bottom-[-16px] w-[2px] bg-white/5" />
-                  )}
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 z-10 ${
-                    ['ai_approved', 'verified', 'admin_verified'].includes(v.status) ? 'bg-emerald-500/20 text-emerald-400' :
-                    ['pending', 'needs_review'].includes(v.status) ? 'bg-amber-500/20 text-amber-400' :
-                    v.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
-                    'bg-white/10 text-white/40'
-                  }`}>
-                    {['ai_approved', 'verified', 'admin_verified'].includes(v.status) ? <CheckCircle2 size={12} /> :
-                     ['pending', 'needs_review'].includes(v.status) ? <Clock size={12} /> :
-                     <AlertCircle size={12} />}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-sm text-white/90">
-                      {v.type === 'resume' ? 'Resume Analysis' : v.type === 'police' ? 'Police Verification' : v.type === 'aadhaar' ? 'Aadhaar Identity' : v.type === 'marksheet_10th' ? '10th Marksheet' : v.type === 'marksheet_12th' ? '12th Marksheet' : v.type === 'degree' ? 'Degree Certificate' : 'Document Upload'}
-                      {' '}<span className="text-white/40 font-normal">— {v.status.replace(/_/g, ' ')}</span>
-                    </p>
-                    <p className="text-xs text-white/30 mt-0.5">{new Date(v.updated_at || v.created_at).toLocaleString('en-IN')}</p>
-                  </div>
-                  {v.ai_confidence > 0 && <span className="text-xs text-white/20 self-center">{v.ai_confidence}% conf.</span>}
-                </div>
-              ))}
-            </div>
+            <ol className="space-y-3">
+              {activity.map((row) => {
+                const info = statusInfo(row.status)
+                return (
+                  <li key={row.id} className="flex items-start gap-3">
+                    <span aria-hidden="true" className={`mt-1.5 size-2 shrink-0 rounded-full ${info.tone === 'success' ? 'bg-success' : info.tone === 'warning' ? 'bg-warning' : info.tone === 'danger' ? 'bg-danger' : 'bg-white/30'}`} />
+                    <span className="min-w-0 text-sm">
+                      <span className="font-bold">{docLabel(row.type)}</span>, {info.label}
+                      <span className="block text-xs text-muted-foreground">{timeAgo(row.updated_at) || formatDateShort(row.updated_at)}</span>
+                    </span>
+                  </li>
+                )
+              })}
+            </ol>
           )}
-        </div>
+        </Panel>
       </div>
-    </div>
+
+      <div className="mt-3">
+        <Panel index={8} title="Your documents" subtitle="Press a folder to open the files inside it">
+          <FolderShelf folders={folders} />
+        </Panel>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {uploaded.length > 0 && userId ? (
+          <PinShelf
+            index={9}
+            storageKey={`credentia:pins:student:${userId}`}
+            title="Pinned documents"
+            subtitle="Pin the ones you open most"
+            label="Documents"
+            max={3}
+            items={uploaded.map((row) => {
+              const Icon = DOC_META[row.type as DocType]?.icon ?? FileText
+              return {
+                id: row.id,
+                title: docLabel(row.type),
+                meta: `${statusInfo(row.status).label}, updated ${formatDateShort(row.updated_at)}`,
+                icon: <Icon className="size-4" />,
+                href: DOC_ROUTE[row.type as DocType] ?? '/dashboard/student/saved',
+              }
+            })}
+          />
+        ) : (
+          <Panel index={9} title="Pinned documents" subtitle="Pin the ones you open most">
+            <EmptyState icon={<FileText />} title="Nothing to pin yet" hint="Documents you upload will appear here, ready to pin." />
+          </Panel>
+        )}
+
+        <QuickAccess
+          index={10}
+          title="Quick access"
+          subtitle="Pages you use most"
+          items={[
+            { title: 'Home', icon: Home, morph: 'home', href: '/dashboard/student' },
+            { title: 'Resume', icon: FileText, href: '/dashboard/student/resume' },
+            { title: 'Police', icon: Shield, href: '/dashboard/student/police' },
+            { title: 'Aadhaar', icon: CreditCard, href: '/dashboard/student/aadhaar' },
+            { title: 'Degree', icon: GraduationCap, href: '/dashboard/student/degree' },
+            { title: 'My link', icon: Link2, href: '/dashboard/student/my-link' },
+            { title: 'Ask Peon', icon: Headphones, onClick: () => peon.open() },
+            { title: 'Guide', icon: BookOpen, morph: 'blog', href: '/how-it-works' },
+          ]}
+        />
+      </div>
+    </>
   )
 }

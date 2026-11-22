@@ -1,263 +1,165 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
-import { Settings, Shield, TrendingUp, Save, Loader2, CheckCircle2, AlertCircle, RefreshCw, Database, Cpu, Globe } from 'lucide-react'
+import * as React from 'react'
+import { CircleAlert, Database, FileStack, ScanText, Sparkles } from 'lucide-react'
+import SmoothButton from '@/components/smoothui/components/smooth-button'
+import { Button } from '@/components/ui/button'
+import { useAdminResource } from '@/hooks/use-admin'
+import { Field, SelectInput, Switch, TextInput } from '@/components/dash/form'
+import { Badge, ErrorState, PageHeader, PageSkeleton, Panel } from '@/components/dash/kit'
+import { adminPost } from '@/lib/admin-client'
+import { timeAgo } from '@/lib/format'
+import { PLATFORM_SETTINGS, validateSetting } from '@/lib/platform-settings'
+import type { PlatformSetting, ServiceStatus } from '@/lib/admin-types'
 
-type Setting = { key: string; value: string; label: string; description: string; updated_at?: string }
+const SERVICE_ICON: Record<string, React.ReactNode> = { Database: <Database />, 'File storage': <FileStack />, 'Document AI': <ScanText />, 'Fast AI': <Sparkles /> }
 
-const SETTING_META: Record<string, { type: 'number' | 'text' | 'select' | 'toggle'; options?: string[]; min?: number; max?: number; suffix?: string }> = {
-  ai_confidence_threshold: { type: 'number', min: 0, max: 100, suffix: '%' },
-  auto_resume_threshold: { type: 'number', min: 0, max: 100 },
-  manual_review_types: { type: 'select', options: ['police', 'police,aadhaar', 'police,aadhaar,degree', 'none'] },
-  maintenance_mode: { type: 'toggle' },
-}
+export default function AdminSettingsPage() {
+  const { data, loading, error, refresh } = useAdminResource<{ settings: PlatformSetting[]; services: ServiceStatus[] }>('/api/admin/settings', { pollMs: 0 })
+  const [values, setValues] = React.useState<Record<string, string>>({})
+  const [saving, setSaving] = React.useState(false)
+  const [notice, setNotice] = React.useState<{ tone: 'success' | 'error'; text: string } | null>(null)
 
-export default function GlobalSettings() {
-  const [settings, setSettings] = useState<Setting[]>([])
-  const [editValues, setEditValues] = useState<Record<string, string>>({})
-  const [stats, setStats] = useState({ students: 0, verifications: 0, approved: 0, pending: 0 })
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    load()
-  }, [])
-
-  const load = async () => {
-    setLoading(true)
-    try {
-      const [settingsRes, { supabase }] = await Promise.all([
-        fetch('/api/admin/settings'),
-        import('@/lib/supabase'),
-      ])
-
-      const settingsData = await settingsRes.json()
-      const loadedSettings: Setting[] = settingsData.settings || []
-      setSettings(loadedSettings)
-      setEditValues(Object.fromEntries(loadedSettings.map((s: Setting) => [s.key, s.value])))
-
-      const [{ count: sCount }, { data: vData }] = await Promise.all([
-        supabase.from('students').select('*', { count: 'exact', head: true }),
-        supabase.from('verifications').select('status'),
-      ])
-      const vList = vData || []
-      setStats({
-        students: sCount || 0,
-        verifications: vList.length,
-        approved: vList.filter((v: any) => ['ai_approved', 'admin_verified', 'verified'].includes(v.status)).length,
-        pending: vList.filter((v: any) => ['pending', 'needs_review'].includes(v.status)).length,
-      })
-    } catch (err: any) {
-      setError('Failed to load settings: ' + err.message)
-    } finally {
-      setLoading(false)
+  // Fill the form once the settings arrive, and again after a save, never in the middle of an edit.
+  const seeded = React.useRef(false)
+  React.useEffect(() => {
+    if (data && !seeded.current) {
+      seeded.current = true
+      setValues(Object.fromEntries(data.settings.map((s) => [s.key, s.value])))
     }
-  }
+  }, [data])
 
-  const handleSave = async () => {
-    setSaving(true); setError(''); setSaved(false)
+  const saved = React.useMemo(() => new Map((data?.settings ?? []).map((s) => [s.key, s])), [data])
+  const problems = React.useMemo(() => {
+    const out: Record<string, string> = {}
+    for (const setting of PLATFORM_SETTINGS) {
+      const result = validateSetting(setting.key, values[setting.key] ?? '')
+      if (!result.ok) out[setting.key] = result.error
+    }
+    return out
+  }, [values])
+  const changed = PLATFORM_SETTINGS.filter((s) => saved.has(s.key) && (values[s.key] ?? '') !== saved.get(s.key)?.value)
+  const hasProblems = Object.keys(problems).length > 0
+
+  const save = async () => {
+    if (changed.length === 0 || hasProblems) return
+    setSaving(true)
+    setNotice(null)
     try {
-      const payload = Object.entries(editValues).map(([key, value]) => ({ key, value }))
-      const res = await fetch('/api/admin/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings: payload }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Save failed')
-      setSaved(true)
-      setTimeout(() => setSaved(false), 3000)
-      load() // Reload to show updated timestamps
-    } catch (err: any) {
-      setError(err.message)
+      await adminPost('/api/admin/settings', { settings: changed.map((s) => ({ key: s.key, value: values[s.key] })) })
+      seeded.current = false
+      await refresh()
+      setNotice({ tone: 'success', text: `${changed.length} ${changed.length === 1 ? 'setting' : 'settings'} saved and written to the audit log.` })
+    } catch (err) {
+      setNotice({ tone: 'error', text: (err as Error).message })
     } finally {
       setSaving(false)
     }
   }
 
-  const renderInput = (setting: Setting) => {
-    const meta = SETTING_META[setting.key] || { type: 'text' }
-    const value = editValues[setting.key] ?? setting.value
-
-    if (meta.type === 'toggle') {
-      const isOn = value === 'true'
-      return (
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setEditValues(prev => ({ ...prev, [setting.key]: isOn ? 'false' : 'true' }))}
-            className={`w-12 h-7 rounded-full transition-all duration-300 relative ${isOn ? 'bg-red-500' : 'bg-white/10'}`}
-          >
-            <div className={`w-5 h-5 rounded-full bg-white absolute top-1 transition-all duration-300 shadow ${isOn ? 'left-6' : 'left-1'}`} />
-          </button>
-          <span className={`text-xs font-semibold ${isOn ? 'text-red-400' : 'text-white/40'}`}>
-            {isOn ? 'ON — Platform is in maintenance mode' : 'OFF'}
-          </span>
-        </div>
-      )
-    }
-
-    if (meta.type === 'select') {
-      return (
-        <select
-          value={value}
-          onChange={e => setEditValues(prev => ({ ...prev, [setting.key]: e.target.value }))}
-          className="h-10 px-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white focus:outline-none focus:border-blue-500/50"
-        >
-          {meta.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-        </select>
-      )
-    }
-
-    return (
-      <div className="flex items-center gap-2">
-        <input
-          type={meta.type === 'number' ? 'number' : 'text'}
-          value={value}
-          min={meta.min}
-          max={meta.max}
-          onChange={e => setEditValues(prev => ({ ...prev, [setting.key]: e.target.value }))}
-          className="w-28 h-10 px-3 rounded-xl text-sm bg-white/5 border border-white/10 text-white focus:outline-none focus:border-blue-500/50 text-center font-mono font-bold"
-        />
-        {meta.suffix && <span className="text-sm text-white/40">{meta.suffix}</span>}
-      </div>
-    )
+  const discard = () => {
+    setValues(Object.fromEntries((data?.settings ?? []).map((s) => [s.key, s.value])))
+    setNotice(null)
   }
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
-    </div>
-  )
+  if (loading) return <PageSkeleton metrics={0} panels={2} />
+  if (error && !data) return <ErrorState message={error} onRetry={refresh} />
+  if (!data) return null
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-heading text-2xl font-bold text-white flex items-center gap-2">
-            <Settings size={24} className="text-blue-400" /> Global Settings
-          </h1>
-          <p className="text-sm text-white/40 mt-1">Platform configuration — all changes are saved to the database instantly.</p>
-        </div>
-        <button
-          onClick={load}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-colors hover:bg-white/5"
-          style={{ color: 'rgba(255,255,255,0.35)', border: '1px solid rgba(255,255,255,0.08)' }}
-        >
-          <RefreshCw size={14} /> Refresh
-        </button>
+    <>
+      <PageHeader title="Settings" description="The rules the team has agreed for verification, and the state of the services the platform runs on." />
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.6fr_1fr]">
+        <Panel index={0} title="Verification rules" subtitle="Press Save changes when you are done. Each change is written to the audit log.">
+          <p className="mb-4 flex gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs leading-relaxed text-foreground/90">
+            <CircleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
+            <span>The first three rules decide new documents within about a minute of saving. Maintenance mode is recorded but does not block anything yet.</span>
+          </p>
+
+          <div className="space-y-3">
+            {PLATFORM_SETTINGS.map((setting) => {
+              const current = values[setting.key] ?? setting.fallback
+              const row = saved.get(setting.key)
+              const dirty = changed.some((c) => c.key === setting.key)
+              return (
+                <div key={setting.key} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+                    <div className="min-w-0 flex-1 basis-60">
+                      <p className="flex items-center gap-2 text-sm font-extrabold">
+                        {setting.label}
+                        {dirty ? <Badge tone="warning">Not saved</Badge> : null}
+                      </p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{setting.description}</p>
+                      {row?.updated_at ? <p className="mt-1.5 text-[11px] text-muted-foreground">Last changed {timeAgo(row.updated_at)}</p> : null}
+                    </div>
+
+                    <div className="shrink-0">
+                      {setting.kind === 'toggle' ? (
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-bold text-muted-foreground">{current === 'true' ? 'On' : 'Off'}</span>
+                          <Switch checked={current === 'true'} label={setting.label} onChange={(on) => setValues({ ...values, [setting.key]: on ? 'true' : 'false' })} />
+                        </div>
+                      ) : setting.kind === 'choice' ? (
+                        <Field label="Choose" htmlFor={`set-${setting.key}`} error={problems[setting.key]} className="w-64 max-w-full">
+                          <SelectInput id={`set-${setting.key}`} value={current} onChange={(e) => setValues({ ...values, [setting.key]: e.target.value })}>
+                            {setting.options?.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </SelectInput>
+                        </Field>
+                      ) : (
+                        <Field label="Value" htmlFor={`set-${setting.key}`} error={problems[setting.key]} className="w-40">
+                          <div className="flex items-center gap-2">
+                            <TextInput id={`set-${setting.key}`} type="number" inputMode="numeric" min={setting.min} max={setting.max} value={current} onChange={(e) => setValues({ ...values, [setting.key]: e.target.value })} className="tabular text-center font-bold" />
+                            {setting.suffix ? <span className="text-xs font-bold text-muted-foreground">{setting.suffix}</span> : null}
+                          </div>
+                        </Field>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Button variant="primary" size="sm" disabled={saving || changed.length === 0 || hasProblems} onClick={() => void save()}>
+              {saving ? 'Saving' : changed.length > 0 ? `Save ${changed.length} ${changed.length === 1 ? 'change' : 'changes'}` : 'Save changes'}
+            </Button>
+            <SmoothButton variant="ghost" shape="pill" size="sm" disabled={saving || changed.length === 0} onClick={discard}>
+              Discard
+            </SmoothButton>
+            {notice ? (
+              <p role={notice.tone === 'error' ? 'alert' : 'status'} className={notice.tone === 'error' ? 'text-sm font-semibold text-destructive' : 'text-sm font-semibold text-success'}>
+                {notice.text}
+              </p>
+            ) : null}
+          </div>
+        </Panel>
+
+        <Panel index={1} className="lg:self-start" title="Services" subtitle="Whether each service has its credentials in place. Keys are never shown.">
+          <ul className="space-y-2.5">
+            {data.services.map((service) => (
+              <li key={service.name} className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3">
+                <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-[10px] bg-white/[0.07] text-brand-ink [&_svg]:size-4">
+                  {SERVICE_ICON[service.name]}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-bold">{service.name}</span>
+                    <span className="text-xs text-muted-foreground">{service.provider}</span>
+                  </span>
+                  <span className="mt-0.5 block break-words text-xs leading-relaxed text-muted-foreground">{service.detail}</span>
+                </span>
+                {service.ready ? <Badge tone="success">Set up</Badge> : <Badge tone="danger">Missing</Badge>}
+              </li>
+            ))}
+          </ul>
+        </Panel>
       </div>
-
-      {/* Platform Stats */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 space-y-4">
-        <h2 className="font-heading font-bold text-sm text-white">Live Platform Statistics</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: 'Total Students', value: stats.students, color: '#8b5cf6' },
-            { label: 'Total Verifications', value: stats.verifications, color: '#3b82f6' },
-            { label: 'Approved', value: stats.approved, color: '#22c55e' },
-            { label: 'Pending Review', value: stats.pending, color: '#f59e0b' },
-          ].map((s, i) => (
-            <div key={i} className="p-4 rounded-xl bg-white/[0.03] border border-white/5 text-center">
-              <p className="font-heading text-2xl font-bold stat-number" style={{ color: s.color }}>{s.value}</p>
-              <p className="text-[9px] text-white/30 uppercase tracking-wider font-semibold mt-1">{s.label}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* AI Configuration — editable */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 space-y-5">
-        <h2 className="font-heading font-bold text-sm text-white flex items-center gap-2">
-          <Shield size={16} className="text-emerald-400" /> AI Verification Settings
-        </h2>
-        <div className="space-y-4">
-          {settings.map((setting, i) => (
-            <motion.div
-              key={setting.key}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="flex items-start justify-between gap-4 p-4 rounded-xl bg-white/[0.03] border border-white/5"
-            >
-              <div className="flex-1">
-                <p className="text-sm font-medium text-white/80">{setting.label}</p>
-                <p className="text-xs text-white/30 mt-0.5">{setting.description}</p>
-                {setting.updated_at && (
-                  <p className="text-[10px] text-white/15 mt-1">
-                    Last updated: {new Date(setting.updated_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                )}
-              </div>
-              <div className="flex-shrink-0">
-                {renderInput(setting)}
-              </div>
-            </motion.div>
-          ))}
-
-          {settings.length === 0 && (
-            <div className="text-center py-8 text-white/30 text-sm">
-              <Settings size={32} className="mx-auto mb-3 opacity-20" />
-              No settings found. The platform_settings table may need initialization.
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Infrastructure Info */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 space-y-4">
-        <h2 className="font-heading font-bold text-sm text-white flex items-center gap-2">
-          <TrendingUp size={16} className="text-teal-400" /> Infrastructure
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {[
-            { icon: Database, label: 'Database', value: 'Supabase (PostgreSQL 17)', color: '#22c55e' },
-            { icon: Globe, label: 'File Storage', value: 'Cloudflare R2', color: '#f59e0b' },
-            { icon: Cpu, label: 'AI Provider', value: 'Groq (LLaMA 3.3 + LLaMA 4 Scout)', color: '#6366f1' },
-            { icon: Shield, label: 'Hosting', value: 'Vercel (Edge Network)', color: '#3b82f6' },
-          ].map((item, i) => (
-            <div key={i} className="p-4 rounded-xl bg-white/[0.03] border border-white/5 flex items-center gap-3">
-              <item.icon size={18} style={{ color: item.color }} className="flex-shrink-0" />
-              <div>
-                <p className="text-[10px] text-white/25 uppercase tracking-wider">{item.label}</p>
-                <p className="text-sm text-white/70 font-medium mt-0.5">{item.value}</p>
-              </div>
-              <span className="ml-auto w-2 h-2 rounded-full bg-emerald-400 realtime-dot" />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Save bar */}
-      {error && (
-        <div className="rounded-xl px-4 py-3 text-sm flex items-center gap-2"
-          style={{ background: 'rgba(239,68,68,0.08)', color: '#f87171', border: '1px solid rgba(239,68,68,0.15)' }}>
-          <AlertCircle size={16} /> {error}
-        </div>
-      )}
-
-      <div className="flex items-center gap-4 pb-6">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white disabled:opacity-50 transition-all hover:translate-y-[-1px] active:scale-[0.97]"
-          style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)', boxShadow: '0 4px 24px rgba(59,130,246,0.25)' }}
-        >
-          {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-          {saving ? 'Saving...' : 'Save All Settings'}
-        </button>
-        {saved && (
-          <motion.span
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-2 text-sm text-emerald-400"
-          >
-            <CheckCircle2 size={16} /> Settings saved to database!
-          </motion.span>
-        )}
-      </div>
-    </div>
+    </>
   )
 }

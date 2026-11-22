@@ -1,66 +1,45 @@
 import { NextResponse } from 'next/server'
-import { revalidatePath } from 'next/cache'
-import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { getUniversityAccess } from '@/lib/university-access'
 
+export const dynamic = 'force-dynamic'
+
+const text = (value: unknown, max: number) => (typeof value === 'string' ? value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max) : '')
+
+/**
+ * Saves the signed in university's profile. Approval and the access key are not
+ * editable here: an admin decides approval and the key stays private.
+ */
 export async function POST(req: Request) {
+  const access = await getUniversityAccess()
+  if (!access) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await req.json().catch(() => null)
+  if (!body || typeof body !== 'object') return NextResponse.json({ error: 'Nothing to save.' }, { status: 400 })
+  const has = (key: string) => Object.prototype.hasOwnProperty.call(body, key)
+
   try {
-    // Use the proper server client that handles session refresh (get/set/remove)
-    const supabase = createSupabaseServerClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      console.error('[university/update-settings] No authenticated user')
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const patch: Record<string, unknown> = { id: access.caller.userId }
+    if (has('university_name')) {
+      const name = text(body.university_name, 160)
+      if (!name) return NextResponse.json({ error: 'The institution name cannot be empty.' }, { status: 400 })
+      patch.university_name = name
     }
+    if (has('city')) patch.city = text(body.city, 80) || null
+    if (has('state')) patch.state = text(body.state, 80) || null
+    if (has('ugc_id')) patch.ugc_id = text(body.ugc_id, 40) || null
+    if (has('naac_grade')) patch.naac_grade = text(body.naac_grade, 8) || null
 
-    // Verify user is a university
-    const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+    const { error } = await supabaseAdmin.from('universities').upsert(patch, { onConflict: 'id' })
+    if (error) throw error
 
-    if (profile?.role !== 'university') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (typeof patch.university_name === 'string') {
+      await supabaseAdmin.from('profiles').update({ full_name: patch.university_name, updated_at: new Date().toISOString() }).eq('id', access.caller.userId)
     }
-
-    const { university_name } = await req.json()
-
-    // 1. Update profiles table — sync full_name + updated_at so every portal sees the new name
-    const { error: profErr } = await supabaseAdmin.from('profiles').update({
-      full_name: university_name,
-      updated_at: new Date().toISOString()
-    }).eq('id', user.id)
-
-    if (profErr) {
-      console.error('[university/update-settings] profiles update error:', profErr.message)
-      throw profErr
-    }
-
-    // 2. Also update universities table (university_name) for cross-panel sync
-    const { error: uniErr } = await supabaseAdmin.from('universities').upsert({
-      id: user.id,
-      university_name: university_name,
-    }, { onConflict: 'id' })
-
-    if (uniErr) {
-      console.error('[university/update-settings] universities upsert error:', uniErr.message)
-      // Non-fatal: the universities row may not exist yet for some accounts
-    }
-
-    console.log(`[university/update-settings] Successfully updated university name to "${university_name}" for user ${user.id}`)
-
-    // 3. Revalidate all portal paths so server-rendered pages pick up the new name
-    revalidatePath('/dashboard/university')
-    revalidatePath('/dashboard/university/settings')
-    revalidatePath('/dashboard/student')
-    revalidatePath('/dashboard/admin')
-    revalidatePath('/dashboard/company')
 
     return NextResponse.json({ success: true })
-
-  } catch (err: any) {
-    console.error('[university/update-settings] Error:', err.message)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (error) {
+    console.error('[university/update-settings] failed:', (error as Error).message)
+    return NextResponse.json({ error: 'Your settings could not be saved. Please try again.' }, { status: 500 })
   }
 }

@@ -1,213 +1,277 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  Users, CheckCircle2, XCircle, Clock, FileText, 
-  ChevronRight, Search, Shield, GraduationCap, Building2, MapPin, Briefcase
-} from 'lucide-react'
-import { ProfileAvatar } from '@/components/ProfileAvatar'
+import * as React from 'react'
+import { useSearchParams } from 'next/navigation'
+import { CircleCheck, Clock3, Users, XCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useDash } from '@/components/dash/dashboard-context'
+import { DataTable, type Column } from '@/components/dash/data-table'
+import { Dialog } from '@/components/dash/dialog'
+import { EmptyState, ErrorState, Metric, PageHeader, PageSkeleton, Panel, StatusBadge } from '@/components/dash/kit'
+import { ProfileAvatar } from '@/components/dash/profile-avatar'
+import { ScoreRing } from '@/components/dash/analysis-report'
+import SmoothButton from '@/components/smoothui/components/smooth-button'
+import { Button } from '@/components/ui/button'
+import { CopyButton } from '@/components/ui/copy-button'
+import { saveCsv } from '@/lib/csv'
+import { formatDateShort } from '@/lib/format'
 
-export default function CompanyApplicantsPage() {
-  const [applications, setApplications] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+interface Applicant {
+  id: string
+  full_name: string
+  email: string
+  avatar_url: string | null
+  trust_score: number
+  ats_score: number
+  verified_documents: number
+  course: string
+  branch: string
+  city: string
+  state: string
+  graduation_year: number | null
+  cgpa: number | null
+  skills: string[]
+}
 
-  const load = async () => {
+interface Application {
+  id: string
+  student_id: string
+  job_title: string | null
+  status: string | null
+  company_notes: string | null
+  created_at: string
+  applicant: Applicant
+}
+
+export default function ApplicantsPage() {
+  const params = useSearchParams()
+  const { userId } = useDash()
+  const [applications, setApplications] = React.useState<Application[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState('')
+  const [notice, setNotice] = React.useState('')
+  const [open, setOpen] = React.useState<Application | null>(null)
+
+  const load = React.useCallback(async () => {
     try {
-      const res = await fetch('/api/company/applications')
-      const data = await res.json()
-      if (data.applications) setApplications(data.applications)
-    } catch (e) {
-      console.error(e)
+      const res = await fetch('/api/company/applications', { cache: 'no-store' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Applications could not be loaded.')
+      setApplications(data.applications ?? [])
+      setError('')
+    } catch (err) {
+      setError((err as Error).message)
     } finally {
       setLoading(false)
     }
-  }
-
-  useEffect(() => {
-    load()
-
-    // Realtime: auto-refresh when applications change
-    const channel = supabase.channel('company_applicants_rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'applications' }, () => {
-        load()
-      })
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
   }, [])
 
-  const updateStatus = async (appId: string, status: string) => {
-    // Optimistic UI
-    setApplications(apps => apps.map(a => a.id === appId ? { ...a, status } : a))
+  React.useEffect(() => {
+    if (!userId) return
+    void load()
+    const channel = supabase
+      .channel(`applicants_${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'applications', filter: `company_id=eq.${userId}` }, () => void load())
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [userId, load])
+
+  const wanted = params?.get('application')
+  React.useEffect(() => {
+    if (!wanted) return
+    const found = applications.find((a) => a.id === wanted)
+    if (found) setOpen(found)
+  }, [wanted, applications])
+
+  const setStatus = async (application: Application, status: 'pending' | 'accepted' | 'rejected') => {
+    const before = applications
+    setNotice('')
+    setApplications((prev) => prev.map((a) => (a.id === application.id ? { ...a, status } : a)))
+    setOpen((prev) => (prev && prev.id === application.id ? { ...prev, status } : prev))
     try {
-      await fetch('/api/company/applications/update-status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ applicationId: appId, status })
-      })
-    } catch (e) {
-      alert("Failed to update status")
-      load() // Reload if failed
+      const res = await fetch('/api/company/applications/update-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ applicationId: application.id, status }) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'The status could not be changed.')
+    } catch (err) {
+      setApplications(before)
+      setOpen((prev) => (prev && prev.id === application.id ? { ...prev, status: application.status } : prev))
+      setNotice((err as Error).message)
     }
   }
 
-  const filtered = useMemo(() => {
-    return applications.filter(a => {
-      if (statusFilter !== 'all' && a.status !== statusFilter) return false
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase()
-        if (!a.job_title?.toLowerCase().includes(q) && 
-            !a.applicant?.full_name?.toLowerCase().includes(q)) return false
-      }
-      return true
-    })
-  }, [applications, statusFilter, searchQuery])
+  const count = (status: string) => applications.filter((a) => (a.status || 'pending') === status).length
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-    </div>
+  const actions = (application: Application) => (
+    <span className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+      <SmoothButton size="xs" variant="outline" shape="pill" disabled={application.status === 'accepted'} onClick={() => void setStatus(application, 'accepted')} aria-label={`Accept ${application.applicant.full_name}`}>
+        Accept
+      </SmoothButton>
+      <SmoothButton size="xs" variant="ghost" shape="pill" disabled={application.status === 'rejected'} onClick={() => void setStatus(application, 'rejected')} aria-label={`Reject ${application.applicant.full_name}`}>
+        Reject
+      </SmoothButton>
+    </span>
   )
 
-  const statusColors: any = {
-    pending: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-    accepted: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-    rejected: 'text-red-400 bg-red-500/10 border-red-500/20'
-  }
-  const statusIcons: any = {
-    pending: <Clock size={14} />,
-    accepted: <CheckCircle2 size={14} />,
-    rejected: <XCircle size={14} />
-  }
+  const columns: Column<Application>[] = [
+    {
+      key: 'applicant',
+      header: 'Applicant',
+      sortValue: (a) => a.applicant.full_name,
+      cell: (a) => (
+        <span className="flex min-w-0 items-center gap-3">
+          <ProfileAvatar name={a.applicant.full_name} avatarUrl={a.applicant.avatar_url} size={36} />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-bold">{a.applicant.full_name}</span>
+            <span className="block truncate text-xs text-muted-foreground">{a.applicant.email}</span>
+          </span>
+        </span>
+      ),
+    },
+    { key: 'role', header: 'Applied for', sortValue: (a) => a.job_title ?? '', cell: (a) => <span className="font-semibold">{a.job_title}</span> },
+    { key: 'course', header: 'Course', hideOnMobile: true, sortValue: (a) => a.applicant.course, cell: (a) => <span className="text-muted-foreground">{[a.applicant.course, a.applicant.branch].filter(Boolean).join(' ') || 'Not added'}</span> },
+    { key: 'trust', header: 'Trust', align: 'right', hideOnMobile: true, sortValue: (a) => a.applicant.trust_score, cell: (a) => <span className="tabular font-bold">{a.applicant.trust_score}</span> },
+    { key: 'date', header: 'Applied', hideOnMobile: true, sortValue: (a) => a.created_at, cell: (a) => <span className="text-muted-foreground">{formatDateShort(a.created_at)}</span> },
+    { key: 'status', header: 'Status', sortValue: (a) => a.status ?? 'pending', cell: (a) => <StatusBadge status={a.status || 'pending'} /> },
+    { key: 'actions', header: 'Decision', align: 'right', cell: actions },
+  ]
+
+  const exportCsv = () =>
+    saveCsv('applicants.csv', [
+      ['Name', 'Email', 'Applied for', 'Status', 'Course', 'Branch', 'Graduation year', 'CGPA', 'ATS score', 'Trust score', 'Verified documents', 'Applied on'],
+      ...applications.map((a) => [a.applicant.full_name, a.applicant.email, a.job_title, a.status || 'pending', a.applicant.course, a.applicant.branch, a.applicant.graduation_year, a.applicant.cgpa, a.applicant.ats_score, a.applicant.trust_score, a.applicant.verified_documents, formatDateShort(a.created_at)]),
+    ])
+
+  if (loading) return <PageSkeleton metrics={4} panels={1} />
+  if (error) return <ErrorState message={error} onRetry={load} />
+
+  const person = open?.applicant
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-12 relative">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <motion.div initial={{ opacity: 0, x: -15 }} animate={{ opacity: 1, x: 0 }}>
-          <h1 className="font-heading text-2xl font-bold text-white flex items-center gap-2">
-            <Users size={24} className="text-emerald-400" /> Incoming Applications
-          </h1>
-          <p className="text-sm text-white/40 mt-1">Review verified student applications for your posted listings.</p>
-        </motion.div>
+    <>
+      <PageHeader
+        title="Applicants"
+        description="Students who applied to your company. Accept or decline each application, and the student is told."
+        actions={
+          <SmoothButton size="sm" variant="outline" shape="pill" onClick={exportCsv} disabled={applications.length === 0}>
+            Export CSV
+          </SmoothButton>
+        }
+      />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Metric index={0} emphasis title="Applications" icon={<Users />} value={applications.length} detail="All time" />
+        <Metric index={1} title="Pending" icon={<Clock3 />} value={count('pending')} detail="Waiting for you" />
+        <Metric index={2} title="Accepted" icon={<CircleCheck />} value={count('accepted')} detail="Told by notification" />
+        <Metric index={3} title="Declined" icon={<XCircle />} value={count('rejected')} detail="Told by notification" />
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex-1 relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
-          <input 
-            value={searchQuery} 
-            onChange={e => setSearchQuery(e.target.value)} 
-            placeholder="Search applicants or job titles..." 
-            className="w-full h-11 pl-10 pr-4 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-white/20 focus:outline-none focus:border-emerald-500/50" 
-          />
-        </div>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-11 px-4 rounded-xl text-sm bg-white/5 border border-white/10 text-white focus:outline-none">
-          <option value="all">All Statuses</option>
-          <option value="pending">Pending Review</option>
-          <option value="accepted">Accepted</option>
-          <option value="rejected">Rejected</option>
-        </select>
+      <div className="mt-3">
+        <Panel index={4} title="All applications" subtitle="Press a row for the full profile">
+          {notice ? (
+            <p role="alert" className="mb-3 text-sm text-destructive">
+              {notice}
+            </p>
+          ) : null}
+          {applications.length === 0 ? (
+            <EmptyState icon={<Users />} title="No applications yet" hint="Students apply from their dashboard. Keep your company profile complete so they can find you." action={<Button href="/dashboard/company/settings" variant="default" size="sm">Complete your profile</Button>} />
+          ) : (
+            <DataTable
+              label="Applications"
+              rows={applications}
+              columns={columns}
+              getRowId={(a) => a.id}
+              searchText={(a) => `${a.applicant.full_name} ${a.job_title ?? ''} ${a.applicant.course} ${a.applicant.email}`}
+              searchPlaceholder="Search applicants or roles"
+              pageSize={8}
+              onRowClick={(a) => setOpen(a)}
+              filters={[
+                {
+                  id: 'status',
+                  label: 'All statuses',
+                  options: [
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'accepted', label: 'Accepted' },
+                    { value: 'rejected', label: 'Declined' },
+                  ],
+                  predicate: (a, value) => (a.status || 'pending') === value,
+                },
+              ]}
+            />
+          )}
+        </Panel>
       </div>
 
-      <div className="space-y-4">
-        <AnimatePresence mode="popLayout">
-          {filtered.map((app, i) => {
-            const stu = app.applicant?.student || {}
-            return (
-              <motion.div
-                key={app.id}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ delay: i * 0.05 }}
-                className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 lg:p-6 flex flex-col md:flex-row md:items-center gap-6 hover:bg-white/[0.04] transition-all group overflow-hidden relative"
-              >
-                <div className="flex-1 flex items-start sm:items-center gap-5">
-                  <ProfileAvatar 
-                    profile={app.applicant} 
-                    userId={app.student_id} 
-                    size="lg" 
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <h3 className="font-heading font-bold text-white text-lg">{app.applicant?.full_name || 'Applicant'}</h3>
-                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] uppercase font-bold tracking-widest border ${statusColors[app.status || 'pending']}`}>
-                        {statusIcons[app.status || 'pending']} {app.status || 'Pending'}
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-wrap items-center gap-3 md:gap-5 mt-2 text-xs text-white/50">
-                      <p className="flex items-center gap-1.5 font-medium text-emerald-400">
-                        <Briefcase size={14} /> Applied for: {app.job_title}
-                      </p>
-                      <p className="flex items-center gap-1.5">
-                        <GraduationCap size={14} /> {stu.course || 'Unknown'} {stu.branch ? `(${stu.branch})` : ''} 
-                      </p>
-                      {(stu.city || stu.state) && (
-                        <p className="flex items-center gap-1.5">
-                          <MapPin size={14} /> {[stu.city, stu.state].filter(Boolean).join(', ')}
-                        </p>
-                      )}
-                      {/* Mobile-visible trust score badge */}
-                      <p className="flex lg:hidden items-center gap-1.5 font-bold" style={{ color: `hsl(${Math.min(120, (app.applicant?.trust_score || 0) * 1.2)}, 70%, 50%)` }}>
-                        <Shield size={14} /> Trust: {app.applicant?.trust_score || 0}
-                      </p>
-                    </div>
-                  </div>
+      <Dialog
+        open={Boolean(open)}
+        onClose={() => setOpen(null)}
+        title={person?.full_name ?? ''}
+        description={open ? `Applied for ${open.job_title} on ${formatDateShort(open.created_at)}` : undefined}
+        size="lg"
+        footer={
+          open ? (
+            <>
+              <Button size="sm" variant="primary" disabled={open.status === 'accepted'} onClick={() => void setStatus(open, 'accepted')}>
+                Accept
+              </Button>
+              <Button size="sm" variant="destructive" disabled={open.status === 'rejected'} onClick={() => void setStatus(open, 'rejected')}>
+                Decline
+              </Button>
+              {open.status !== 'pending' ? (
+                <SmoothButton size="sm" variant="ghost" shape="pill" onClick={() => void setStatus(open, 'pending')}>
+                  Move back to pending
+                </SmoothButton>
+              ) : null}
+              {person?.email ? <CopyButton value={person.email} /> : null}
+            </>
+          ) : null
+        }
+      >
+        {open && person ? (
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center gap-5">
+              <ScoreRing value={person.ats_score} label="ATS score" />
+              <div className="min-w-0 flex-1 space-y-1 text-sm">
+                <p className="flex flex-wrap items-center gap-2">
+                  <StatusBadge status={open.status || 'pending'} />
+                  <span className="text-xs font-semibold text-muted-foreground">{person.verified_documents} documents verified</span>
+                </p>
+                <p className="text-muted-foreground">Trust score {person.trust_score} out of 100</p>
+                {person.email ? <p className="truncate font-semibold">{person.email}</p> : null}
+              </div>
+            </div>
+            <dl className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+              {[
+                { label: 'Course', value: [person.course, person.branch].filter(Boolean).join(' ') },
+                { label: 'Graduation year', value: person.graduation_year },
+                { label: 'CGPA', value: person.cgpa },
+                { label: 'Place', value: [person.city, person.state].filter(Boolean).join(', ') },
+              ].map((fact) => (
+                <div key={fact.label} className="glass-flat min-w-0 rounded-xl px-3 py-2.5">
+                  <dt className="text-[11px] font-semibold text-muted-foreground">{fact.label}</dt>
+                  <dd className="mt-0.5 truncate text-sm font-bold">{fact.value || <span className="font-medium text-muted-foreground">Not added</span>}</dd>
                 </div>
-
-                {/* Trust Metrics Section — Desktop only */}
-                <div className="hidden lg:flex flex-col items-center justify-center px-8 border-l border-white/5">
-                  <div className="text-center group">
-                    <p className="text-3xl font-heading font-black" style={{ color: `hsl(${Math.min(120, (app.applicant?.trust_score || 0) * 1.2)}, 70%, 50%)` }}>
-                      {app.applicant?.trust_score || 0}
-                    </p>
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-white/30 mt-1 flex items-center justify-center gap-1">
-                      <Shield size={12} /> ATS Trust
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-2 w-full md:w-auto mt-4 md:mt-0 pt-4 md:pt-0 border-t md:border-t-0 border-white/5">
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => updateStatus(app.id, 'accepted')}
-                      disabled={app.status === 'accepted'}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 disabled:opacity-30 disabled:hover:bg-emerald-500/10 text-xs font-bold transition-colors border border-emerald-500/20"
-                    >
-                      <CheckCircle2 size={16} /> Accept
-                    </button>
-                    <button 
-                      onClick={() => updateStatus(app.id, 'rejected')}
-                      disabled={app.status === 'rejected'}
-                      className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 disabled:opacity-30 disabled:hover:bg-red-500/10 text-xs font-bold transition-colors border border-red-500/20"
-                    >
-                      <XCircle size={16} /> Reject
-                    </button>
-                  </div>
-                  {app.company_notes && (
-                    <div className="w-full text-xs text-white/40 bg-white/5 rounded-lg p-3 line-clamp-2 mt-2">
-                      <span className="font-bold text-white/60 mb-1 block">Context:</span> {app.company_notes}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )
-          })}
-        </AnimatePresence>
-        
-        {filtered.length === 0 && (
-          <div className="py-20 text-center rounded-2xl border border-white/5 bg-white/[0.01]">
-            <Users size={48} className="mx-auto mb-4 text-white/10" />
-            <p className="text-white/70 font-heading text-lg font-bold">No applicants found</p>
-            <p className="text-sm text-white/30 mt-1">Adjust your filters or wait for new applications.</p>
+              ))}
+            </dl>
+            {person.skills.length > 0 ? (
+              <ul className="flex flex-wrap gap-1.5" aria-label="Skills">
+                {person.skills.map((skill) => (
+                  <li key={skill} className="rounded-lg border border-brand/40 bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand-ink">
+                    {skill}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {open.company_notes ? (
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                <h4 className="text-xs font-extrabold text-foreground/80">Note from the student</h4>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{open.company_notes}</p>
+              </div>
+            ) : null}
           </div>
-        )}
-      </div>
-    </div>
+        ) : null}
+      </Dialog>
+    </>
   )
 }

@@ -1,236 +1,143 @@
-import { cookies } from 'next/headers'
-import { createServerClient } from '@supabase/ssr'
-import { supabaseAdmin } from '@/lib/supabase'
-import { redirect } from 'next/navigation'
-import { FileText, Shield, CreditCard, GraduationCap, CheckCircle2, AlertCircle, Clock, XCircle, ChevronRight } from 'lucide-react'
+'use client'
+
+import * as React from 'react'
 import Link from 'next/link'
+import { Eye, EyeOff, GraduationCap, Shield, TrendingUp, Users } from 'lucide-react'
+import { useStudentData } from '@/hooks/use-student-data'
+import { Meter } from '@/components/dash/charts'
+import { ErrorState, Metric, PageHeader, PageSkeleton, Panel, StatusBadge } from '@/components/dash/kit'
+import { DOC_META } from '@/components/dash/doc-meta'
+import { Button } from '@/components/ui/button'
+import { DOC_ROUTE, DOC_TYPES, docLabel } from '@/lib/documents'
 
-// Types
-type Verification = {
-  type: string;
-  status: string;
-  ai_confidence: number;
-  ai_result: any;
-  updated_at: string;
-}
-
-type Student = {
-  full_name: string;
-  ats_score: number;
-}
-
-export default async function StudentOverview() {
-  const cookieStore = cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { get(name: string) { return cookieStore.get(name)?.value } } }
+function Row({ label, value }: { label: string; value?: string | number | null }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 border-b border-white/10 py-2.5 last:border-b-0">
+      <dt className="text-xs font-semibold text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 truncate text-right text-sm font-bold">{value || <span className="font-medium text-muted-foreground">Not added</span>}</dd>
+    </div>
   )
+}
 
-  const { data: { session }, error } = await supabase.auth.getSession()
-  const user = session?.user
+export default function StudentOverviewPage() {
+  const { student, byType, counts, loading, error, refresh } = useStudentData()
+  const [university, setUniversity] = React.useState<string | null>(null)
 
-  if (!user || error) {
-    redirect('/login/student')
-  }
-
-  // Fetch Student Data (column is 'name', not 'full_name')
-  const { data: student } = await supabaseAdmin
-    .from('students')
-    .select('name, ats_score, cgpa, percentage_10th, percentage_12th, trust_score, course, branch, graduation_year')
-    .eq('id', user.id)
-    .single()
-
-  // Also get the profile name as a fallback
-  const { data: profileData } = await supabaseAdmin
-    .from('profiles')
-    .select('full_name')
-    .eq('id', user.id)
-    .single()
-
-  // Fetch Verifications Data
-  const { data: verifications } = await supabaseAdmin
-    .from('verifications')
-    .select('*')
-    .eq('student_id', user.id)
-
-  const vList: Verification[] = verifications || []
-
-  // Check verification counts
-  const requiredDocs = ['resume', 'police', 'aadhaar', 'degree', 'marksheet_10th', 'marksheet_12th', 'passport']
-  let verifiedCount = 0
-
-  requiredDocs.forEach(type => {
-    const doc = vList.find(v => v.type === type)
-    if (doc?.status === 'ai_approved' || doc?.status === 'verified' || doc?.status === 'admin_verified') {
-      verifiedCount++
+  React.useEffect(() => {
+    if (!student?.university_id) {
+      setUniversity(null)
+      return
     }
-  })
-
-  // Set maximum bounds to 100
-  const rawPercentage = Math.round((verifiedCount / 7) * 100)
-  const completionPercentage = Math.min(100, Math.max(0, rawPercentage))
-
-  // Document Config
-  const documents = [
-    { type: 'resume', label: 'Resume', desc: 'Get your ATS score with AI', icon: FileText, href: '/dashboard/student/resume' },
-    { type: 'police', label: 'Police Check', desc: 'Secure verification via AI', icon: Shield, href: '/dashboard/student/police' },
-    { type: 'aadhaar', label: 'Aadhaar Card', desc: 'Fast identity clearance', icon: CreditCard, href: '/dashboard/student/aadhaar' },
-    { type: 'degree', label: 'Degree Pass', desc: 'University records check', icon: GraduationCap, href: '/dashboard/student/degree' },
-    { type: 'marksheet_10th', label: '10th Marksheet', desc: 'High school records check', icon: FileText, href: '/dashboard/student/saved' },
-    { type: 'marksheet_12th', label: '12th Marksheet', desc: 'Senior secondary records check', icon: FileText, href: '/dashboard/student/saved' },
-    { type: 'passport', label: 'Other Credentials', desc: 'Certificates and diplomas', icon: FileText, href: '/dashboard/student/saved' },
-  ]
-
-  const getBadgeInfo = (status: string | undefined) => {
-    switch (status) {
-      case 'ai_approved':
-      case 'admin_verified':
-      case 'verified':
-        return { text: 'Verified ✓', color: 'text-green-400', bg: 'bg-green-400/10', border: 'border-green-400/20', active: true }
-      case 'needs_review':
-      case 'pending':
-        return { text: 'Needs Review', color: 'text-yellow-400', bg: 'bg-yellow-400/10', border: 'border-yellow-400/20', active: true }
-      case 'rejected':
-        return { text: 'Rejected ✗', color: 'text-red-400', bg: 'bg-red-400/10', border: 'border-red-400/20', active: true }
-      default:
-        return { text: 'Not Uploaded', color: 'text-slate-400', bg: 'bg-slate-800/40', border: 'border-white/5', active: false }
+    let alive = true
+    fetch('/api/student/universities', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (alive) setUniversity(data?.universities?.find((u: { id: string; name: string }) => u.id === student.university_id)?.name ?? null)
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
     }
-  }
+  }, [student?.university_id])
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return 'Pending'
-    const date = new Date(dateString)
-    return new Intl.DateTimeFormat('en-IN', {
-      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-    }).format(date)
-  }
+  if (loading) return <PageSkeleton metrics={4} panels={2} />
+  if (error) return <ErrorState message={error} onRetry={refresh} />
+
+  const ats = Number(byType.resume?.ai_result?.ats_score ?? student?.ats_score ?? 0) || 0
+  const isPublic = student?.profile_is_public === true
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-12 p-4 md:p-8">
-      {/* Header Profile Section */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div>
-          <h1 className="font-heading text-3xl font-bold text-white tracking-tight">
-            Hi, {(student?.name || profileData?.full_name || 'Student').split(' ')[0]} 👋
-          </h1>
-          <p className="text-white/50 mt-2 text-lg">Here is your verification progress overview.</p>
-        </div>
+    <>
+      <PageHeader
+        title="Overview"
+        description="The details and scores read from your documents. This is the information your profile is built from."
+        actions={
+          <Button href="/dashboard/student/settings" variant="default" size="sm">
+            Edit details
+          </Button>
+        }
+      />
 
-        {/* Completion Progress Bar */}
-        <div className="bg-slate-900/60 border border-white/10 rounded-xl p-5 w-full md:w-80 shadow-2xl backdrop-blur-xl">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-white/70">Profile Completion</span>
-            <span className="text-sm font-bold text-green-400">{completionPercentage}%</span>
-          </div>
-          <div className="h-2 w-full bg-slate-800/80 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-gradient-to-r from-blue-500 to-green-400 rounded-full transition-all duration-1000 ease-out" 
-              style={{ width: `${completionPercentage}%` }}
-            />
-          </div>
-        </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Metric index={0} emphasis title="Trust score" icon={<Shield />} value={student?.trust_score ?? 0} suffix="out of 100" detail={`${counts.verified} documents verified`} />
+        <Metric index={1} title="ATS score" icon={<TrendingUp />} value={ats} suffix="out of 100" detail={ats ? 'From your resume' : 'No resume yet'} />
+        <Metric index={2} title="CGPA" icon={<GraduationCap />} value={Number(student?.cgpa ?? 0)} format="decimal" detail={student?.cgpa ? 'Out of 10' : 'Not added'} />
+        <Metric index={3} title="Profile views" icon={<Users />} value={student?.profile_views ?? 0} detail="People who opened your link" />
       </div>
 
-      {/* Academic Overview Cards */}
-      {(student?.cgpa || student?.percentage_10th || student?.percentage_12th || student?.trust_score) && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2">
-          {[
-            { label: 'CGPA', value: student?.cgpa ? String(student.cgpa) : null, color: '#3b82f6', icon: '🎓' },
-            { label: '10th %', value: student?.percentage_10th ? `${student.percentage_10th}%` : null, color: '#f59e0b', icon: '📊' },
-            { label: '12th %', value: student?.percentage_12th ? `${student.percentage_12th}%` : null, color: '#8b5cf6', icon: '📈' },
-            { label: 'Trust Score', value: student?.trust_score ? `${student.trust_score}%` : null, color: '#10b981', icon: '🛡️' },
-          ].filter(d => d.value).map((d, i) => (
-            <div key={i} className="relative overflow-hidden bg-[#0A0F1C] border border-white/5 rounded-2xl p-5 group hover:border-white/10 transition-all duration-300">
-              <div className="absolute top-0 right-0 w-20 h-20 opacity-5" style={{ background: `radial-gradient(circle, ${d.color}, transparent)` }} />
-              <span className="text-2xl mb-2 block">{d.icon}</span>
-              <p className="text-[10px] text-white/30 uppercase tracking-wider font-semibold mb-1">{d.label}</p>
-              <p className="text-2xl font-bold text-white">{d.value}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Panel index={4} title="Academic details" subtitle="Filled from your documents, editable in Settings">
+          <dl>
+            <Row label="Course" value={student?.course} />
+            <Row label="Branch" value={student?.branch} />
+            <Row label="Graduation year" value={student?.graduation_year} />
+            <Row label="CGPA" value={student?.cgpa} />
+            <Row label="10th percentage" value={student?.percentage_10th ? `${student.percentage_10th}%` : null} />
+            <Row label="12th percentage" value={student?.percentage_12th ? `${student.percentage_12th}%` : null} />
+            <Row label="City" value={student?.city} />
+            <Row label="State" value={student?.state} />
+            <Row label="University" value={university} />
+          </dl>
+        </Panel>
 
-      {/* Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-        {documents.map((doc) => {
-          const record = vList.find(v => v.type === doc.type)
-          const badge = getBadgeInfo(record?.status)
-          const IconStyle = doc.icon
-          
-          return (
-            <Link 
-              key={doc.type} 
-              href={doc.href}
-              className="group block relative overflow-hidden bg-[#0A0F1C] border border-white/5 hover:border-white/10 rounded-2xl p-6 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/5 hover:-translate-y-1"
-            >
-              {/* Top Row: Icon & Badge */}
-              <div className="flex items-start justify-between mb-8">
-                <div className={`p-3 rounded-xl border ${badge.border} ${badge.bg}`}>
-                  <IconStyle className={`w-6 h-6 ${badge.color}`} />
-                </div>
-                <div className={`px-3 py-1.5 rounded-full border text-xs font-semibold tracking-wide ${badge.bg} ${badge.color} ${badge.border}`}>
-                  {badge.text}
-                </div>
-              </div>
-
-              {/* Title Area */}
-              <div>
-                <h3 className="text-xl font-bold text-white group-hover:text-blue-400 transition-colors">
-                  {doc.label}
-                </h3>
-                <p className="text-sm text-slate-400 mt-1">{doc.desc}</p>
-              </div>
-
-              {/* Bottom Metadata Row */}
-              <div className="mt-8 pt-6 border-t border-white/5 flex items-center justify-between">
-                
-                {/* Confidence / ATS Score */}
-                <div className="flex flex-col">
-                  {doc.type === 'resume' ? (
-                    <>
-                      <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">ATS Score</span>
-                      {badge.active ? (
-                        <span className="text-2xl font-bold text-white mt-1">
-                          {student?.ats_score || record?.ai_confidence || 0}<span className="text-slate-500 text-sm font-normal">/100</span>
-                        </span>
-                      ) : (
-                        <span className="text-slate-600 font-medium mt-1">--</span>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">AI Confidence</span>
-                      {badge.active ? (
-                        <span className="text-lg font-bold text-white mt-1">
-                          {record?.ai_confidence || 0}%
-                        </span>
-                      ) : (
-                        <span className="text-slate-600 font-medium mt-1">--</span>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {/* Upload Date */}
-                <div className="flex flex-col items-end">
-                  <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">Last Update</span>
-                  <div className="flex items-center gap-1.5 text-sm text-slate-300">
-                    <Clock className="w-3.5 h-3.5 text-slate-500" />
-                    {formatDate(record?.updated_at)}
+        <div className="space-y-3">
+          <Panel index={5} title="Scores">
+            <div className="space-y-4">
+              {[
+                { label: 'Trust score', value: student?.trust_score ?? 0 },
+                { label: 'ATS score', value: ats },
+                { label: 'Profile completion', value: student?.profile_complete_pct ?? 0 },
+              ].map((item) => (
+                <div key={item.label}>
+                  <div className="mb-1.5 flex justify-between text-xs font-semibold">
+                    <span>{item.label}</span>
+                    <span className="tabular text-muted-foreground">{item.value} out of 100</span>
                   </div>
+                  <Meter label={item.label} value={item.value} />
                 </div>
+              ))}
+            </div>
+          </Panel>
 
+          <Panel index={6} title="What companies can see">
+            <div className="flex items-start gap-3">
+              <span className={`grid size-10 shrink-0 place-items-center rounded-xl border ${isPublic ? 'border-success/40 bg-success/10 text-success' : 'border-white/15 bg-white/[0.05] text-muted-foreground'}`}>
+                {isPublic ? <Eye className="size-[18px]" aria-hidden="true" /> : <EyeOff className="size-[18px]" aria-hidden="true" />}
+              </span>
+              <div className="min-w-0 text-sm">
+                <p className="font-bold">{isPublic ? 'Your profile is public' : 'Your profile is private'}</p>
+                <p className="mt-1 leading-relaxed text-muted-foreground">
+                  {isPublic
+                    ? 'Companies can find you in talent search and see your name, course, scores and which documents are verified. Your public link works too.'
+                    : 'Companies cannot find you and your public link is switched off. Turn it on when you are ready to be found.'}
+                </p>
+                <Link href="/dashboard/student/my-link" className="mt-2 inline-block text-xs font-semibold text-brand-ink hover:underline">
+                  Change this on My Link
+                </Link>
               </div>
-
-              {/* Hover Indicator */}
-              <div className="absolute top-6 right-6 opacity-0 group-hover:translate-x-1 group-hover:opacity-100 transition-all duration-300">
-                <ChevronRight className="w-5 h-5 text-white/30" />
-              </div>
-            </Link>
-          )
-        })}
+            </div>
+          </Panel>
+        </div>
       </div>
-    </div>
+
+      <div className="mt-3">
+        <Panel index={7} title="Document checklist" subtitle="Every document and where it stands">
+          <ul className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {DOC_TYPES.map((type) => {
+              const Icon = DOC_META[type].icon
+              return (
+                <li key={type}>
+                  <Link href={DOC_ROUTE[type]} className="flex min-h-14 items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 transition-colors hover:bg-white/[0.07]">
+                    <Icon className="size-[18px] shrink-0 text-brand-ink" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-bold">{docLabel(type)}</span>
+                    <StatusBadge status={byType[type]?.status} />
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </Panel>
+      </div>
+    </>
   )
 }

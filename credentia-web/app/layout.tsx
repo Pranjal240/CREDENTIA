@@ -1,70 +1,53 @@
-import type { Metadata } from 'next'
-import { Inter, Space_Grotesk, Instrument_Serif, Bricolage_Grotesque, JetBrains_Mono } from 'next/font/google'
-import { ThemeProvider } from 'next-themes'
+import type { Metadata, Viewport } from 'next'
+import { Manrope, JetBrains_Mono } from 'next/font/google'
+import { AppBackground } from '@/components/shell/app-background'
+import { SmoothScroll } from '@/components/shell/smooth-scroll'
 import './globals.css'
 
-const inter = Inter({
+const manrope = Manrope({
   subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
-  variable: '--font-inter',
+  variable: '--font-sans',
   display: 'swap',
 })
 
-const spaceGrotesk = Space_Grotesk({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-heading',
-  display: 'swap',
-})
-
-const instrumentSerif = Instrument_Serif({
-  subsets: ['latin'],
-  weight: ['400'],
-  style: ['normal', 'italic'],
-  variable: '--font-serif',
-  display: 'swap',
-})
-
-// New: expressive variable display font — used for hero titles and stat callouts
-const bricolage = Bricolage_Grotesque({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800'],
-  variable: '--font-display',
-  display: 'swap',
-})
-
-// New: technical mono — used for data streams, code, and metric labels
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+  weight: ['400', '500', '600'],
   variable: '--font-mono',
   display: 'swap',
 })
 
 export const metadata: Metadata = {
-  title: 'CREDENTIA — India\'s #1 Credential Verification Platform',
-  description: 'AI-powered credential verification for students, companies, and universities. Verify once. Trusted forever.',
-  keywords: 'credential verification, India, student verification, police certificate, Aadhaar, resume ATS, university ERP',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://credentiaonline.in'),
+  title: {
+    default: 'Credentia: AI credential verification for India',
+    template: '%s | Credentia',
+  },
+  description:
+    'Verify a resume, Aadhaar, degree and police certificate once with AI, then share one trusted link with companies and universities.',
+  keywords:
+    'credential verification, India, student verification, police certificate, Aadhaar, resume ATS, university registry',
   openGraph: {
-    title: 'CREDENTIA',
-    description: 'Verify Once. Trusted Forever.',
+    title: 'Credentia',
+    description: 'Verify once. Trusted everywhere.',
     url: 'https://credentiaonline.in',
-    siteName: 'CREDENTIA',
+    siteName: 'Credentia',
     type: 'website',
   },
 }
 
+export const viewport: Viewport = {
+  themeColor: '#000000',
+  colorScheme: 'dark',
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={`${inter.variable} ${spaceGrotesk.variable} ${instrumentSerif.variable} ${bricolage.variable} ${jetbrainsMono.variable}`}
-    >
-      <body className="font-sans antialiased">
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
-          {children}
-        </ThemeProvider>
+    <html lang="en" className={`dark ${manrope.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+      <body className="bg-transparent font-sans text-foreground antialiased">
+        <AppBackground />
+        <SmoothScroll />
+        {children}
       </body>
     </html>
   )

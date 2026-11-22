@@ -1,86 +1,63 @@
 import { NextResponse } from 'next/server'
-import { uploadToR2 } from '@/lib/r2'
+import { getCallerWithRole } from '@/lib/api-auth'
+import { rateLimit } from '@/lib/rate-limit'
+import { sniffFile } from '@/lib/doc-files'
+import { uploadStudentFile } from '@/lib/r2'
+import { MAX_UPLOAD_BYTES, UPLOAD_FOLDERS } from '@/lib/documents'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
+export const dynamic = 'force-dynamic'
 
+const fail = (status: number, error: string) => NextResponse.json({ success: false, error }, { status })
+
+/**
+ * Stores one document for the signed in student. The account comes from the
+ * session, the folder must be one of the listed ones, the file must really be
+ * a PDF, JPG or PNG (judged by its bytes, not by what the browser says) and
+ * under 10 MB. The key is built from the account id, so a student can only
+ * ever write inside their own folder.
+ */
 export async function POST(request: Request) {
+  const caller = await getCallerWithRole(['student'])
+  if (!caller) return fail(401, 'Please sign in again to continue.')
+  if (!rateLimit(`doc-upload:${caller.userId}`, 30, 60 * 60_000)) {
+    return fail(429, 'You are uploading very quickly. Please wait a little and try again.')
+  }
+
+  if (!(request.headers.get('content-type') || '').includes('multipart/form-data')) return fail(400, 'Send the file as a form upload.')
+  // An honest oversized request is refused before it is read. The real limit is checked on the file below.
+  if (Number(request.headers.get('content-length') ?? 0) > MAX_UPLOAD_BYTES + 1024 * 1024) return fail(413, 'That file is too large. The limit is 10 MB.')
+
+  let form: FormData
   try {
-    // Validate content type
-    const contentType = request.headers.get('content-type') || ''
-    if (!contentType.includes('multipart/form-data')) {
-      return NextResponse.json(
-        { success: false, error: `Invalid content-type: ${contentType}. Expected multipart/form-data.` },
-        { status: 400 }
-      )
-    }
+    form = await request.formData()
+  } catch {
+    return fail(400, 'The upload could not be read. Please try again.')
+  }
 
-    // Parse form data
-    let formData: FormData
-    try {
-      formData = await request.formData()
-    } catch (parseError: any) {
-      console.error('[upload] FormData parse error:', parseError)
-      return NextResponse.json(
-        { success: false, error: `Failed to parse form data: ${parseError.message}` },
-        { status: 400 }
-      )
-    }
+  const folder = form.get('folder')
+  if (typeof folder !== 'string' || !(UPLOAD_FOLDERS as readonly string[]).includes(folder)) return fail(400, 'That kind of document is not recognised.')
 
-    const file = formData.get('file') as File | null
-    const folder = (formData.get('folder') as string) || 'documents'
+  const file = form.get('file')
+  if (!(file instanceof Blob)) return fail(400, 'Choose a file to upload.')
+  if (file.size === 0) return fail(400, 'That file is empty.')
+  if (file.size > MAX_UPLOAD_BYTES) return fail(413, 'That file is too large. The limit is 10 MB.')
 
-    if (!file) {
-      return NextResponse.json(
-        { success: false, error: 'No file provided in form data. Ensure the field name is "file".' },
-        { status: 400 }
-      )
-    }
+  const bytes = Buffer.from(await file.arrayBuffer())
+  const kind = sniffFile(bytes)
+  if (!kind) return fail(400, 'Only PDF, JPG or PNG files can be uploaded.')
 
-    if (file.size === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Uploaded file is empty (0 bytes).' },
-        { status: 400 }
-      )
-    }
+  if (!process.env.CLOUDFLARE_ACCOUNT_ID || !process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || !process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || !process.env.CLOUDFLARE_R2_BUCKET_NAME || !process.env.CLOUDFLARE_R2_PUBLIC_URL) {
+    console.error('[upload] file storage is not configured')
+    return fail(500, 'File storage is not available right now. Please try again later.')
+  }
 
-    // Max 10MB
-    if (file.size > 10 * 1024 * 1024) {
-      return NextResponse.json(
-        { success: false, error: `File too large: ${(file.size / 1024 / 1024).toFixed(1)}MB. Max is 10MB.` },
-        { status: 400 }
-      )
-    }
-
-    // Verify R2 env vars are configured
-    if (!process.env.CLOUDFLARE_ACCOUNT_ID || !process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || !process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || !process.env.CLOUDFLARE_R2_BUCKET_NAME) {
-      console.error('[upload] Missing R2 environment variables')
-      return NextResponse.json(
-        { success: false, error: 'Server misconfiguration: R2 storage credentials are missing.' },
-        { status: 500 }
-      )
-    }
-
-    // Convert File to Buffer
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
-
-    console.log(`[upload] Uploading ${file.name} (${file.size} bytes, ${file.type}) to folder: ${folder}`)
-
-    // Upload to R2
-    const result = await uploadToR2(buffer, file.name, file.type, folder)
-
-    console.log(`[upload] Success: ${result.url}`)
-    return NextResponse.json({ success: true, ...result })
-  } catch (error: any) {
-    console.error('[upload] Unhandled error:', error)
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.message || 'Upload failed',
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-      },
-      { status: 500 }
-    )
+  try {
+    const stored = await uploadStudentFile(caller.userId, folder, bytes, (file as File).name || 'document', kind)
+    return NextResponse.json({ success: true, ...stored })
+  } catch (error) {
+    console.error('[upload] failed:', (error as Error).message)
+    return fail(500, 'The upload failed. Please try again.')
   }
 }
